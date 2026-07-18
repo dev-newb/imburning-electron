@@ -2072,7 +2072,8 @@ ipcMain.handle('get-settings', () => {
     compactMode: store.get('settings.compactMode', false),
     refreshInterval: store.get('settings.refreshInterval', '300'),
     graphVisible: store.get('settings.graphVisible', false),
-    expandedOpen: store.get('settings.expandedOpen', false),
+    expandedOpen: store.get('settings.expandedOpen', true),
+    openaiExtrasOpen: store.get('settings.openaiExtrasOpen', true),
     showTrayStats: store.get('settings.showTrayStats', false),
     showClaudeCode: store.get('settings.showClaudeCode', true),
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
@@ -2110,6 +2111,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.refreshInterval', settings.refreshInterval);
   store.set('settings.graphVisible', settings.graphVisible);
   store.set('settings.expandedOpen', settings.expandedOpen);
+  if (settings.openaiExtrasOpen !== undefined) store.set('settings.openaiExtrasOpen', settings.openaiExtrasOpen !== false);
   store.set('settings.showTrayStats', settings.showTrayStats);
   store.set('settings.showClaudeCode', settings.showClaudeCode !== false);
   if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);
@@ -2421,7 +2423,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   // or if compact mode is disabled (normal mode). This reduces API calls when the
   // user won't see the extra usage data anyway.
   // If forceExtended is passed (e.g., when user clicks expand), use that instead of saved setting
-  const expandedOpen = options.forceExtended !== undefined ? options.forceExtended : store.get('settings.expandedOpen', false);
+  const expandedOpen = options.forceExtended !== undefined ? options.forceExtended : store.get('settings.expandedOpen', true);
   const compactMode = store.get('settings.compactMode', false);
   const shouldFetchExtended = expandedOpen;
 

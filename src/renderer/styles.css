@@ -1450,7 +1450,8 @@ body.custom-font .title span {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 14px;
+    margin-top: auto;
+    padding: 10px 14px 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1460,7 +1461,7 @@ body.custom-font .title span {
     color: #9090b0;
 }
 
-.settings-footer .coffee-btn {
+.settings-footer .github-btn {
     flex-shrink: 0;
 }
 
@@ -1482,10 +1483,10 @@ body.custom-font .title span {
     border-color: rgba(239, 68, 68, 0.7);
 }
 
-.coffee-btn {
-    background: rgba(255, 193, 7, 0.12);
-    color: #fbbf24;
-    border: 1px solid rgba(255, 193, 7, 0.25);
+.github-btn {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
     padding: 5px 10px;
     border-radius: 6px;
     font-size: 10px;
@@ -1499,14 +1500,14 @@ body.custom-font .title span {
     justify-content: center;
 }
 
-.coffee-btn svg {
+.github-btn svg {
     display: block;
     flex-shrink: 0;
 }
 
-.coffee-btn:hover {
-    background: rgba(255, 193, 7, 0.2);
-    border-color: rgba(255, 193, 7, 0.45);
+.github-btn:hover {
+    background: rgba(139, 92, 246, 0.22);
+    border-color: rgba(139, 92, 246, 0.55);
 }
 
 .settings-btn {

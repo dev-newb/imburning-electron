@@ -12,6 +12,7 @@ let graphWasVisible = false; // preserves graph state across compact mode toggle
 let appInitializing = true;  // suppresses _saveViewState during startup restore
 let isFetching = false;       // in-flight guard — prevents overlapping fetchUsageData calls
 let _updateReadyToInstall = false; // an auto-update is downloaded and ready to apply
+let isOpenaiExtrasOpen = true;     // OpenAI Credits + Limit Resets sub-panel
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 155;
 const WIDGET_ROW_HEIGHT = 30;
@@ -84,7 +85,11 @@ const elements = {
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
-    coffeeBtn: document.getElementById('coffeeBtn'),
+    githubBtn: document.getElementById('githubBtn'),
+    openaiExtras: document.getElementById('openaiExtras'),
+    openaiExtraRows: document.getElementById('openaiExtraRows'),
+    openaiExpandToggle: document.getElementById('openaiExpandToggle'),
+    openaiExpandArrow: document.getElementById('openaiExpandArrow'),
     autoStartCol: document.getElementById('autoStartCol'),
     autoStartToggle: document.getElementById('autoStartToggle'),
     autoStartHint: document.getElementById('autoStartHint'),
@@ -222,12 +227,15 @@ async function init() {
         }
     }
 
-    // Restore expanded state
-    if (settings.expandedOpen) {
+    // Restore expanded state (default: everything expanded)
+    if (settings.expandedOpen !== false) {
         isExpanded = true;
         elements.expandArrow.classList.add('expanded');
         elements.expandSection.style.display = 'block';
     }
+    isOpenaiExtrasOpen = settings.openaiExtrasOpen !== false;
+    elements.openaiExpandArrow.classList.toggle('expanded', isOpenaiExtrasOpen);
+    elements.openaiExtras.style.display = isOpenaiExtrasOpen ? 'block' : 'none';
 
     if (credentials.sessionKey && credentials.organizationId) {
         // Populate org selector if user has multiple orgs
@@ -429,8 +437,17 @@ function setupEventListeners() {
         showLoginRequired();
     });
 
-    elements.coffeeBtn.addEventListener('click', () => {
-        window.electronAPI.openExternal('https://paypal.me/SlavomirDurej?country.x=GB&locale.x=en_GB');
+    elements.githubBtn.addEventListener('click', () => {
+        window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
+    });
+
+    // OpenAI extras (Credits + Limit Resets) collapse toggle
+    elements.openaiExpandToggle.addEventListener('click', async () => {
+        isOpenaiExtrasOpen = !isOpenaiExtrasOpen;
+        elements.openaiExpandArrow.classList.toggle('expanded', isOpenaiExtrasOpen);
+        elements.openaiExtras.style.display = isOpenaiExtrasOpen ? 'block' : 'none';
+        if (!isCompactMode) resizeWidget();
+        await _saveSettingsPatch({ openaiExtrasOpen: isOpenaiExtrasOpen });
     });
 
     // Theme buttons
@@ -691,7 +708,7 @@ function buildExtraRows(data) {
     
     // Only rebuild if we have data, otherwise keep existing rows
     const existingRows = elements.extraRows.children.length + elements.scopedRows.children.length
-        + elements.openaiRows.children.length + elements.googleRows.children.length;
+        + elements.openaiRows.children.length + elements.openaiExtraRows.children.length + elements.googleRows.children.length;
     if (!hasAnyExtendedData && existingRows > 0) {
         return; // Keep existing rows
     }
@@ -699,6 +716,7 @@ function buildExtraRows(data) {
     elements.extraRows.innerHTML = '';
     elements.scopedRows.innerHTML = '';
     elements.openaiRows.innerHTML = '';
+    elements.openaiExtraRows.innerHTML = '';
     elements.googleRows.innerHTML = '';
     let count = 0;
 
@@ -904,7 +922,7 @@ function buildExtraRows(data) {
         balAmount.textContent = codexCredits.unlimited ? 'unlimited' : String(codexCredits.balance ?? 0);
         row.appendChild(balAmount);
 
-        elements.openaiRows.appendChild(row);
+        elements.openaiExtraRows.appendChild(row);
     }
 
     // OpenAI weekly-limit reset feature — banked resets shown as magic dots
@@ -947,11 +965,12 @@ function buildExtraRows(data) {
         balAmount.textContent = String(resetCredits.available);
         row.appendChild(balAmount);
 
-        elements.openaiRows.appendChild(row);
+        elements.openaiExtraRows.appendChild(row);
     }
 
     // Provider sections appear only when they have rows
-    elements.sectionOpenai.style.display = elements.openaiRows.children.length ? '' : 'none';
+    elements.sectionOpenai.style.display = (elements.openaiRows.children.length || elements.openaiExtraRows.children.length) ? '' : 'none';
+    elements.openaiExpandToggle.style.display = elements.openaiExtraRows.children.length ? 'flex' : 'none';
     elements.sectionGoogle.style.display = elements.googleRows.children.length ? '' : 'none';
 
     // Hide toggle if no extra rows
@@ -2270,7 +2289,8 @@ async function saveSettings() {
         },
         dailyDigest: elements.dailyDigestToggle.checked,
         showCodex: elements.showCodexToggle.checked,
-        showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true
+        showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
+        openaiExtrasOpen: isOpenaiExtrasOpen
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;
