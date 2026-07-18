@@ -937,6 +937,20 @@ body.theme-light .settings-disclaimer {
     cursor: pointer;
 }
 
+/* Custom font colour (Settings) — overrides the data-text colours of both
+   themes; chrome (buttons, banner, settings) keeps its theme colours */
+body.custom-font .usage-label,
+body.custom-font .expand-section .usage-label,
+body.custom-font .usage-percentage,
+body.custom-font .timer-text,
+body.custom-font .resets-at-text,
+body.custom-font .col-header,
+body.custom-font .compact-label,
+body.custom-font .compact-pct,
+body.custom-font .title span {
+    color: var(--custom-font) !important;
+}
+
 .settings-col {
     display: flex;
     align-items: center;

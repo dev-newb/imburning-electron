@@ -115,6 +115,8 @@ const elements = {
     trayOutlineToggle: document.getElementById('trayOutlineToggle'),
     trayOutlineColor: document.getElementById('trayOutlineColor'),
     burnAlertsToggle: document.getElementById('burnAlertsToggle'),
+    fontColorToggle: document.getElementById('fontColorToggle'),
+    fontColorPicker: document.getElementById('fontColorPicker'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -175,6 +177,7 @@ async function init() {
     }
     warnThreshold = settings.warnThreshold;
     dangerThreshold = settings.dangerThreshold;
+    applyFontColor(settings);
 
     // Restore compact mode from saved settings
     if (settings.compactMode) {
@@ -1813,6 +1816,8 @@ async function loadSettings() {
     if (elements.trayOutlineToggle) elements.trayOutlineToggle.checked = settings.trayOutline?.enabled !== false;
     if (elements.trayOutlineColor) elements.trayOutlineColor.value = settings.trayOutline?.color || '#facc15';
     if (elements.burnAlertsToggle) elements.burnAlertsToggle.checked = settings.burnAlerts !== false;
+    if (elements.fontColorToggle) elements.fontColorToggle.checked = settings.fontColor?.enabled === true;
+    if (elements.fontColorPicker) elements.fontColorPicker.value = settings.fontColor?.color || '#e0e0e0';
 
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
@@ -1871,11 +1876,16 @@ async function saveSettings() {
             enabled: elements.trayOutlineToggle.checked,
             color: elements.trayOutlineColor.value
         },
-        burnAlerts: elements.burnAlertsToggle.checked
+        burnAlerts: elements.burnAlertsToggle.checked,
+        fontColor: {
+            enabled: elements.fontColorToggle.checked,
+            color: elements.fontColorPicker.value
+        }
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;
     applyTheme(settings.theme);
+    applyFontColor(settings);
     if (window.electronAPI.platform === 'darwin') {
         document.getElementById('trayLabel').textContent = 'Hide from Dock';
     }
@@ -1897,6 +1907,16 @@ function applyTheme(theme) {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const useDark = theme === 'dark' || (theme === 'system' && prefersDark);
     document.body.classList.toggle('theme-light', !useDark);
+}
+
+// Apply (or clear) the custom widget font colour from settings
+function applyFontColor(settings) {
+    const fc = settings?.fontColor || {};
+    const enabled = fc.enabled === true && fc.color;
+    document.body.classList.toggle('custom-font', !!enabled);
+    if (enabled) {
+        document.documentElement.style.setProperty('--custom-font', fc.color);
+    }
 }
 
 // Update check

@@ -1421,7 +1421,8 @@ ipcMain.handle('get-settings', () => {
     showClaudeCode: store.get('settings.showClaudeCode', true),
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
     trayOutline: { ...DEFAULT_TRAY_OUTLINE, ...store.get('settings.trayOutline', {}) },
-    burnAlerts: store.get('settings.burnAlerts', true)
+    burnAlerts: store.get('settings.burnAlerts', true),
+    fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' })
   };
 });
 
@@ -1447,6 +1448,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);
   if (settings.trayOutline) store.set('settings.trayOutline', settings.trayOutline);
   store.set('settings.burnAlerts', settings.burnAlerts !== false);
+  if (settings.fontColor) store.set('settings.fontColor', settings.fontColor);
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
