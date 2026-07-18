@@ -654,6 +654,11 @@ body.theme-light .graph-btn.active {
     box-shadow: 0 0 10px rgba(217, 70, 239, 0.3);
 }
 
+.progress-fill.codex {
+    background: linear-gradient(90deg, #10a37f 0%, #34d0a8 100%);
+    box-shadow: 0 0 10px rgba(16, 163, 127, 0.3);
+}
+
 .progress-fill.opus {
     background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
@@ -728,6 +733,10 @@ body.theme-light .graph-btn.active {
 
 .timer-progress.fable {
     stroke: #d946ef;
+}
+
+.timer-progress.codex {
+    stroke: #10a37f;
 }
 
 .timer-progress.opus {
@@ -937,6 +946,24 @@ body.theme-light .settings-disclaimer {
     cursor: pointer;
 }
 
+/* Session planner hint under the pinned rows */
+.plan-note {
+    font-size: 10px;
+    font-style: italic;
+    color: #808080;
+    padding: 2px 16px 0;
+    height: 16px;
+    line-height: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.webhook-url {
+    width: 100%;
+    font-size: 10px;
+}
+
 /* Custom font colour (Settings) — overrides the data-text colours of both
    themes; chrome (buttons, banner, settings) keeps its theme colours */
 body.custom-font .usage-label,
@@ -947,6 +974,7 @@ body.custom-font .resets-at-text,
 body.custom-font .col-header,
 body.custom-font .compact-label,
 body.custom-font .compact-pct,
+body.custom-font .plan-note,
 body.custom-font .title span {
     color: var(--custom-font) !important;
 }

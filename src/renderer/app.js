@@ -117,6 +117,11 @@ const elements = {
     burnAlertsToggle: document.getElementById('burnAlertsToggle'),
     fontColorToggle: document.getElementById('fontColorToggle'),
     fontColorPicker: document.getElementById('fontColorPicker'),
+    planNote: document.getElementById('planNote'),
+    webhookToggle: document.getElementById('webhookToggle'),
+    webhookUrl: document.getElementById('webhookUrl'),
+    dailyDigestToggle: document.getElementById('dailyDigestToggle'),
+    showCodexToggle: document.getElementById('showCodexToggle'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -446,7 +451,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(430);
+        window.electronAPI.resizeWindow(510);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -817,8 +822,9 @@ function resizeWidget(bannerVisible) {
         : 0;
     // Pinned scoped rows (e.g. Fable) are visible even when collapsed
     const scopedOffset = elements.scopedRows.children.length * WIDGET_ROW_HEIGHT;
+    const planOffset = elements.planNote && elements.planNote.style.display !== 'none' ? 18 : 0;
     const graphOffset = graphVisible ? GRAPH_HEIGHT : 0;
-    const totalHeight = WIDGET_HEIGHT_COLLAPSED + scopedOffset + expandedOffset + graphOffset + bannerOffset;
+    const totalHeight = WIDGET_HEIGHT_COLLAPSED + scopedOffset + planOffset + expandedOffset + graphOffset + bannerOffset;
     window.electronAPI.resizeWindow(totalHeight);
 }
 
@@ -881,6 +887,21 @@ function normalizeUsageData(data) {
             EXTRA_ROW_CONFIG.extra_usage = extraUsage;
         }
     }
+
+    // Codex (OpenAI) account — fetched by the main process from the codex
+    // CLI's local login (live endpoint, or its session-log snapshot when the
+    // token has expired). Keys embed the window so timers use the right span.
+    const cx = data.codex;
+    if (cx && Array.isArray(cx.limits) && cx.limits.length) {
+        for (const lim of cx.limits) {
+            const key = 'codex_' + lim.key;
+            if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'codex' };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+        }
+        const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
+        delete EXTRA_ROW_CONFIG.extra_usage;
+        EXTRA_ROW_CONFIG.extra_usage = extraUsage;
+    }
     return data;
 }
 
@@ -899,6 +920,16 @@ function updateUI(data) {
         weeklySection.title = data.forecasts?.weekly
             ? `At the current pace, 100% by ${formatResetsAt(data.forecasts.weekly, true, settings.timeFormat || '12h', 'date-day-time')}`
             : '';
+    }
+
+    // Session-window planner hint
+    if (elements.planNote) {
+        const plan = data.sessionPlan;
+        elements.planNote.style.display = plan ? '' : 'none';
+        if (plan) {
+            elements.planNote.textContent = plan.text;
+            elements.planNote.title = plan.text;
+        }
     }
     if (!isCompactMode) resizeWidget();
     startCountdown();
@@ -963,6 +994,8 @@ function checkUsageAlerts(data) {
             'Claude Usage Widget',
             `Weekly Limit usage is at ${Math.round(weeklyPct)}% — running low`
         );
+        window.electronAPI.sendAlertWebhook('weekly_danger', 'Claude usage warning',
+            `Weekly Limit usage is at ${Math.round(weeklyPct)}% — running low`);
     // Weekly Limit — warn threshold
     } else if (weeklyPct >= warnThreshold && !alertFired.weekly_warn) {
         alertFired.weekly_warn = true;
@@ -999,6 +1032,8 @@ function checkUsageAlerts(data) {
                 'Claude Usage Widget',
                 `${label} limit is maxed out${resetStr}`
             );
+            window.electronAPI.sendAlertWebhook('scoped_maxed', 'Claude limit maxed',
+                `${label} limit is maxed out${resetStr}`);
         } else if (pct >= dangerThreshold && !alertFired[`${key}_danger`]) {
             alertFired[`${key}_danger`] = true;
             alertFired[`${key}_warn`] = true;
@@ -1006,6 +1041,8 @@ function checkUsageAlerts(data) {
                 'Claude Usage Widget',
                 `${label} usage is at ${Math.round(pct)}% — running low`
             );
+            window.electronAPI.sendAlertWebhook('scoped_danger', 'Claude usage warning',
+                `${label} usage is at ${Math.round(pct)}% — running low`);
         } else if (pct >= warnThreshold && !alertFired[`${key}_warn`]) {
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
@@ -1653,6 +1690,67 @@ function renderChart(history) {
         });
     }
 
+    // Burn-rate projections: dotted line from the newest sample to the
+    // forecast 100% crossing, plus a grey marker at the weekly reset — the
+    // visual race between "when I max out" and "when the window resets".
+    const lastEntry = history[history.length - 1];
+    let chartXMax = lastEntry.timestamp;
+    const forecasts = latestUsageData?.forecasts || {};
+    const weeklyResetMs = latestUsageData?.seven_day?.resets_at
+        ? new Date(latestUsageData.seven_day.resets_at).getTime() : null;
+    const projections = [];
+    const addProjection = (label, color, lastVal, etaIso, resetMs) => {
+        if (!etaIso || lastVal == null) return;
+        const eta = new Date(etaIso).getTime();
+        if (eta <= lastEntry.timestamp) return;
+        if (resetMs && eta > resetMs) return; // window resets first — no cap hit
+        projections.push({
+            label: `${label} → 100%`,
+            data: [{ x: lastEntry.timestamp, y: lastVal }, { x: eta, y: 100 }],
+            borderColor: color,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            pointHitRadius: 10
+        });
+        chartXMax = Math.max(chartXMax, eta);
+    };
+    addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
+    {
+        const SCOPED_CHART_COLORS = { fable: '#d946ef' };
+        for (const key of scopedKeys) {
+            const scopedResetIso = latestUsageData?.['seven_day_scoped_' + key]?.resets_at;
+            addProjection(
+                key.charAt(0).toUpperCase() + key.slice(1),
+                SCOPED_CHART_COLORS[key] || '#84cc16',
+                lastEntry.scoped?.[key],
+                forecasts.scoped?.[key],
+                scopedResetIso ? new Date(scopedResetIso).getTime() : null
+            );
+        }
+    }
+    if (projections.length) {
+        datasets.push(...projections);
+        // Reset marker, if the weekly reset falls inside the projected span
+        if (weeklyResetMs && weeklyResetMs > lastEntry.timestamp && weeklyResetMs <= chartXMax * 1.02) {
+            chartXMax = Math.max(chartXMax, weeklyResetMs);
+            datasets.push({
+                label: 'Weekly reset',
+                data: [{ x: weeklyResetMs, y: 0 }, { x: weeklyResetMs, y: 100 }],
+                borderColor: '#9ca3af',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [2, 3],
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
+        }
+        chartXMax = Math.min(chartXMax, Date.now() + 3 * 24 * 60 * 60 * 1000);
+    }
+
     const firstDayMidnight = new Date(history[0].timestamp);
     firstDayMidnight.setHours(0, 0, 0, 0);
 
@@ -1671,9 +1769,9 @@ function renderChart(history) {
                 x: {
                     type: 'linear',
                     min: firstDayMidnight.getTime(),
-                    max: history[history.length - 1].timestamp,
+                    max: chartXMax,
                     afterBuildTicks(axis) {
-                        const end = history[history.length - 1].timestamp;
+                        const end = chartXMax;
                         const d = new Date(firstDayMidnight.getTime());
                         const ticks = [];
                         while (d.getTime() <= end) {
@@ -1818,6 +1916,10 @@ async function loadSettings() {
     if (elements.burnAlertsToggle) elements.burnAlertsToggle.checked = settings.burnAlerts !== false;
     if (elements.fontColorToggle) elements.fontColorToggle.checked = settings.fontColor?.enabled === true;
     if (elements.fontColorPicker) elements.fontColorPicker.value = settings.fontColor?.color || '#e0e0e0';
+    if (elements.webhookToggle) elements.webhookToggle.checked = settings.webhook?.enabled === true;
+    if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
+    if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
+    if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
 
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
@@ -1880,7 +1982,13 @@ async function saveSettings() {
         fontColor: {
             enabled: elements.fontColorToggle.checked,
             color: elements.fontColorPicker.value
-        }
+        },
+        webhook: {
+            enabled: elements.webhookToggle.checked,
+            url: elements.webhookUrl.value.trim()
+        },
+        dailyDigest: elements.dailyDigestToggle.checked,
+        showCodex: elements.showCodexToggle.checked
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;

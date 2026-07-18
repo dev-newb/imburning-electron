@@ -173,6 +173,9 @@
                 <!-- Scoped weekly limits (e.g. Fable) — always visible, never collapsed -->
                 <div id="scopedRows"></div>
 
+                <!-- Session planner hint (shown when a usage pattern is detected) -->
+                <div class="plan-note" id="planNote" style="display: none;"></div>
+
                 <!-- Expand Toggle -->
                 <div class="expand-toggle" id="expandToggle">
                     <svg class="expand-arrow" id="expandArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -408,6 +411,40 @@
                                     <input type="color" id="fontColorPicker" title="Widget text colour">
                                 </span>
                                 <span class="settings-row-hint">Off = theme default</span>
+                            </div>
+                        </div>
+
+                        <!-- Row: phone alerts webhook (ntfy or generic JSON POST) -->
+                        <div class="settings-row-2col webhook-row">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Phone alerts</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="webhookToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Webhook / ntfy URL</span>
+                                <input type="text" id="webhookUrl" class="settings-select webhook-url" placeholder="https://ntfy.sh/your-topic" spellcheck="false">
+                            </div>
+                        </div>
+
+                        <!-- Row: daily digest + Codex account -->
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Daily digest</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dailyDigestToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Codex account</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showCodexToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="settings-row-hint">Rows from your local codex CLI login</span>
                             </div>
                         </div>
 

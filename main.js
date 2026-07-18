@@ -141,6 +141,329 @@ function fetchClaudeCodeUsage() {
   });
 }
 
+// ---- Codex (OpenAI) account usage ----
+// Reads the Codex CLI's local OAuth token (~/.codex/auth.json) and queries the
+// same usage endpoint the CLI polls. The stored access token is used as-is —
+// never refreshed here — and when it has expired we fall back to the newest
+// rate-limit snapshot embedded in the CLI's own session logs.
+function readCodexAuth() {
+  try {
+    const p = path.join(os.homedir(), '.codex', 'auth.json');
+    if (!fs.existsSync(p)) return null;
+    const auth = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    const accessToken = auth.tokens?.access_token;
+    if (!accessToken) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
+      if (payload.exp && Date.now() >= payload.exp * 1000) {
+        debugLog('[Codex] Access token expired — will use session snapshot');
+        return null;
+      }
+    } catch {}
+    return { accessToken, accountId: auth.tokens?.account_id || null };
+  } catch (err) {
+    debugLog('[Codex] Could not read auth.json:', err.message);
+    return null;
+  }
+}
+
+function codexWindowLabel(windowSeconds) {
+  if (windowSeconds == null) return 'Codex';
+  const hours = Math.round(windowSeconds / 3600);
+  if (hours >= 24 * 6) return 'Codex Weekly (7d)';
+  if (hours <= 6) return `Codex ${hours}h`;
+  return `Codex ${hours}h`;
+}
+
+function codexWindowKey(windowSeconds, prefix) {
+  const hours = windowSeconds != null ? Math.round(windowSeconds / 3600) : 0;
+  return hours >= 24 * 6 ? `${prefix}_seven_day` : `${prefix}_five_hour`;
+}
+
+// Normalize the live /backend-api/wham/usage response into rows
+function normalizeCodexLive(json) {
+  const limits = [];
+  const pw = json?.rate_limit?.primary_window;
+  if (pw && pw.used_percent != null) {
+    limits.push({
+      key: codexWindowKey(pw.limit_window_seconds, 'primary'),
+      label: codexWindowLabel(pw.limit_window_seconds),
+      percent: pw.used_percent,
+      resetsAt: pw.reset_at ? new Date(pw.reset_at * 1000).toISOString() : null
+    });
+  }
+  const sw = json?.rate_limit?.secondary_window;
+  if (sw && sw.used_percent != null) {
+    limits.push({
+      key: codexWindowKey(sw.limit_window_seconds, 'secondary'),
+      label: codexWindowLabel(sw.limit_window_seconds),
+      percent: sw.used_percent,
+      resetsAt: sw.reset_at ? new Date(sw.reset_at * 1000).toISOString() : null
+    });
+  }
+  for (const extra of (json?.additional_rate_limits || [])) {
+    const w = extra?.rate_limit?.primary_window;
+    if (!w || w.used_percent == null || w.used_percent <= 0) continue; // skip untouched sub-limits
+    const name = String(extra.limit_name || 'Extra').replace(/^gpt-[\d.]+-codex-/i, '');
+    limits.push({
+      key: 'extra_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_seven_day',
+      label: `Codex ${name} (7d)`,
+      percent: w.used_percent,
+      resetsAt: w.reset_at ? new Date(w.reset_at * 1000).toISOString() : null
+    });
+  }
+  return limits.length ? { source: 'live', limits } : null;
+}
+
+function fetchCodexUsageLive() {
+  return new Promise((resolve) => {
+    const auth = readCodexAuth();
+    if (!auth) return resolve(null);
+    const req = https.request({
+      hostname: 'chatgpt.com',
+      path: '/backend-api/wham/usage',
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${auth.accessToken}`,
+        ...(auth.accountId ? { 'chatgpt-account-id': auth.accountId } : {}),
+        'User-Agent': CHROME_USER_AGENT
+      },
+      timeout: 10000
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          debugLog('[Codex] Live usage fetch failed with status', res.statusCode);
+          return resolve(null);
+        }
+        try { resolve(normalizeCodexLive(JSON.parse(body))); } catch { resolve(null); }
+      });
+    });
+    req.on('error', (err) => { debugLog('[Codex] Live usage error:', err.message); resolve(null); });
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+// Fallback: newest rate_limits snapshot from the Codex CLI's session logs
+const CODEX_SNAPSHOT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+function readCodexSessionSnapshot() {
+  try {
+    const root = path.join(os.homedir(), '.codex', 'sessions');
+    if (!fs.existsSync(root)) return null;
+    let dir = root;
+    for (let depth = 0; depth < 3; depth++) {
+      const subs = fs.readdirSync(dir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
+        .map((d) => d.name)
+        .sort((a, b) => Number(b) - Number(a));
+      if (!subs.length) break;
+      dir = path.join(dir, subs[0]);
+    }
+    const files = fs.readdirSync(dir)
+      .filter((f) => f.endsWith('.jsonl'))
+      .map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m);
+    if (!files.length) return null;
+    const filePath = path.join(dir, files[0].f);
+    if (Date.now() - files[0].m > CODEX_SNAPSHOT_MAX_AGE_MS) return null;
+
+    const size = fs.statSync(filePath).size;
+    const fd = fs.openSync(filePath, 'r');
+    const readLen = Math.min(size, 262144);
+    const buf = Buffer.alloc(readLen);
+    fs.readSync(fd, buf, 0, readLen, size - readLen);
+    fs.closeSync(fd);
+
+    const lines = buf.toString('utf-8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].includes('"rate_limits"')) continue;
+      try {
+        const event = JSON.parse(lines[i]);
+        const rl = event.payload?.rate_limits || event.rate_limits;
+        if (!rl) continue;
+        const limits = [];
+        for (const [prefix, w] of [['primary', rl.primary], ['secondary', rl.secondary]]) {
+          if (!w || w.used_percent == null) continue;
+          const windowSeconds = w.window_minutes != null ? w.window_minutes * 60 : null;
+          limits.push({
+            key: codexWindowKey(windowSeconds, prefix),
+            label: codexWindowLabel(windowSeconds),
+            percent: w.used_percent,
+            resetsAt: w.resets_at ? new Date(w.resets_at * 1000).toISOString() : null
+          });
+        }
+        if (limits.length) return { source: 'session', asOf: event.timestamp || null, limits };
+      } catch {}
+    }
+    return null;
+  } catch (err) {
+    debugLog('[Codex] Session snapshot read failed:', err.message);
+    return null;
+  }
+}
+
+async function fetchCodexUsage() {
+  return (await fetchCodexUsageLive()) || readCodexSessionSnapshot();
+}
+
+// The widget refreshes every 30s, but external provider endpoints rate-limit
+// aggressive polling (429s) — cache each provider's result for 5 minutes.
+const PROVIDER_CACHE_MS = 5 * 60 * 1000;
+const _providerCache = {};
+function cachedProviderFetch(key, fetchFn) {
+  const entry = _providerCache[key];
+  if (entry && Date.now() - entry.at < PROVIDER_CACHE_MS) return Promise.resolve(entry.data);
+  return fetchFn().then((data) => {
+    // Keep serving the previous good result through transient failures
+    const previous = entry?.data || null;
+    _providerCache[key] = { at: Date.now(), data: data || previous };
+    return _providerCache[key].data;
+  });
+}
+
+// ---- Alert webhook (phone-reaching alerts via ntfy or generic JSON POST) ----
+function sendAlertWebhook(event, title, message) {
+  const wh = store.get('settings.webhook', {});
+  if (!wh.enabled || !wh.url) return;
+  try {
+    const target = new URL(wh.url);
+    const isLocal = target.hostname === 'localhost' || target.hostname === '127.0.0.1';
+    if (target.protocol !== 'https:' && !(target.protocol === 'http:' && isLocal)) return;
+    const isNtfy = /ntfy/i.test(target.hostname);
+    const body = isNtfy
+      ? message
+      : JSON.stringify({ event, title, message, timestamp: new Date().toISOString(), source: 'claude-usage-widget' });
+    const mod = target.protocol === 'http:' ? require('http') : https;
+    const req = mod.request({
+      hostname: target.hostname,
+      port: target.port || undefined,
+      path: target.pathname + target.search,
+      method: 'POST',
+      headers: isNtfy
+        ? { 'Content-Type': 'text/plain', 'Title': title, 'Tags': 'chart_with_upwards_trend' }
+        : { 'Content-Type': 'application/json' },
+      timeout: 10000
+    }, (res) => { res.resume(); debugLog('[Webhook]', event, '→', res.statusCode); });
+    req.on('error', (err) => debugLog('[Webhook] Failed:', err.message));
+    req.on('timeout', () => req.destroy());
+    req.end(body);
+  } catch (err) {
+    debugLog('[Webhook] Bad URL or send error:', err.message);
+  }
+}
+
+ipcMain.on('alert-webhook', (event, { event: alertEvent, title, message }) => {
+  sendAlertWebhook(alertEvent || 'alert', title || 'Claude Usage Widget', message || '');
+});
+
+// ---- Session-window planner ----
+// Finds the user's heaviest 5-hour stretch of the day from a week of history
+// so they can align a fresh session window with it.
+function computeSessionPlan() {
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const history = store.get(historyKey, []).filter((e) => e.timestamp > cutoff);
+  if (history.length < 100) return null;
+
+  const hourly = new Array(24).fill(0);
+  for (let i = 1; i < history.length; i++) {
+    const dt = history[i].timestamp - history[i - 1].timestamp;
+    if (dt <= 0 || dt > 3 * 60 * 1000) continue;
+    const dv = (history[i].session || 0) - (history[i - 1].session || 0);
+    if (dv <= 0) continue;
+    hourly[new Date(history[i].timestamp).getHours()] += dv;
+  }
+  const total = hourly.reduce((a, b) => a + b, 0);
+  if (total < 20) return null; // not enough burn to find a pattern
+
+  let bestStart = 0;
+  let bestSum = -1;
+  for (let s = 0; s < 24; s++) {
+    let sum = 0;
+    for (let k = 0; k < 5; k++) sum += hourly[(s + k) % 24];
+    if (sum > bestSum) { bestSum = sum; bestStart = s; }
+  }
+  if (bestSum < total * 0.35) return null; // usage too evenly spread — no useful peak
+
+  const timeFormat = store.get('settings.timeFormat', '12h');
+  const fmtHour = (h) => {
+    h = ((h % 24) + 24) % 24;
+    if (timeFormat === '24h') return `${String(h).padStart(2, '0')}:00`;
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    return `${h12}${ampm}`;
+  };
+  const share = Math.round((bestSum / total) * 100);
+  return {
+    startHour: bestStart,
+    text: `Planner: your heaviest hours are ${fmtHour(bestStart)}–${fmtHour(bestStart + 5)} (${share}% of burn) — start a fresh session just before ${fmtHour(bestStart)} to cover them in one 5h window.`
+  };
+}
+
+// ---- Daily digest ----
+function localDateString(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function checkDailyDigest(data) {
+  if (!store.get('settings.dailyDigest', true)) return;
+  const now = new Date();
+  if (now.getHours() < 9) return; // fire with the first refresh after 9am
+  const today = localDateString(now);
+  if (store.get('digest.lastShown') === today) return;
+
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const history = store.get(historyKey, []);
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yStart = dayStart - 24 * 60 * 60 * 1000;
+
+  const burnOf = (pick) => {
+    let burn = 0;
+    for (let i = 1; i < history.length; i++) {
+      if (history[i].timestamp < yStart || history[i].timestamp >= dayStart) continue;
+      const dt = history[i].timestamp - history[i - 1].timestamp;
+      if (dt <= 0 || dt > 3 * 60 * 1000) continue;
+      const dv = (pick(history[i]) || 0) - (pick(history[i - 1]) || 0);
+      if (dv > 0) burn += dv;
+    }
+    return Math.round(burn);
+  };
+  const weeklyBurn = burnOf((e) => e.weekly);
+  const scopedSlugs = new Set();
+  for (const e of history) for (const s of Object.keys(e.scoped || {})) scopedSlugs.add(s);
+  const scopedParts = [...scopedSlugs].map((slug) => {
+    const label = slug.charAt(0).toUpperCase() + slug.slice(1);
+    return `${label} +${burnOf((e) => e.scoped?.[slug])} pts`;
+  });
+
+  const yesterday = localDateString(new Date(yStart));
+  const anomalies = store.get(`burnAlerts_${yesterday}`, 0);
+
+  const weeklyNow = Math.round(data.seven_day?.utilization || 0);
+  let paceStr = '';
+  if (data.seven_day?.resets_at) {
+    const daysLeft = (new Date(data.seven_day.resets_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    if (daysLeft > 0.25) {
+      paceStr = ` Stay under ~${Math.max(1, Math.floor((100 - weeklyNow) / daysLeft))} pts/day to reach the reset.`;
+    }
+  }
+
+  const body = `Yesterday: Weekly +${weeklyBurn} pts${scopedParts.length ? ', ' + scopedParts.join(', ') : ''}`
+    + `${anomalies ? `, ${anomalies} burn alert${anomalies > 1 ? 's' : ''}` : ''}. Weekly now ${weeklyNow}%.${paceStr}`;
+
+  store.set('digest.lastShown', today);
+  try {
+    new Notification({ title: 'Daily usage digest', body }).show();
+  } catch (err) {
+    console.error('Digest notification failed:', err.message);
+  }
+  sendAlertWebhook('daily_digest', 'Daily usage digest', body);
+}
+
 // ---- Burn-rate forecast ----
 // Least-squares slope over recent history → projected time of hitting 100%.
 // Samples before the most recent value drop (a window reset) are discarded
@@ -293,16 +616,20 @@ function checkBurnAnomalies() {
 
     const minutes = Math.round(spanMs / 60000);
     const typicalStr = typicalJump != null ? ` (typical: ~${typicalJump}% per 10 min)` : '';
+    const alertBody = `${series.label} jumped ${Math.round(jump)}% in ${minutes} min${typicalStr}. Something may be eating tokens.`;
     debugLog('[BurnAlert]', series.key, `+${jump}% in ${minutes}min`, 'rate', jumpRate.toFixed(2), '%/min');
+    const dateKey = `burnAlerts_${localDateString(new Date())}`;
+    store.set(dateKey, store.get(dateKey, 0) + 1);
     try {
       shell.beep();
       new Notification({
         title: 'Unusual token burn',
-        body: `${series.label} jumped ${Math.round(jump)}% in ${minutes} min${typicalStr}. Something may be eating tokens.`
+        body: alertBody
       }).show();
     } catch (err) {
       console.error('Burn alert notification failed:', err.message);
     }
+    sendAlertWebhook('burn_spike', 'Unusual token burn', alertBody);
   }
 }
 
@@ -1422,7 +1749,10 @@ ipcMain.handle('get-settings', () => {
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
     trayOutline: { ...DEFAULT_TRAY_OUTLINE, ...store.get('settings.trayOutline', {}) },
     burnAlerts: store.get('settings.burnAlerts', true),
-    fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' })
+    fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' }),
+    webhook: store.get('settings.webhook', { enabled: false, url: '' }),
+    dailyDigest: store.get('settings.dailyDigest', true),
+    showCodex: store.get('settings.showCodex', true)
   };
 });
 
@@ -1449,6 +1779,9 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.trayOutline) store.set('settings.trayOutline', settings.trayOutline);
   store.set('settings.burnAlerts', settings.burnAlerts !== false);
   if (settings.fontColor) store.set('settings.fontColor', settings.fontColor);
+  if (settings.webhook) store.set('settings.webhook', settings.webhook);
+  store.set('settings.dailyDigest', settings.dailyDigest !== false);
+  store.set('settings.showCodex', settings.showCodex !== false);
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -1728,10 +2061,13 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     throw new Error('Missing credentials');
   }
 
-  // Kick off the Claude Code (CLI) account fetch concurrently with the
-  // claude.ai one; it resolves to null on any failure and never blocks login.
+  // Kick off the Claude Code (CLI) and Codex account fetches concurrently
+  // with the claude.ai one; each resolves to null on any failure.
   const claudeCodePromise = store.get('settings.showClaudeCode', true)
-    ? fetchClaudeCodeUsage()
+    ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage)
+    : Promise.resolve(null);
+  const codexPromise = store.get('settings.showCodex', true)
+    ? cachedProviderFetch('codex', fetchCodexUsage)
     : Promise.resolve(null);
 
   // Ensure cookie is set
@@ -1853,12 +2189,16 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (claudeCode && (claudeCode.five_hour?.resets_at || claudeCode.seven_day?.resets_at)) {
     data.claude_code = claudeCode;
   }
+  const codex = await codexPromise;
+  if (codex) data.codex = codex;
 
   storeUsageHistory(data);
 
-  // Burn-rate forecasts + anomaly check (computed after the new sample is stored)
+  // Burn-rate forecasts, anomaly check, planner, digest — after the new sample lands
   data.forecasts = computeForecasts();
+  data.sessionPlan = computeSessionPlan();
   checkBurnAnomalies();
+  checkDailyDigest(data);
 
   // Store latest usage data for settings refresh
   store.set('latestUsageData', data);

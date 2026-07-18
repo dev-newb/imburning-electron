@@ -11,7 +11,11 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 🎯 **Real-time Usage Tracking** — Monitor both session and weekly usage limits  
 🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own always-visible bar, timer, chart line, tray icon, and alerts  
 💻 **CLI Account** — also tracks your local `claude` CLI login's limits, no extra sign-in  
-⏳ **Burn-rate Forecast** — projects when Weekly/Fable hit 100% at your current pace  
+🟢 **Codex Account** — OpenAI Codex plan limits from your local `codex` CLI login  
+⏳ **Burn-rate Forecast** — projects when Weekly/Fable hit 100%, drawn on the chart and in tooltips  
+🗓️ **Session Planner** — finds your heaviest hours and suggests when to start a fresh 5h window  
+📱 **Phone Alerts** — ntfy/webhook push for burn spikes, danger levels, maxed limits, daily digest  
+🌅 **Daily Digest** — yesterday's burn, anomalies, and pace-to-reset each morning  
 📊 **Visual Progress Bars** — Clean, gradient progress indicators with configurable warning thresholds  
 ⏱️ **Countdown Timers** — Circular timers showing time elapsed in the current session window  
 🔄 **Auto-refresh** — Updates every 5 minutes automatically, with animated refresh indicator  
@@ -72,6 +76,28 @@ Every stats tray icon's background and number colour is configurable in Settings
 ### 🚨 Burn-spike Alert
 
 The widget learns your normal token burn rate from its usage history (robust median + MAD baseline over the retention window) and fires a **sound + notification** when a 10-minute window burns far outside that pattern — catching runaway token sinks you didn't intend. No config needed beyond an on/off toggle; the baseline adapts to *your* usage. Until enough history exists it falls back to a conservative absolute threshold.
+
+### 🟢 Codex (OpenAI) Account Tracking
+
+If the `codex` CLI is installed, the widget also shows your **Codex plan limits** (e.g. weekly usage on Pro) as teal rows — read from the CLI's local login and the same usage endpoint the CLI itself polls. When the stored token has expired, it falls back to the newest rate-limit snapshot in the CLI's own session logs. Toggle with **Codex account** in Settings. Provider endpoints are polled at most every 5 minutes.
+
+> **Gemini:** not supported — Google exposes no programmatic quota endpoint, and even the Gemini CLI itself [cannot show your remaining daily quota](https://github.com/google-gemini/gemini-cli/discussions/3096). If that ever changes, the provider framework here is ready for it.
+
+### 📉 Forecast on the Chart
+
+The burn-rate forecast is now drawn on the usage graph: a **dotted projection line** from the newest sample to each series' predicted 100% crossing, plus a grey dashed marker at the weekly reset — so you can see at a glance whether you'll hit the cap or the reset first. Projections only appear for series with a real upward trend.
+
+### 🗓️ Session-window Planner
+
+A small hint under the usage bars analyses your last week of activity and finds your heaviest 5-hour stretch of the day: *"your heaviest hours are 2pm–7pm — start a fresh session just before 2pm to cover them in one 5h window."* Shown only when a clear pattern exists.
+
+### 📱 Phone Alerts (webhook / ntfy)
+
+Point **Phone alerts** in Settings at an [ntfy](https://ntfy.sh) topic or any HTTPS webhook, and the widget pushes burn-spike alerts, danger-threshold crossings, maxed-out limits, and the daily digest to your phone — the alerts that matter most when you're *not* at the machine. ntfy URLs get plain-text pushes with a title; anything else gets a JSON POST.
+
+### 🌅 Daily Digest
+
+Once a day (first refresh after 9am) the widget posts a summary: yesterday's burn per limit, any anomalies, and a pace line — *"stay under ~N pts/day to reach the reset."* Toggle in Settings; also delivered to your webhook if enabled.
 
 ### 🔄 Auto-update (no installer wizard)
 
