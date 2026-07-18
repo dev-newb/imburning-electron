@@ -1195,17 +1195,53 @@ body.theme-light .section-header.frozen .section-name {
     100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.25) rotate(180deg); opacity: 0; }
 }
 
-/* Session planner hint under the pinned rows */
+/* Session planner hint under the pinned rows — wraps onto extra lines,
+   never ellipsed */
 .plan-note {
     font-size: 10px;
     font-style: italic;
     color: #808080;
-    padding: 2px 16px 0;
-    height: 16px;
-    line-height: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 2px 16px 3px;
+    line-height: 13px;
+    white-space: normal;
+}
+
+/* Codex limit-reset dots — magic teal orbs, spread edge to edge */
+.reset-dots {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 7px;
+}
+
+.reset-dots.single {
+    justify-content: center;
+}
+
+.reset-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #10a37f 0%, #34d0a8 100%);
+    box-shadow: 0 0 4px rgba(16, 163, 127, 0.5);
+    animation: dotGlimmer 7s ease-in-out infinite;
+}
+
+@keyframes dotGlimmer {
+    0%, 86%, 100% {
+        filter: brightness(1);
+        box-shadow: 0 0 4px rgba(16, 163, 127, 0.5);
+        transform: scale(1);
+    }
+    90% {
+        filter: brightness(1.75);
+        box-shadow: 0 0 10px rgba(52, 208, 168, 0.95), 0 0 18px rgba(130, 240, 205, 0.5);
+        transform: scale(1.3);
+    }
+    94% {
+        filter: brightness(1.1);
+    }
 }
 
 .webhook-url {

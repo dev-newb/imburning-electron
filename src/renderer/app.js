@@ -915,7 +915,8 @@ function buildExtraRows(data) {
         elements.openaiRows.appendChild(row);
     }
 
-    // OpenAI weekly-limit reset feature — banked resets, same row style
+    // OpenAI weekly-limit reset feature — banked resets shown as magic dots
+    // (no ON/OFF: resets aren't a toggle, they simply exist)
     const resetCredits = data.codex?.resetCredits;
     if (resetCredits && elements.openaiRows.children.length) {
         const row = document.createElement('div');
@@ -926,26 +927,22 @@ function buildExtraRows(data) {
 
         const label = document.createElement('span');
         label.className = 'usage-label';
-        const statusTag = document.createElement('span');
-        statusTag.className = `extra-status ${resetCredits.applicable > 0 ? 'on' : 'off'}`;
-        statusTag.textContent = resetCredits.applicable > 0 ? 'ON' : 'OFF';
-        label.appendChild(statusTag);
-        label.appendChild(document.createTextNode(' Limit Resets'));
+        label.textContent = 'Limit Resets';
         row.appendChild(label);
 
+        // One teal dot per banked reset, spread edge to edge across the column
         const barGroup = document.createElement('div');
         barGroup.className = 'usage-bar-group';
-        const progressBar = document.createElement('div');
-        progressBar.className = 'progress-bar';
-        const progressFill = document.createElement('div');
-        progressFill.className = 'progress-fill extra';
-        progressFill.style.width = '0%';
-        progressBar.appendChild(progressFill);
-        barGroup.appendChild(progressBar);
-        const percentage = document.createElement('span');
-        percentage.className = 'usage-percentage';
-        percentage.textContent = '—';
-        barGroup.appendChild(percentage);
+        const dotsWrap = document.createElement('div');
+        const dotCount = Math.min(resetCredits.available, 12);
+        dotsWrap.className = 'reset-dots' + (dotCount === 1 ? ' single' : '');
+        for (let i = 0; i < dotCount; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'reset-dot';
+            dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
+            dotsWrap.appendChild(dot);
+        }
+        barGroup.appendChild(dotsWrap);
         row.appendChild(barGroup);
 
         const elapsedGroup = document.createElement('div');
