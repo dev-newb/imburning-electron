@@ -67,7 +67,7 @@ Desktop notifications now also fire for scoped weekly limits: at your configured
 
 ### 🎨 Custom Tray Colors & Critical Outline
 
-Every stats tray icon's background and number colour is configurable in Settings. New defaults tell the icons apart at a glance: **Session = black number on purple, Weekly = white on blue, Fable = white on red**. When Anthropic's API reports a limit's severity as elevated (`critical`), the icon gets a **2px coloured outline** (default yellow) — toggle and colour are both configurable.
+Every stats tray icon's background and number colour is configurable in Settings. Default scheme: **Weekly (leftmost) = white number on blue, Session = black number on blue, Fable = black number on red**. When Anthropic's API reports a limit's severity as elevated (`critical`), the icon gets a **2px coloured outline** (default yellow) — toggle and colour are both configurable.
 
 ### 🚨 Burn-spike Alert
 

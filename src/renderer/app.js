@@ -1798,9 +1798,9 @@ async function loadSettings() {
     // Tray colours + critical outline + burn alerts
     const trayColors = settings.trayColors || {};
     const colorDefaults = {
-        session: { bg: '#8b5cf6', text: '#000000' },
+        session: { bg: '#3b82f6', text: '#000000' },
         weekly: { bg: '#3b82f6', text: '#ffffff' },
-        fable: { bg: '#ef4444', text: '#ffffff' }
+        fable: { bg: '#ef4444', text: '#000000' }
     };
     for (const [key, ids] of [
         ['session', ['traySessionBg', 'traySessionText']],

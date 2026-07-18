@@ -470,9 +470,11 @@ function getBackgroundColor(percent, defaultColor, warnThreshold, dangerThreshol
 
 // ---- Tray icon colours (customizable in Settings) ----
 const DEFAULT_TRAY_COLORS = {
-  session: { bg: '#8b5cf6', text: '#000000' },  // black number distinguishes it from Weekly
+  // Weekly (left) and Session (right) share the blue background; the number
+  // colour tells them apart — white = Weekly, black = Session
+  session: { bg: '#3b82f6', text: '#000000' },
   weekly:  { bg: '#3b82f6', text: '#ffffff' },
-  fable:   { bg: '#ef4444', text: '#ffffff' }
+  fable:   { bg: '#ef4444', text: '#000000' }
 };
 const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
 
