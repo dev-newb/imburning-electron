@@ -10,7 +10,7 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 
 🎯 **Real-time Usage Tracking** — Monitor both session and weekly usage limits  
 🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own always-visible bar, timer, chart line, tray icon, and alerts  
-💻 **Claude Code Account** — also tracks your local Claude Code (CLI) login's limits, no extra sign-in  
+💻 **CLI Account** — also tracks your local `claude` CLI login's limits, no extra sign-in  
 ⏳ **Burn-rate Forecast** — projects when Weekly/Fable hit 100% at your current pace  
 📊 **Visual Progress Bars** — Clean, gradient progress indicators with configurable warning thresholds  
 ⏱️ **Countdown Timers** — Circular timers showing time elapsed in the current session window  
@@ -49,11 +49,13 @@ A third tray icon (menu bar icon on macOS) shows your Fable weekly percentage at
 
 > **Windows note:** Windows hides new tray icons in the overflow area (the **^** chevron) by default. Drag the red icon onto the taskbar once to keep it visible at a glance.
 
-### 💻 Claude Code Account Tracking
+### 💻 CLI Account Tracking
 
-If Claude Code (the CLI coding agent) is installed on the same machine, the widget also shows **that account's** session, weekly, and Fable usage — read from the CLI's own local login, no extra sign-in needed. Useful when your claude.ai login and your Claude Code login are different accounts with separate limits. Rows appear in the expandable panel with `Code` labels; toggle with **Claude Code account** in Settings.
+If the `claude` CLI (Claude Code) is installed on the same machine, the widget also shows **that login's** session, weekly, and Fable usage — read from the CLI's own local credentials, no extra sign-in needed. Useful when your claude.ai login and your CLI login are different accounts with separate limits. Rows appear in the expandable panel with `CLI` labels; toggle with **CLI account** in Settings.
 
 > The widget never touches the CLI's refresh token (that could log the CLI out), so these rows appear only while the CLI's short-lived access token is fresh — any run of the `claude` CLI renews it. If the rows are missing, the token has simply expired.
+
+> Note this is specifically the **CLI's** login: the Claude Code desktop app keeps its own separate session, which the widget can't read.
 
 ### 📈 Burn-rate Forecast
 

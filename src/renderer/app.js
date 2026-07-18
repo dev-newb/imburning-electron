@@ -820,12 +820,12 @@ function normalizeUsageData(data) {
         const ccRows = [];
         if (cc.five_hour?.utilization != null) {
             ccRows.push(['cc_five_hour',
-                { label: 'Code Session', color: 'cc' },
+                { label: 'CLI Session', color: 'cc' },
                 { utilization: cc.five_hour.utilization, resets_at: cc.five_hour.resets_at }]);
         }
         if (cc.seven_day?.utilization != null) {
             ccRows.push(['cc_seven_day',
-                { label: 'Code Weekly (7d)', color: 'weekly' },
+                { label: 'CLI Weekly (7d)', color: 'weekly' },
                 { utilization: cc.seven_day.utilization, resets_at: cc.seven_day.resets_at }]);
         }
         for (const limit of (cc.limits || [])) {
@@ -833,7 +833,7 @@ function normalizeUsageData(data) {
             const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
             const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
             ccRows.push(['cc_seven_day_scoped_' + slug,
-                { label: `Code ${scopeName} (7d)`, color: SCOPED_COLOR_CLASSES[slug] || 'opus' },
+                { label: `CLI ${scopeName} (7d)`, color: SCOPED_COLOR_CLASSES[slug] || 'opus' },
                 { utilization: limit.percent, resets_at: limit.resets_at }]);
         }
         if (ccRows.length) {
