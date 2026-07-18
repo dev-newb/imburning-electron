@@ -76,6 +76,17 @@ function storeUsageHistory(data) {
   const timestamp = Date.now();
   let history = store.get(historyKey, []);
 
+  // Scoped weekly limits (e.g. Fable) arrive in the `limits` array; their
+  // legacy seven_day_<model> fields are null. Record them under a slug keyed
+  // by display name (same slug the renderer derives) so the chart can plot
+  // whatever scopes the API sends without a per-model release.
+  const scoped = {};
+  for (const limit of (data.limits || [])) {
+    if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
+    const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
+    scoped[String(scopeName).toLowerCase().replace(/[^a-z0-9]+/g, '_')] = limit.percent;
+  }
+
   history.push({
     timestamp,
     session: data.five_hour?.utilization || 0,
@@ -85,7 +96,8 @@ function storeUsageHistory(data) {
     cowork: data.seven_day_cowork?.utilization || 0,
     design: data.seven_day_omelette?.utilization || 0,
     oauthApps: data.seven_day_oauth_apps?.utilization || 0,
-    extraUsage: data.extra_usage?.utilization || 0
+    extraUsage: data.extra_usage?.utilization || 0,
+    ...(Object.keys(scoped).length ? { scoped } : {})
   });
 
   // Rotation: apply both time-based and count-based limits

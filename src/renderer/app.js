@@ -763,6 +763,10 @@ function resizeWidget(bannerVisible) {
     window.electronAPI.resizeWindow(totalHeight);
 }
 
+// Colour classes for scoped weekly limits that have their own CSS identity;
+// anything not listed falls back to the opus colour.
+const SCOPED_COLOR_CLASSES = { fable: 'fable' };
+
 function normalizeUsageData(data) {
     // claude.ai now reports per-model weekly limits (e.g. Fable) as entries in
     // the `limits` array with kind "weekly_scoped"; the legacy seven_day_<model>
@@ -771,9 +775,10 @@ function normalizeUsageData(data) {
     for (const limit of (data.limits || [])) {
         if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
         const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
-        const key = 'seven_day_scoped_' + scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const key = 'seven_day_scoped_' + slug;
         if (!EXTRA_ROW_CONFIG[key]) {
-            EXTRA_ROW_CONFIG[key] = { label: `${scopeName} (7d)`, color: 'opus' };
+            EXTRA_ROW_CONFIG[key] = { label: `${scopeName} (7d)`, color: SCOPED_COLOR_CLASSES[slug] || 'opus' };
             // Re-insert extra_usage so model rows stay grouped above it
             const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
             delete EXTRA_ROW_CONFIG.extra_usage;
@@ -1292,6 +1297,16 @@ function renderChart(history) {
     const showDesign = isExpanded && !!latestUsageData?.seven_day_omelette;
     const showOAuthApps = isExpanded && !!latestUsageData?.seven_day_oauth_apps;
     const showExtraUsage = isExpanded && !!latestUsageData?.extra_usage;
+    // Scoped weekly series (e.g. Fable) recorded by main.js under entry.scoped
+    const scopedKeys = [];
+    if (isExpanded) {
+        const seen = new Set();
+        for (const entry of history) {
+            for (const key of Object.keys(entry.scoped || {})) {
+                if (!seen.has(key)) { seen.add(key); scopedKeys.push(key); }
+            }
+        }
+    }
     const allValues = history.flatMap((entry) => {
         const values = [entry.session, entry.weekly];
         if (showSonnet) values.push(entry.sonnet || 0);
@@ -1300,6 +1315,7 @@ function renderChart(history) {
         if (showDesign) values.push(entry.design || 0);
         if (showOAuthApps) values.push(entry.oauthApps || 0);
         if (showExtraUsage) values.push(entry.extraUsage || 0);
+        for (const key of scopedKeys) values.push(entry.scoped?.[key] || 0);
         return values;
     });
     const yMax = Math.max(10, Math.ceil(Math.max(...allValues) / 10) * 10);
@@ -1429,6 +1445,32 @@ function renderChart(history) {
             pointHitRadius: 10
             });
         }
+    }
+
+    // Dynamic series for scoped weekly limits (e.g. Fable), matching the
+    // per-model rows built by normalizeUsageData()
+    const SCOPED_CHART_COLORS = { fable: '#d946ef' };
+    const SCOPED_FALLBACK_COLORS = ['#84cc16', '#14b8a6', '#a855f7', '#64748b'];
+    let scopedColorIndex = 0;
+    for (const key of scopedKeys) {
+        const scopedData = history.map((entry) => entry.scoped?.[key] || 0);
+        if (!scopedData.some((value) => value > 0)) continue;
+        const label = key.split('_')
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        const borderColor = SCOPED_CHART_COLORS[key]
+            || SCOPED_FALLBACK_COLORS[scopedColorIndex++ % SCOPED_FALLBACK_COLORS.length];
+        datasets.push({
+            label,
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry.scoped?.[key] || 0 })),
+            borderColor,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            stepped: true,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            pointHitRadius: 10
+        });
     }
 
     const firstDayMidnight = new Date(history[0].timestamp);
