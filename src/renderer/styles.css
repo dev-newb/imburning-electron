@@ -474,9 +474,9 @@ body {
 
 /* Expandable Section */
 .expand-section {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    margin-top: 12px;
-    padding-top: 6px;
+    /* No divider or extra gap inside a provider section — the section's own
+       bottom rule is the only separator, spacing matches OpenAI/Google */
+    margin-top: 2px;
 }
 
 .graph-section {
@@ -1081,6 +1081,32 @@ body.theme-light .section-eye {
 
 body.theme-light .section-eye.on {
     color: #7c5ce0;
+}
+
+/* Ring-reset sparkle — a wand-tap of gold when an elapsed circle completes */
+.sparkle-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 5;
+}
+
+.sparkle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    line-height: 1;
+    color: #ffd700;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.9), 0 0 10px rgba(255, 240, 150, 0.5);
+    animation: sparkleFly 1.1s ease-out forwards;
+    opacity: 0;
+}
+
+@keyframes sparkleFly {
+    0%   { transform: translate(-50%, -50%) scale(0.2) rotate(0deg); opacity: 0; }
+    18%  { transform: translate(-50%, -50%) scale(1.15) rotate(45deg); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.25) rotate(180deg); opacity: 0; }
 }
 
 /* Session planner hint under the pinned rows */

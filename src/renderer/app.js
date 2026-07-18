@@ -1134,19 +1134,21 @@ function updateUI(data) {
             : '';
     }
 
-    // Session-window planner hints, one per provider section
+    // Session-window planner hints, one per provider section. When there is
+    // not enough burn history yet, show a learning placeholder rather than
+    // nothing — the line stays put instead of appearing days later.
     const plans = data.sessionPlans || {};
+    const PLAN_LEARNING = 'Planner: still learning this account’s rhythm — needs more usage history.';
     for (const [el, plan] of [
         [elements.planNote, plans.anthropic],
         [elements.planNoteOpenai, plans.openai],
         [elements.planNoteGoogle, plans.google]
     ]) {
         if (!el) continue;
-        el.style.display = plan ? '' : 'none';
-        if (plan) {
-            el.textContent = plan.text;
-            el.title = plan.text;
-        }
+        el.style.display = '';
+        el.textContent = plan ? plan.text : PLAN_LEARNING;
+        el.title = plan ? plan.text : PLAN_LEARNING;
+        el.style.opacity = plan ? '' : '0.55';
     }
 
     if (!isCompactMode) resizeWidget();
@@ -1580,6 +1582,36 @@ function formatResetsAt(resetsAt, isWeekly, timeFormat, weeklyDateFormat) {
     }
 }
 
+// A whimsical gold sparkle burst around an elapsed ring — fired when its
+// window completes, as if an unseen Tinkerbell tapped it with her wand
+function sparkleRing(timerElement) {
+    if (document.visibilityState !== 'visible') return; // only when in view
+    const anchor = timerElement.closest('.usage-elapsed-group') || timerElement.parentElement;
+    if (!anchor || anchor.querySelector('.sparkle-burst')) return;
+    anchor.style.position = 'relative';
+
+    const burst = document.createElement('div');
+    burst.className = 'sparkle-burst';
+    const glyphs = ['✦', '✧', '✨', '⋆', '✦'];
+    const colors = ['#ffd700', '#fff3b0', '#ffe066', '#ffffff', '#ffec99'];
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+        const s = document.createElement('span');
+        s.className = 'sparkle';
+        s.textContent = glyphs[i % glyphs.length];
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+        const dist = 13 + Math.random() * 19;
+        s.style.setProperty('--dx', `${(Math.cos(angle) * dist).toFixed(1)}px`);
+        s.style.setProperty('--dy', `${(Math.sin(angle) * dist).toFixed(1)}px`);
+        s.style.color = colors[i % colors.length];
+        s.style.animationDelay = `${(Math.random() * 0.3).toFixed(2)}s`;
+        s.style.fontSize = `${Math.round(5 + Math.random() * 5)}px`;
+        burst.appendChild(s);
+    }
+    anchor.appendChild(burst);
+    setTimeout(() => burst.remove(), 1700);
+}
+
 // Update circular timer
 function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     if (!resetsAt) {
@@ -1597,6 +1629,12 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     textElement.style.fontSize = '';
     textElement.title = '';
 
+    // A new resets_at means the previous window just completed — sparkle once
+    if (timerElement.dataset.lastResets && timerElement.dataset.lastResets !== resetsAt) {
+        sparkleRing(timerElement);
+    }
+    timerElement.dataset.lastResets = resetsAt;
+
     const resetDate = new Date(resetsAt);
     const now = new Date();
     const diff = resetDate - now;
@@ -1605,6 +1643,11 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
         textElement.textContent = 'Resetting...';
         timerElement.style.strokeDashoffset = 0;
         timerElement.style.stroke = 'hsl(142, 70%, 47%)'; // full green — reset imminent
+        // The circle just completed — one wand-tap per window
+        if (timerElement.dataset.sparkledFor !== resetsAt) {
+            timerElement.dataset.sparkledFor = resetsAt;
+            sparkleRing(timerElement);
+        }
         return;
     }
 
