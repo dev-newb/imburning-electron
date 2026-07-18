@@ -109,7 +109,7 @@ A toggleable usage history graph now sits below the main widget. Click the graph
 ### 🌍 Currency Support
 The Extra Usage row now displays the correct currency symbol based on your account's billing currency — **€**, **£**, or **$**.
 
-> For full release history, see the [Releases](../../releases) page.
+> For full release history, see the [Releases](../../releases) page. Fork releases auto-apply from v1.9.0 onward.
 
 ---
 
