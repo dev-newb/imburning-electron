@@ -82,6 +82,10 @@ The widget learns your normal token burn rate from its usage history (robust med
 
 If the `codex` CLI is installed, the widget also shows your **Codex plan limits** (e.g. weekly usage on Pro) as teal rows — read from the CLI's local login and the same usage endpoint the CLI itself polls. When the stored token has expired, it falls back to the newest rate-limit snapshot in the CLI's own session logs. Toggle with **Codex account** in Settings. Provider endpoints are polled at most every 5 minutes.
 
+### 🗂️ Provider Sections
+
+The widget is organised into **Anthropic / OpenAI / Google** sections, each with a labelled header. Sections **collapse and expand** with a click (state persists across restarts), and each header carries its own **tray checkbox** controlling that provider's tray icons — Anthropic's session/weekly/Fable badges, an OpenAI Codex badge (teal), and a Google Gemini badge (yellow, worst bucket). Provider sections appear only when their CLI is installed and reporting data. Window height adapts automatically to whatever is visible.
+
 ### 🟡 Gemini (Google) Account Tracking
 
 If the `gemini` CLI is installed, the widget shows your **Gemini daily quota** as yellow rows — one for the Pro model family, one for Flash, each reflecting the most-consumed model bucket in that family with its reset time. It authenticates with the CLI's own local OAuth credentials against the same quota endpoint the CLI's backend uses (Google refresh tokens don't rotate, so this can never break the CLI's login; nothing is written back). Toggle with **Gemini account** in Settings.

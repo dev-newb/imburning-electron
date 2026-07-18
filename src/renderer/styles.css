@@ -955,6 +955,79 @@ body.theme-light .settings-disclaimer {
     cursor: pointer;
 }
 
+/* Provider sections (Anthropic / OpenAI / Google) */
+.provider-section {
+    margin-top: 2px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 14px 3px 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-header:hover .section-name {
+    color: #c0c0d0;
+}
+
+.section-arrow {
+    color: #8a8a9a;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.section-header.collapsed .section-arrow {
+    transform: rotate(-90deg);
+}
+
+.section-name {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #8a8a9a;
+}
+
+.section-tray {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #70707e;
+    cursor: pointer;
+}
+
+.section-tray input {
+    width: 11px;
+    height: 11px;
+    accent-color: #8b5cf6;
+    cursor: pointer;
+    margin: 0;
+}
+
+.section-body.collapsed {
+    display: none;
+}
+
+body.theme-light .section-name,
+body.theme-light .section-arrow {
+    color: #707090;
+}
+
+body.theme-light .section-header:hover .section-name {
+    color: #404060;
+}
+
+body.theme-light .section-tray {
+    color: #808098;
+}
+
 /* Session planner hint under the pinned rows */
 .plan-note {
     font-size: 10px;

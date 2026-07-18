@@ -130,6 +130,18 @@
                     <span class="col-header col-header-center">Resets At</span>
                 </div>
 
+                <!-- ANTHROPIC provider section -->
+                <div class="provider-section" id="sectionAnthropic">
+                    <div class="section-header" id="headerAnthropic">
+                        <svg class="section-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+                        <span class="section-name">Anthropic</span>
+                        <label class="section-tray" title="Show Anthropic tray icons">
+                            <input type="checkbox" id="trayCheckAnthropic">
+                            <span>tray</span>
+                        </label>
+                    </div>
+                    <div class="section-body" id="bodyAnthropic">
+
                 <!-- Session Usage -->
                 <div class="usage-section">
                     <span class="usage-label">Current Session</span>
@@ -186,6 +198,39 @@
                 <!-- Expandable Details -->
                 <div class="expand-section" id="expandSection" style="display: none;">
                     <div id="extraRows"></div>
+                </div>
+
+                    </div><!-- /bodyAnthropic -->
+                </div><!-- /sectionAnthropic -->
+
+                <!-- OPENAI provider section -->
+                <div class="provider-section" id="sectionOpenai" style="display: none;">
+                    <div class="section-header" id="headerOpenai">
+                        <svg class="section-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+                        <span class="section-name">OpenAI</span>
+                        <label class="section-tray" title="Show OpenAI tray icon">
+                            <input type="checkbox" id="trayCheckOpenai">
+                            <span>tray</span>
+                        </label>
+                    </div>
+                    <div class="section-body" id="bodyOpenai">
+                        <div id="openaiRows"></div>
+                    </div>
+                </div>
+
+                <!-- GOOGLE provider section -->
+                <div class="provider-section" id="sectionGoogle" style="display: none;">
+                    <div class="section-header" id="headerGoogle">
+                        <svg class="section-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+                        <span class="section-name">Google</span>
+                        <label class="section-tray" title="Show Google tray icon">
+                            <input type="checkbox" id="trayCheckGoogle">
+                            <span>tray</span>
+                        </label>
+                    </div>
+                    <div class="section-body" id="bodyGoogle">
+                        <div id="googleRows"></div>
+                    </div>
                 </div>
 
                 <div class="graph-section" id="graphSection" style="display: none;">
@@ -274,11 +319,7 @@
                                 </label>
                             </div>
                             <div class="settings-col">
-                                <span class="settings-row-label">Show tray stats</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="showTrayStatsToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <span class="settings-row-hint">Tray icons are toggled per provider — use the checkbox in each section header.</span>
                             </div>
                         </div>
 

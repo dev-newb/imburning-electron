@@ -1511,10 +1511,12 @@ function syncFableTray(scopedLimit, forecastAt = null) {
 
 function destroyTrayIcons() {
   // Centralized tray cleanup keeps Linux appindicator hosts from showing stale icons.
-  const trays = [sessionTray, weeklyTray, fableTray];
+  const trays = [sessionTray, weeklyTray, fableTray, _providerTrays.codex, _providerTrays.gemini];
   sessionTray = null;
   weeklyTray = null;
   fableTray = null;
+  _providerTrays.codex = null;
+  _providerTrays.gemini = null;
 
   for (const tray of trays) {
     if (!tray || tray.isDestroyed()) continue;
@@ -1574,11 +1576,81 @@ function formatResetTime(resetsAt, timeFormat, includeDate = false) {
   }
 }
 
+// ---- External provider tray icons (OpenAI / Google sections) ----
+// Independent of the Anthropic tray setting: each provider section's
+// checkbox controls its own badge.
+const _providerTrays = { codex: null, gemini: null };
+
+function syncProviderTray(name, enabled, badge) {
+  let tray = _providerTrays[name];
+  if (!enabled || !badge) {
+    if (tray && !tray.isDestroyed()) {
+      try {
+        tray.removeAllListeners();
+        tray.setContextMenu(null);
+        tray.setToolTip('');
+        if (process.platform === 'linux') tray.setImage(nativeImage.createEmpty());
+        tray.destroy();
+      } catch (_) {}
+    }
+    _providerTrays[name] = null;
+    return;
+  }
+
+  try {
+    if (!tray || tray.isDestroyed()) {
+      tray = new Tray(trayStaticIconPath());
+      tray.setContextMenu(buildTrayContextMenu());
+      attachTrayToggleClick(tray);
+      _providerTrays[name] = tray;
+    }
+    const dangerThreshold = store.get('settings.dangerThreshold', 90);
+    const colors = getTrayColorSettings();
+    const outline = colors.outline.enabled && badge.percent >= dangerThreshold
+      ? colors.outline.color : null;
+    tray.setImage(badge.percent >= 99
+      ? generateRedXIcon(badge.bg, badge.text, outline)
+      : generatePercentageIcon(badge.percent, badge.bg, badge.text, outline));
+    const timeFormat = store.get('settings.timeFormat', '12h');
+    let tooltip = `${badge.label}: ${Math.round(badge.percent)}%`;
+    const resetTime = formatResetTime(badge.resetsAt, timeFormat, true);
+    if (resetTime) tooltip += `\nResets: ${resetTime}`;
+    tray.setToolTip(tooltip);
+  } catch (error) {
+    console.error(`Failed to update ${name} tray icon:`, error);
+  }
+}
+
+function syncExternalProviderTrays(usageData) {
+  const codexLimit = usageData?.codex?.limits?.[0] || null;
+  syncProviderTray('codex', store.get('settings.trayOpenai', false), codexLimit && {
+    percent: codexLimit.percent,
+    label: codexLimit.label,
+    resetsAt: codexLimit.resetsAt,
+    bg: { r: 16, g: 163, b: 127 },                 // OpenAI teal
+    text: { r: 255, g: 255, b: 255, a: 255 }
+  });
+
+  const geminiLimits = usageData?.gemini?.limits || [];
+  const worstGemini = geminiLimits.reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+  syncProviderTray('gemini', store.get('settings.trayGoogle', false), worstGemini && {
+    percent: worstGemini.percent,
+    label: worstGemini.label,
+    resetsAt: worstGemini.resetsAt,
+    bg: { r: 244, g: 180, b: 0 },                  // Google yellow
+    text: { r: 0, g: 0, b: 0, a: 255 }
+  });
+}
+
 /**
  * Update tray icons with current usage data
  * @param {Object} usageData - Usage data object containing session and weekly percentages
  */
 function updateTrayIcon(usageData) {
+  // Provider badges are governed by their own section checkboxes,
+  // independent of the Anthropic tray setting below
+  syncExternalProviderTrays(usageData);
+
   const showTrayStats = store.get('settings.showTrayStats', false);
   
   if (!showTrayStats) {
@@ -1910,11 +1982,18 @@ ipcMain.handle('get-settings', () => {
     webhook: store.get('settings.webhook', { enabled: false, url: '' }),
     dailyDigest: store.get('settings.dailyDigest', true),
     showCodex: store.get('settings.showCodex', true),
-    showGemini: store.get('settings.showGemini', true)
+    showGemini: store.get('settings.showGemini', true),
+    trayOpenai: store.get('settings.trayOpenai', false),
+    trayGoogle: store.get('settings.trayGoogle', false),
+    sectionCollapsed: store.get('settings.sectionCollapsed', {})
   };
 });
 
 ipcMain.handle('save-settings', (event, settings) => {
+  debugLog('[Settings] save-settings received:', JSON.stringify({
+    trayOpenai: settings.trayOpenai, trayGoogle: settings.trayGoogle,
+    sectionCollapsed: settings.sectionCollapsed, showTrayStats: settings.showTrayStats
+  }));
   const supportsLoginItems = process.platform !== 'linux';
   const autoStart = supportsLoginItems ? settings.autoStart : false;
 
@@ -1941,6 +2020,9 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.dailyDigest', settings.dailyDigest !== false);
   store.set('settings.showCodex', settings.showCodex !== false);
   store.set('settings.showGemini', settings.showGemini !== false);
+  if (settings.trayOpenai !== undefined) store.set('settings.trayOpenai', settings.trayOpenai === true);
+  if (settings.trayGoogle !== undefined) store.set('settings.trayGoogle', settings.trayGoogle === true);
+  if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 

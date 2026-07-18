@@ -63,6 +63,20 @@ const elements = {
     expandSection: document.getElementById('expandSection'),
     extraRows: document.getElementById('extraRows'),
     scopedRows: document.getElementById('scopedRows'),
+    titleBar: document.getElementById('titleBar'),
+    headerAnthropic: document.getElementById('headerAnthropic'),
+    bodyAnthropic: document.getElementById('bodyAnthropic'),
+    trayCheckAnthropic: document.getElementById('trayCheckAnthropic'),
+    sectionOpenai: document.getElementById('sectionOpenai'),
+    headerOpenai: document.getElementById('headerOpenai'),
+    bodyOpenai: document.getElementById('bodyOpenai'),
+    openaiRows: document.getElementById('openaiRows'),
+    trayCheckOpenai: document.getElementById('trayCheckOpenai'),
+    sectionGoogle: document.getElementById('sectionGoogle'),
+    headerGoogle: document.getElementById('headerGoogle'),
+    bodyGoogle: document.getElementById('bodyGoogle'),
+    googleRows: document.getElementById('googleRows'),
+    trayCheckGoogle: document.getElementById('trayCheckGoogle'),
     graphSection: document.getElementById('graphSection'),
     usageChart: document.getElementById('usageChart'),
 
@@ -76,7 +90,6 @@ const elements = {
     autoStartHint: document.getElementById('autoStartHint'),
     minimizeToTrayToggle: document.getElementById('minimizeToTrayToggle'),
     alwaysOnTopToggle: document.getElementById('alwaysOnTopToggle'),
-    showTrayStatsToggle: document.getElementById('showTrayStatsToggle'),
     warnThreshold: document.getElementById('warnThreshold'),
     dangerThreshold: document.getElementById('dangerThreshold'),
     themeBtns: document.querySelectorAll('.theme-btn'),
@@ -184,6 +197,7 @@ async function init() {
     warnThreshold = settings.warnThreshold;
     dangerThreshold = settings.dangerThreshold;
     applyFontColor(settings);
+    applySectionStates(settings);
 
     // Restore compact mode from saved settings
     if (settings.compactMode) {
@@ -236,6 +250,70 @@ async function init() {
 
     // Startup restore complete — allow _saveViewState to persist changes
     appInitializing = false;
+}
+
+// Merge a partial settings change into the cached settings and persist —
+// used by controls that live outside the settings overlay (section headers)
+async function _saveSettingsPatch(patch) {
+    const settings = window._cachedSettings || await window.electronAPI.getSettings();
+    Object.assign(settings, patch);
+    window._cachedSettings = settings;
+    await window.electronAPI.saveSettings(settings);
+}
+
+// Provider sections: collapsible, each with its own tray-icon checkbox
+const PROVIDER_SECTIONS = [
+    { key: 'anthropic', traySetting: 'showTrayStats' },
+    { key: 'openai', traySetting: 'trayOpenai' },
+    { key: 'google', traySetting: 'trayGoogle' }
+];
+
+function sectionEls(key) {
+    const cap = key.charAt(0).toUpperCase() + key.slice(1);
+    return {
+        header: elements['header' + cap],
+        body: elements['body' + cap],
+        check: elements['trayCheck' + cap]
+    };
+}
+
+function applySectionStates(settings) {
+    const collapsed = settings.sectionCollapsed || {};
+    for (const { key, traySetting } of PROVIDER_SECTIONS) {
+        const { header, body, check } = sectionEls(key);
+        if (!header) continue;
+        header.classList.toggle('collapsed', !!collapsed[key]);
+        body.classList.toggle('collapsed', !!collapsed[key]);
+        if (check) check.checked = settings[traySetting] === true;
+    }
+}
+
+function setupProviderSections() {
+    for (const { key, traySetting } of PROVIDER_SECTIONS) {
+        const { header, body, check } = sectionEls(key);
+        if (!header) continue;
+        header.addEventListener('click', async (e) => {
+            if (e.target.closest('.section-tray')) return; // checkbox handles itself
+            const nowCollapsed = !body.classList.contains('collapsed');
+            header.classList.toggle('collapsed', nowCollapsed);
+            body.classList.toggle('collapsed', nowCollapsed);
+            if (!isCompactMode) resizeWidget();
+            const settings = window._cachedSettings || await window.electronAPI.getSettings();
+            const sectionCollapsed = { ...(settings.sectionCollapsed || {}), [key]: nowCollapsed };
+            await _saveSettingsPatch({ sectionCollapsed });
+        });
+        if (check) {
+            check.addEventListener('change', async () => {
+                // Unchecking the Anthropic tray while hidden from taskbar would
+                // leave no icon to restore the app from
+                if (key === 'anthropic' && !check.checked && elements.minimizeToTrayToggle.checked) {
+                    elements.minimizeToTrayToggle.checked = false;
+                    await _saveSettingsPatch({ minimizeToTray: false });
+                }
+                await _saveSettingsPatch({ [traySetting]: check.checked });
+            });
+        }
+    }
 }
 
 // Event Listeners
@@ -359,20 +437,16 @@ function setupEventListeners() {
         });
     });
 
-    // Prevent accidental app hiding: bidirectional coupling between Hide from Taskbar and Show Tray Stats
-    // If user enables "Hide from Taskbar", automatically enable "Show Tray Stats" (ensures tray icon is visible)
+    // Prevent accidental app hiding: enabling "Hide from Taskbar" force-enables
+    // the Anthropic tray icons (ensures a tray icon exists to restore from)
     elements.minimizeToTrayToggle.addEventListener('change', () => {
-        if (elements.minimizeToTrayToggle.checked && !elements.showTrayStatsToggle.checked) {
-            elements.showTrayStatsToggle.checked = true;
+        if (elements.minimizeToTrayToggle.checked && !elements.trayCheckAnthropic.checked) {
+            elements.trayCheckAnthropic.checked = true;
+            _saveSettingsPatch({ showTrayStats: true });
         }
     });
 
-    // If user disables "Show Tray Stats", automatically disable "Hide from Taskbar" (prevents app from being completely hidden)
-    elements.showTrayStatsToggle.addEventListener('change', () => {
-        if (!elements.showTrayStatsToggle.checked && elements.minimizeToTrayToggle.checked) {
-            elements.minimizeToTrayToggle.checked = false;
-        }
-    });
+    setupProviderSections();
 
     // Listen for refresh requests from tray
     window.electronAPI.onRefreshUsage(async () => {
@@ -611,12 +685,16 @@ function buildExtraRows(data) {
     });
     
     // Only rebuild if we have data, otherwise keep existing rows
-    if (!hasAnyExtendedData && (elements.extraRows.children.length > 0 || elements.scopedRows.children.length > 0)) {
+    const existingRows = elements.extraRows.children.length + elements.scopedRows.children.length
+        + elements.openaiRows.children.length + elements.googleRows.children.length;
+    if (!hasAnyExtendedData && existingRows > 0) {
         return; // Keep existing rows
     }
 
     elements.extraRows.innerHTML = '';
     elements.scopedRows.innerHTML = '';
+    elements.openaiRows.innerHTML = '';
+    elements.googleRows.innerHTML = '';
     let count = 0;
 
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
@@ -761,9 +839,10 @@ function buildExtraRows(data) {
             row.appendChild(resetsText);
         }
 
-        // Scoped weekly limits (e.g. Fable) are pinned below the Weekly row and
-        // never hidden by the collapse toggle; everything else stays in the
-        // expandable panel and counts toward its row tally.
+        // Route rows to their provider section. Anthropic scoped limits
+        // (e.g. Fable) are pinned below the Weekly row; CLI + extra-usage rows
+        // stay in Anthropic's expandable panel and count toward its tally;
+        // Codex and Gemini rows go to the OpenAI / Google sections.
         if (key.startsWith('seven_day_scoped_')) {
             const slug = key.slice('seven_day_scoped_'.length);
             const forecastAt = data.forecasts?.scoped?.[slug];
@@ -772,11 +851,19 @@ function buildExtraRows(data) {
                 row.title = `At the current pace, 100% by ${formatResetsAt(forecastAt, true, settings.timeFormat || '12h', 'date-day-time')}`;
             }
             elements.scopedRows.appendChild(row);
+        } else if (key.startsWith('codex_')) {
+            elements.openaiRows.appendChild(row);
+        } else if (key.startsWith('gemini_')) {
+            elements.googleRows.appendChild(row);
         } else {
             elements.extraRows.appendChild(row);
             count++;
         }
     }
+
+    // Provider sections appear only when they have rows
+    elements.sectionOpenai.style.display = elements.openaiRows.children.length ? '' : 'none';
+    elements.sectionGoogle.style.display = elements.googleRows.children.length ? '' : 'none';
 
     // Hide toggle if no extra rows
     elements.expandToggle.style.display = count > 0 ? 'flex' : 'none';
@@ -794,8 +881,8 @@ function refreshExtraTimers() {
     // querySelectorAll lists by index breaks as soon as one row has a text
     // but no circle (the extra_usage row), leaving every later row's timer
     // stuck at --:--.
-    // Covers both the pinned scoped rows (always visible) and the expandable panel.
-    for (const container of [elements.scopedRows, elements.extraRows]) {
+    // Covers the pinned scoped rows, the expandable panel, and provider sections.
+    for (const container of [elements.scopedRows, elements.extraRows, elements.openaiRows, elements.googleRows]) {
         container.querySelectorAll('.usage-section').forEach((row) => {
             const textEl = row.querySelector('.timer-text');
             const circleEl = row.querySelector('.timer-progress');
@@ -813,20 +900,24 @@ const BANNER_HEIGHT = 28;
 const EXPAND_OVERHEAD = 28; // margin-top(12) + padding-top(6) + bottom buffer(10)
 
 function resizeWidget(bannerVisible) {
-    const hasBanner = bannerVisible !== undefined
-        ? bannerVisible
-        : elements.updateBanner.style.display !== 'none';
-    const bannerOffset = hasBanner ? BANNER_HEIGHT : 0;
-    const extraCount = elements.extraRows.children.length;
-    const expandedOffset = isExpanded && extraCount > 0
-        ? EXPAND_OVERHEAD + (extraCount * WIDGET_ROW_HEIGHT)
-        : 0;
-    // Pinned scoped rows (e.g. Fable) are visible even when collapsed
-    const scopedOffset = elements.scopedRows.children.length * WIDGET_ROW_HEIGHT;
-    const planOffset = elements.planNote && elements.planNote.style.display !== 'none' ? 18 : 0;
-    const graphOffset = graphVisible ? GRAPH_HEIGHT : 0;
-    const totalHeight = WIDGET_HEIGHT_COLLAPSED + scopedOffset + planOffset + expandedOffset + graphOffset + bannerOffset;
-    window.electronAPI.resizeWindow(totalHeight);
+    // Measure the actual laid-out content instead of summing row constants —
+    // with collapsible provider sections the arithmetic became unmaintainable.
+    // bannerVisible is accepted for call-site compatibility; the measurement
+    // sees the banner's real display state (set before any resize call).
+    void bannerVisible;
+    requestAnimationFrame(() => {
+        if (isCompactMode) return;
+        const titleHeight = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+        const contentHeight = elements.mainContent.scrollHeight;
+        // While minimized/hidden every measurement reads ~0 — resizing then
+        // would shrink the window to a sliver. Skip; the focus listener
+        // re-measures on restore.
+        if (titleHeight < 10 || contentHeight < 40) return;
+        const bannerHeight = elements.updateBanner.style.display !== 'none'
+            ? (elements.updateBanner.offsetHeight || BANNER_HEIGHT) : 0;
+        // +2 for the widget-container border, +8 bottom breathing room
+        window.electronAPI.resizeWindow(titleHeight + bannerHeight + contentHeight + 10);
+    });
 }
 
 // Colour classes for scoped weekly limits that have their own CSS identity;
@@ -1901,7 +1992,7 @@ async function loadSettings() {
     }
     elements.minimizeToTrayToggle.checked = settings.minimizeToTray;
     elements.alwaysOnTopToggle.checked = settings.alwaysOnTop;
-    elements.showTrayStatsToggle.checked = settings.showTrayStats || false;
+    applySectionStates(settings);
     elements.warnThreshold.value = settings.warnThreshold;
     elements.dangerThreshold.value = settings.dangerThreshold;
     elements.timeFormat.value = settings.timeFormat || '12h';
@@ -1973,7 +2064,10 @@ async function saveSettings() {
         autoStart: (window.electronAPI.platform === 'linux' || window.electronAPI.isPortable) ? false : elements.autoStartToggle.checked,
         minimizeToTray: elements.minimizeToTrayToggle.checked,
         alwaysOnTop: elements.alwaysOnTopToggle.checked,
-        showTrayStats: elements.showTrayStatsToggle.checked,
+        showTrayStats: elements.trayCheckAnthropic.checked,
+        trayOpenai: elements.trayCheckOpenai.checked,
+        trayGoogle: elements.trayCheckGoogle.checked,
+        sectionCollapsed: window._cachedSettings?.sectionCollapsed || {},
         theme: activeThemeBtn ? activeThemeBtn.dataset.theme : 'dark',
         warnThreshold: warn,
         dangerThreshold: danger,
@@ -2068,6 +2162,12 @@ async function checkForUpdate() {
         debugLog('Update check failed silently', e);
     }
 }
+
+// Re-measure the window after a restore from minimized (measurements read ~0
+// while minimized, so any resize during that state was skipped)
+window.addEventListener('focus', () => {
+    if (!isCompactMode && elements.mainContent.style.display !== 'none') resizeWidget();
+});
 
 // Start the application
 init();
