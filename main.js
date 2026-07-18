@@ -253,7 +253,12 @@ function normalizeCodexLive(json) {
   const credits = json?.credits
     ? { balance: json.credits.balance ?? null, hasCredits: !!json.credits.has_credits, unlimited: !!json.credits.unlimited }
     : null;
-  return { source: 'live', limits, credits };
+  // OpenAI's weekly-limit reset feature: banked resets that can be spent to
+  // clear a hit limit early (applicable_available_count = usable right now)
+  const resetCredits = json?.rate_limit_reset_credits
+    ? { available: json.rate_limit_reset_credits.available_count ?? 0, applicable: json.rate_limit_reset_credits.applicable_available_count ?? 0 }
+    : null;
+  return { source: 'live', limits, credits, resetCredits };
 }
 
 function fetchCodexUsageLive() {

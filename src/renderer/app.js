@@ -915,6 +915,56 @@ function buildExtraRows(data) {
         elements.openaiRows.appendChild(row);
     }
 
+    // OpenAI weekly-limit reset feature — banked resets, same row style
+    const resetCredits = data.codex?.resetCredits;
+    if (resetCredits && elements.openaiRows.children.length) {
+        const row = document.createElement('div');
+        row.className = 'usage-section';
+        row.title = resetCredits.applicable > 0
+            ? `${resetCredits.applicable} reset${resetCredits.applicable > 1 ? 's' : ''} usable right now to clear a hit limit`
+            : 'Banked limit resets — become usable when a limit is reached';
+
+        const label = document.createElement('span');
+        label.className = 'usage-label';
+        const statusTag = document.createElement('span');
+        statusTag.className = `extra-status ${resetCredits.applicable > 0 ? 'on' : 'off'}`;
+        statusTag.textContent = resetCredits.applicable > 0 ? 'ON' : 'OFF';
+        label.appendChild(statusTag);
+        label.appendChild(document.createTextNode(' Limit Resets'));
+        row.appendChild(label);
+
+        const barGroup = document.createElement('div');
+        barGroup.className = 'usage-bar-group';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        const progressFill = document.createElement('div');
+        progressFill.className = 'progress-fill extra';
+        progressFill.style.width = '0%';
+        progressBar.appendChild(progressFill);
+        barGroup.appendChild(progressBar);
+        const percentage = document.createElement('span');
+        percentage.className = 'usage-percentage';
+        percentage.textContent = '—';
+        barGroup.appendChild(percentage);
+        row.appendChild(barGroup);
+
+        const elapsedGroup = document.createElement('div');
+        elapsedGroup.className = 'usage-elapsed-group';
+        row.appendChild(elapsedGroup);
+
+        const balLabel = document.createElement('span');
+        balLabel.className = 'timer-text extra-balance-label';
+        balLabel.textContent = 'Resets Available:';
+        row.appendChild(balLabel);
+
+        const balAmount = document.createElement('span');
+        balAmount.className = 'resets-at-text extra-balance-amount';
+        balAmount.textContent = String(resetCredits.available);
+        row.appendChild(balAmount);
+
+        elements.openaiRows.appendChild(row);
+    }
+
     // Provider sections appear only when they have rows
     elements.sectionOpenai.style.display = elements.openaiRows.children.length ? '' : 'none';
     elements.sectionGoogle.style.display = elements.googleRows.children.length ? '' : 'none';
@@ -1538,6 +1588,7 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
         textElement.style.fontSize = '10px';
         textElement.title = 'Starts when a message is sent';
         timerElement.style.strokeDashoffset = 63;
+        timerElement.style.stroke = '';
         return;
     }
 
@@ -1553,6 +1604,7 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     if (diff <= 0) {
         textElement.textContent = 'Resetting...';
         timerElement.style.strokeDashoffset = 0;
+        timerElement.style.stroke = 'hsl(142, 70%, 47%)'; // full green — reset imminent
         return;
     }
 
@@ -1582,13 +1634,15 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     const offset = circumference - (elapsedPercentage / 100) * circumference;
     timerElement.style.strokeDashoffset = offset;
 
-    // Update color based on remaining time
+    // Colour brightens toward green as the window nears its reset — elapsed
+    // time is GOOD news (reset means fresh usage), so no red alarm here.
+    // Slate → teal → green as the circle closes.
+    const f = Math.min(Math.max(elapsedPercentage / 100, 0), 1);
+    const hue = 222 - (222 - 142) * f;
+    const sat = 12 + (70 - 12) * f;
+    const light = 55 - (55 - 47) * f;
     timerElement.classList.remove('warning', 'danger');
-    if (elapsedPercentage >= 90) {
-        timerElement.classList.add('danger');
-    } else if (elapsedPercentage >= 75) {
-        timerElement.classList.add('warning');
-    }
+    timerElement.style.stroke = `hsl(${Math.round(hue)}, ${Math.round(sat)}%, ${Math.round(light)}%)`;
 }
 
 // UI State Management
