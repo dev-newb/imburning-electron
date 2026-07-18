@@ -431,6 +431,9 @@ function createMainWindow() {
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.loadFile('src/renderer/index.html');
 
+  // Re-announce a downloaded update once the renderer is actually listening
+  mainWindow.webContents.on('did-finish-load', sendUpdateReady);
+
   let positionSaveTimer = null;
   mainWindow.on('move', () => {
     if (positionSaveTimer) clearTimeout(positionSaveTimer);
@@ -1594,6 +1597,16 @@ try {
   debugLog('[AutoUpdate] electron-updater unavailable:', err.message);
 }
 
+// On fast connections the download can finish before the renderer has
+// registered its listener, so the ready signal is re-sent on every
+// did-finish-load (createMainWindow wires this up).
+let _downloadedUpdateVersion = null;
+function sendUpdateReady() {
+  if (_downloadedUpdateVersion && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded', _downloadedUpdateVersion);
+  }
+}
+
 function setupAutoUpdate() {
   if (!autoUpdater || !app.isPackaged) return;
   // Portable builds can't self-replace their exe — they keep the banner+link flow
@@ -1603,9 +1616,8 @@ function setupAutoUpdate() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-downloaded', (info) => {
     debugLog('[AutoUpdate] Downloaded', info.version);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-downloaded', info.version);
-    }
+    _downloadedUpdateVersion = info.version;
+    sendUpdateReady();
   });
   autoUpdater.on('error', (err) => debugLog('[AutoUpdate] Error:', err.message));
 
