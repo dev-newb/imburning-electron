@@ -342,6 +342,52 @@
                             </div>
                         </div>
 
+                        <!-- Row: tray icon colors (background / number per icon) -->
+                        <div class="settings-row-2col tray-colors-row">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Session tray</span>
+                                <span class="tray-color-pair">
+                                    <input type="color" id="traySessionBg" title="Background">
+                                    <input type="color" id="traySessionText" title="Number">
+                                </span>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Weekly tray</span>
+                                <span class="tray-color-pair">
+                                    <input type="color" id="trayWeeklyBg" title="Background">
+                                    <input type="color" id="trayWeeklyText" title="Number">
+                                </span>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Fable tray</span>
+                                <span class="tray-color-pair">
+                                    <input type="color" id="trayFableBg" title="Background">
+                                    <input type="color" id="trayFableText" title="Number">
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Row: critical outline + burn alerts -->
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Critical outline</span>
+                                <span class="tray-color-pair">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="trayOutlineToggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <input type="color" id="trayOutlineColor" title="Outline color">
+                                </span>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Burn-spike alert</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="burnAlertsToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
                         <!-- Row: CLI account tracking (Claude Code CLI login) -->
                         <div class="settings-row-2col">
                             <div class="settings-col">

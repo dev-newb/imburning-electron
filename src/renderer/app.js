@@ -11,6 +11,7 @@ let graphVisible = false;
 let graphWasVisible = false; // preserves graph state across compact mode toggle
 let appInitializing = true;  // suppresses _saveViewState during startup restore
 let isFetching = false;       // in-flight guard — prevents overlapping fetchUsageData calls
+let _updateReadyToInstall = false; // an auto-update is downloaded and ready to apply
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 155;
 const WIDGET_ROW_HEIGHT = 30;
@@ -105,6 +106,15 @@ const elements = {
     compactScopedFill: document.getElementById('compactScopedFill'),
     compactScopedPct: document.getElementById('compactScopedPct'),
     showClaudeCodeToggle: document.getElementById('showClaudeCodeToggle'),
+    traySessionBg: document.getElementById('traySessionBg'),
+    traySessionText: document.getElementById('traySessionText'),
+    trayWeeklyBg: document.getElementById('trayWeeklyBg'),
+    trayWeeklyText: document.getElementById('trayWeeklyText'),
+    trayFableBg: document.getElementById('trayFableBg'),
+    trayFableText: document.getElementById('trayFableText'),
+    trayOutlineToggle: document.getElementById('trayOutlineToggle'),
+    trayOutlineColor: document.getElementById('trayOutlineColor'),
+    burnAlertsToggle: document.getElementById('burnAlertsToggle'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -375,10 +385,31 @@ function setupEventListeners() {
         resizeWidget();
     });
     elements.updateBannerText.addEventListener('click', () => {
-        window.electronAPI.openExternal(`https://github.com/SlavomirDurej/claude-usage-widget/releases/latest`);
+        if (_updateReadyToInstall) {
+            window.electronAPI.installUpdate();
+        } else {
+            window.electronAPI.openExternal(`https://github.com/dev-newb/claude-usage-widget/releases/latest`);
+        }
     });
     elements.settingsUpdateLink.addEventListener('click', () => {
-        window.electronAPI.openExternal(`https://github.com/SlavomirDurej/claude-usage-widget/releases/latest`);
+        if (_updateReadyToInstall) {
+            window.electronAPI.installUpdate();
+        } else {
+            window.electronAPI.openExternal(`https://github.com/dev-newb/claude-usage-widget/releases/latest`);
+        }
+    });
+
+    // Auto-update: a downloaded release turns the banner into a one-click
+    // "restart & apply" — no installer wizard involved
+    window.electronAPI.onUpdateDownloaded((version) => {
+        _updateReadyToInstall = true;
+        elements.updateBannerText.textContent = `▲  v${version} downloaded — click to restart & apply`;
+        elements.updateBanner.style.display = 'flex';
+        if (elements.settingsUpdateLink) {
+            elements.settingsUpdateLink.textContent = `→ v${version} ready — click to apply`;
+            elements.settingsUpdateLink.style.display = 'inline';
+        }
+        if (!isCompactMode) resizeWidget(true);
     });
 
     // Compact mode — collapse chevron (normal → compact)
@@ -412,7 +443,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(318);
+        window.electronAPI.resizeWindow(430);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -1764,6 +1795,25 @@ async function loadSettings() {
     if (elements.compactModeToggle) elements.compactModeToggle.checked = !!settings.compactMode;
     if (elements.showClaudeCodeToggle) elements.showClaudeCodeToggle.checked = settings.showClaudeCode !== false;
 
+    // Tray colours + critical outline + burn alerts
+    const trayColors = settings.trayColors || {};
+    const colorDefaults = {
+        session: { bg: '#8b5cf6', text: '#000000' },
+        weekly: { bg: '#3b82f6', text: '#ffffff' },
+        fable: { bg: '#ef4444', text: '#ffffff' }
+    };
+    for (const [key, ids] of [
+        ['session', ['traySessionBg', 'traySessionText']],
+        ['weekly', ['trayWeeklyBg', 'trayWeeklyText']],
+        ['fable', ['trayFableBg', 'trayFableText']]
+    ]) {
+        if (elements[ids[0]]) elements[ids[0]].value = trayColors[key]?.bg || colorDefaults[key].bg;
+        if (elements[ids[1]]) elements[ids[1]].value = trayColors[key]?.text || colorDefaults[key].text;
+    }
+    if (elements.trayOutlineToggle) elements.trayOutlineToggle.checked = settings.trayOutline?.enabled !== false;
+    if (elements.trayOutlineColor) elements.trayOutlineColor.value = settings.trayOutline?.color || '#facc15';
+    if (elements.burnAlertsToggle) elements.burnAlertsToggle.checked = settings.burnAlerts !== false;
+
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
         populateOrgSelector(credentials.organizations, credentials.organizationId);
@@ -1811,7 +1861,17 @@ async function saveSettings() {
         compactMode: isCompactMode,
         graphVisible: graphVisible,
         expandedOpen: isExpanded,
-        showClaudeCode: elements.showClaudeCodeToggle ? elements.showClaudeCodeToggle.checked : true
+        showClaudeCode: elements.showClaudeCodeToggle ? elements.showClaudeCodeToggle.checked : true,
+        trayColors: {
+            session: { bg: elements.traySessionBg.value, text: elements.traySessionText.value },
+            weekly: { bg: elements.trayWeeklyBg.value, text: elements.trayWeeklyText.value },
+            fable: { bg: elements.trayFableBg.value, text: elements.trayFableText.value }
+        },
+        trayOutline: {
+            enabled: elements.trayOutlineToggle.checked,
+            color: elements.trayOutlineColor.value
+        },
+        burnAlerts: elements.burnAlertsToggle.checked
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;

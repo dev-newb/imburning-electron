@@ -75,7 +75,8 @@ function getScopedWeeklyLimits(data) {
       slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
       name,
       percent: limit.percent,
-      resetsAt: limit.resets_at
+      resetsAt: limit.resets_at,
+      severity: limit.severity || null
     });
   }
   return scoped;
@@ -199,6 +200,110 @@ function computeForecasts() {
     forecasts.scoped[slug] = forecastSeries(series((entry) => entry.scoped?.[slug]));
   }
   return forecasts;
+}
+
+// ---- Burn-spike anomaly detection ----
+// Learns the user's "normal" burn rate from history and alerts (with sound)
+// when the recent window burns tokens far outside that pattern — catches
+// unintended token sinks early. Baseline is robust (median + MAD of
+// per-minute rates over the retention window), so occasional heavy sessions
+// don't blind it, and window resets never poison it.
+const BURN_WINDOW_MS = 10 * 60 * 1000;        // jump measured over this window
+const BURN_MIN_WINDOW_MS = 4 * 60 * 1000;     // need at least this much data
+const BURN_PAIR_MAX_GAP_MS = 3 * 60 * 1000;   // ignore pairs across app-closed gaps
+const BURN_COOLDOWN_MS = 30 * 60 * 1000;      // one alert per series per half hour
+const BURN_MIN_JUMP = 3;                      // pct points per window — absolute floor
+const BURN_FALLBACK_JUMP = 8;                 // floor when too little baseline data
+const BURN_MAD_K = 6;                         // sensitivity: median + K * MAD
+const _burnAlertAt = {};                      // seriesKey -> last alert timestamp
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function checkBurnAnomalies() {
+  if (!store.get('settings.burnAlerts', true)) return;
+
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const history = store.get(historyKey, []);
+  if (history.length < 5) return;
+  const now = history[history.length - 1].timestamp;
+
+  const seriesList = [
+    { key: 'session', label: 'Session', pick: (e) => e.session },
+    { key: 'weekly', label: 'Weekly', pick: (e) => e.weekly }
+  ];
+  const slugs = new Set();
+  for (const entry of history) {
+    for (const slug of Object.keys(entry.scoped || {})) slugs.add(slug);
+  }
+  for (const slug of slugs) {
+    const label = slug.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    seriesList.push({ key: `scoped_${slug}`, label: `${label} (weekly)`, pick: (e) => e.scoped?.[slug] });
+  }
+
+  for (const series of seriesList) {
+    const samples = history
+      .map((e) => ({ t: e.timestamp, v: series.pick(e) }))
+      .filter((s) => s.v != null);
+    if (samples.length < 5) continue;
+
+    // Current jump: oldest in-window sample → newest
+    const windowSamples = samples.filter((s) => s.t >= now - BURN_WINDOW_MS);
+    if (windowSamples.length < 2) continue;
+    const first = windowSamples[0];
+    const last = windowSamples[windowSamples.length - 1];
+    const spanMs = last.t - first.t;
+    if (spanMs < BURN_MIN_WINDOW_MS) continue;
+    const jump = last.v - first.v;
+    if (jump < BURN_MIN_JUMP) continue; // negative = reset, small = normal
+
+    // Baseline: per-minute rates from consecutive pairs OLDER than the window
+    const rates = [];
+    for (let i = 1; i < samples.length; i++) {
+      const dt = samples[i].t - samples[i - 1].t;
+      if (samples[i].t >= now - BURN_WINDOW_MS) break;
+      if (dt <= 0 || dt > BURN_PAIR_MAX_GAP_MS) continue;
+      const dv = samples[i].v - samples[i - 1].v;
+      if (dv < 0) continue; // window reset
+      rates.push(dv / (dt / 60000));
+    }
+
+    const jumpRate = jump / (spanMs / 60000);
+    let isAnomaly;
+    let typicalJump;
+    if (rates.length >= 50) {
+      const med = median(rates);
+      const mad = median(rates.map((r) => Math.abs(r - med))) * 1.4826;
+      const threshold = med + BURN_MAD_K * Math.max(mad, 0.01);
+      isAnomaly = jumpRate > threshold;
+      typicalJump = Math.round(med * (BURN_WINDOW_MS / 60000) * 10) / 10;
+    } else {
+      // Not enough learned baseline yet — use a conservative absolute floor
+      isAnomaly = jump >= BURN_FALLBACK_JUMP;
+      typicalJump = null;
+    }
+    if (!isAnomaly) continue;
+
+    if (_burnAlertAt[series.key] && now - _burnAlertAt[series.key] < BURN_COOLDOWN_MS) continue;
+    _burnAlertAt[series.key] = now;
+
+    const minutes = Math.round(spanMs / 60000);
+    const typicalStr = typicalJump != null ? ` (typical: ~${typicalJump}% per 10 min)` : '';
+    debugLog('[BurnAlert]', series.key, `+${jump}% in ${minutes}min`, 'rate', jumpRate.toFixed(2), '%/min');
+    try {
+      shell.beep();
+      new Notification({
+        title: 'Unusual token burn',
+        body: `${series.label} jumped ${Math.round(jump)}% in ${minutes} min${typicalStr}. Something may be eating tokens.`
+      }).show();
+    } catch (err) {
+      console.error('Burn alert notification failed:', err.message);
+    }
+  }
 }
 
 function storeUsageHistory(data) {
@@ -346,22 +451,76 @@ function createMainWindow() {
 
 /**
  * Determine background color based on thresholds
+ * @param {number} percent
+ * @param {object} defaultColor - {r, g, b} used below the warn threshold
  */
-function getBackgroundColor(percent, isSession, warnThreshold, dangerThreshold) {
+function getBackgroundColor(percent, defaultColor, warnThreshold, dangerThreshold) {
   if (percent >= dangerThreshold) {
     // Red #ef4444
     return { r: 239, g: 68, b: 68 };
   } else if (percent >= warnThreshold) {
     // Amber/Orange #f59e0b
     return { r: 245, g: 158, b: 11 };
-  } else {
-    // Default colors
-    if (isSession) {
-      // Purple #8b5cf6
-      return { r: 139, g: 92, b: 246 };
-    } else {
-      // Blue #3b82f6
-      return { r: 59, g: 130, b: 246 };
+  }
+  return defaultColor;
+}
+
+// ---- Tray icon colours (customizable in Settings) ----
+const DEFAULT_TRAY_COLORS = {
+  session: { bg: '#8b5cf6', text: '#000000' },  // black number distinguishes it from Weekly
+  weekly:  { bg: '#3b82f6', text: '#ffffff' },
+  fable:   { bg: '#ef4444', text: '#ffffff' }
+};
+const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
+
+function hexToRgb(hex, fallback = { r: 0, g: 0, b: 0 }) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!match) return fallback;
+  const n = parseInt(match[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+// Resolve saved tray colour settings (hex strings) into rgb objects
+function getTrayColorSettings() {
+  const savedColors = store.get('settings.trayColors', {});
+  const savedOutline = store.get('settings.trayOutline', {});
+  const resolve = (key) => ({
+    bg: hexToRgb(savedColors[key]?.bg, hexToRgb(DEFAULT_TRAY_COLORS[key].bg)),
+    text: { ...hexToRgb(savedColors[key]?.text, hexToRgb(DEFAULT_TRAY_COLORS[key].text)), a: 255 }
+  });
+  return {
+    session: resolve('session'),
+    weekly: resolve('weekly'),
+    fable: resolve('fable'),
+    outline: {
+      enabled: savedOutline.enabled !== false,
+      color: hexToRgb(savedOutline.color, hexToRgb(DEFAULT_TRAY_OUTLINE.color))
+    }
+  };
+}
+
+// API-reported severity ("normal" | "warning" | "critical") for a limits[] kind
+function getLimitSeverity(data, kind) {
+  const limit = (data?.limits || []).find((l) => l.kind === kind);
+  return limit?.severity || null;
+}
+
+function isElevatedSeverity(severity) {
+  return !!severity && severity !== 'normal';
+}
+
+// 2px border drawn inside the icon edge, used to flag API-critical limits
+function drawIconOutline(buffer, width, height, color) {
+  const T = 2;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (x < T || y < T || x >= width - T || y >= height - T) {
+        const offset = (y * width + x) * 4;
+        buffer[offset] = color.b;
+        buffer[offset + 1] = color.g;
+        buffer[offset + 2] = color.r;
+        buffer[offset + 3] = 255;
+      }
     }
   }
 }
@@ -570,9 +729,10 @@ function drawChar(buffer, width, height, char, x, y, color, useNarrow = false) {
  * @param {number} percent - Usage percentage (0-100)
  * @param {object} bgColor - Background color {r, g, b}
  * @param {object} [textColor] - Text color {r, g, b, a}, defaults to white
+ * @param {object|null} [outlineColor] - Border color {r, g, b} for critical limits
  * @returns {NativeImage} Generated tray icon
  */
-function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255, a: 255 }) {
+function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255, a: 255 }, outlineColor = null) {
   const width = 20;  // Back to 20x20
   const height = 20;
   const buffer = Buffer.alloc(width * height * 4);
@@ -605,7 +765,9 @@ function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, 
     drawChar(buffer, width, height, percentText[i], startX, startY, textColor, useNarrow);
     startX += charWidth + gap;
   }
-  
+
+  if (outlineColor) drawIconOutline(buffer, width, height, outlineColor);
+
   return nativeImage.createFromBuffer(buffer, { width, height });
 }
 
@@ -613,9 +775,10 @@ function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, 
  * Generate an X icon for 99-100% usage (maxed out)
  * @param {object} [bgColor] - Background color {r, g, b}, defaults to #dc3545
  * @param {object} [xColor] - X color {r, g, b, a}, defaults to white
+ * @param {object|null} [outlineColor] - Border color {r, g, b} for critical limits
  * @returns {NativeImage} Generated X tray icon
  */
-function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255, g: 255, b: 255, a: 255 }) {
+function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255, g: 255, b: 255, a: 255 }, outlineColor = null) {
   const width = 20;
   const height = 20;
   const buffer = Buffer.alloc(width * height * 4);
@@ -674,7 +837,9 @@ function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255,
       }
     }
   }
-  
+
+  if (outlineColor) drawIconOutline(buffer, width, height, outlineColor);
+
   return nativeImage.createFromBuffer(buffer, { width, height });
 }
 
@@ -829,12 +994,14 @@ function syncFableTray(scopedLimit, forecastAt = null) {
       attachTrayToggleClick(fableTray);
     }
 
-    const red = { r: 239, g: 68, b: 68 };          // #ef4444
-    const black = { r: 0, g: 0, b: 0, a: 255 };
-    // Black X on red when maxed out, otherwise the black number
+    const colors = getTrayColorSettings();
+    const outline = colors.outline.enabled && isElevatedSeverity(scopedLimit.severity)
+      ? colors.outline.color
+      : null;
+    // X on the badge when maxed out, otherwise the number
     fableTray.setImage(scopedLimit.percent >= 99
-      ? generateRedXIcon(red, black)
-      : generatePercentageIcon(scopedLimit.percent, red, black));
+      ? generateRedXIcon(colors.fable.bg, colors.fable.text, outline)
+      : generatePercentageIcon(scopedLimit.percent, colors.fable.bg, colors.fable.text, outline));
 
     const timeFormat = store.get('settings.timeFormat', '12h');
     let tooltip = `${scopedLimit.name} (weekly): ${Math.round(scopedLimit.percent)}%`;
@@ -959,21 +1126,28 @@ function updateTrayIcon(usageData) {
   const warnThreshold = store.get('settings.warnThreshold', 75);
   const dangerThreshold = store.get('settings.dangerThreshold', 90);
   const timeFormat = store.get('settings.timeFormat', '12h');
+  const colors = getTrayColorSettings();
+
+  // Outline flags API-elevated severity when enabled in settings
+  const outlineFor = (severity) =>
+    colors.outline.enabled && isElevatedSeverity(severity) ? colors.outline.color : null;
 
   // Extract percentages and reset times from usage data
   const sessionPercent = usageData?.five_hour?.utilization || 0;
   const sessionResetsAt = usageData?.five_hour?.resets_at;
   const weeklyPercent = usageData?.seven_day?.utilization || 0;
   const weeklyResetsAt = usageData?.seven_day?.resets_at;
+  const sessionOutline = outlineFor(getLimitSeverity(usageData, 'session'));
+  const weeklyOutline = outlineFor(getLimitSeverity(usageData, 'weekly_all'));
 
   try {
     // Generate Weekly icon (blue background) - LEFT position
     let weeklyIcon;
     if (weeklyPercent >= 99) {
-      weeklyIcon = generateRedXIcon();
+      weeklyIcon = generateRedXIcon(undefined, undefined, weeklyOutline);
     } else {
-      const weeklyColor = getBackgroundColor(weeklyPercent, false, warnThreshold, dangerThreshold);
-      weeklyIcon = generatePercentageIcon(weeklyPercent, weeklyColor);
+      const weeklyColor = getBackgroundColor(weeklyPercent, colors.weekly.bg, warnThreshold, dangerThreshold);
+      weeklyIcon = generatePercentageIcon(weeklyPercent, weeklyColor, colors.weekly.text, weeklyOutline);
     }
     if (weeklyTray && !weeklyTray.isDestroyed()) {
       weeklyTray.setImage(weeklyIcon);
@@ -992,10 +1166,10 @@ function updateTrayIcon(usageData) {
     // Generate Session icon (purple background) - RIGHT position
     let sessionIcon;
     if (sessionPercent >= 99) {
-      sessionIcon = generateRedXIcon();
+      sessionIcon = generateRedXIcon(undefined, undefined, sessionOutline);
     } else {
-      const sessionColor = getBackgroundColor(sessionPercent, true, warnThreshold, dangerThreshold);
-      sessionIcon = generatePercentageIcon(sessionPercent, sessionColor);
+      const sessionColor = getBackgroundColor(sessionPercent, colors.session.bg, warnThreshold, dangerThreshold);
+      sessionIcon = generatePercentageIcon(sessionPercent, sessionColor, colors.session.text, sessionOutline);
     }
     if (sessionTray && !sessionTray.isDestroyed()) {
       sessionTray.setImage(sessionIcon);
@@ -1239,7 +1413,10 @@ ipcMain.handle('get-settings', () => {
     graphVisible: store.get('settings.graphVisible', false),
     expandedOpen: store.get('settings.expandedOpen', false),
     showTrayStats: store.get('settings.showTrayStats', false),
-    showClaudeCode: store.get('settings.showClaudeCode', true)
+    showClaudeCode: store.get('settings.showClaudeCode', true),
+    trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
+    trayOutline: { ...DEFAULT_TRAY_OUTLINE, ...store.get('settings.trayOutline', {}) },
+    burnAlerts: store.get('settings.burnAlerts', true)
   };
 });
 
@@ -1262,6 +1439,9 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.expandedOpen', settings.expandedOpen);
   store.set('settings.showTrayStats', settings.showTrayStats);
   store.set('settings.showClaudeCode', settings.showClaudeCode !== false);
+  if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);
+  if (settings.trayOutline) store.set('settings.trayOutline', settings.trayOutline);
+  store.set('settings.burnAlerts', settings.burnAlerts !== false);
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -1401,6 +1581,44 @@ ipcMain.handle('detect-session-key', async () => {
 
     loginWin.loadURL('https://claude.ai/login');
   });
+});
+
+// ---- Auto-update (electron-updater) ----
+// Downloads new fork releases in the background and applies them silently —
+// no installer wizard. Renderer gets 'update-downloaded' and offers a
+// one-click restart; otherwise the update applies on next quit.
+let autoUpdater = null;
+try {
+  ({ autoUpdater } = require('electron-updater'));
+} catch (err) {
+  debugLog('[AutoUpdate] electron-updater unavailable:', err.message);
+}
+
+function setupAutoUpdate() {
+  if (!autoUpdater || !app.isPackaged) return;
+  // Portable builds can't self-replace their exe — they keep the banner+link flow
+  if (process.platform === 'win32' && process.env.PORTABLE_EXECUTABLE_FILE) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-downloaded', (info) => {
+    debugLog('[AutoUpdate] Downloaded', info.version);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-downloaded', info.version);
+    }
+  });
+  autoUpdater.on('error', (err) => debugLog('[AutoUpdate] Error:', err.message));
+
+  const check = () => autoUpdater.checkForUpdates().catch((err) => debugLog('[AutoUpdate] Check failed:', err.message));
+  check();
+  setInterval(check, 6 * 60 * 60 * 1000);
+}
+
+ipcMain.on('install-update', () => {
+  if (autoUpdater) {
+    // silent install, relaunch when done
+    autoUpdater.quitAndInstall(true, true);
+  }
 });
 
 // Check GitHub releases for a newer version
@@ -1622,8 +1840,9 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
   storeUsageHistory(data);
 
-  // Burn-rate forecasts (computed after the new sample is stored)
+  // Burn-rate forecasts + anomaly check (computed after the new sample is stored)
   data.forecasts = computeForecasts();
+  checkBurnAnomalies();
 
   // Store latest usage data for settings refresh
   store.set('latestUsageData', data);
@@ -1646,6 +1865,8 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  setupAutoUpdate();
+
   // Restore session cookie if we have stored credentials
   let sessionKey = null;
   if (safeStorage.isEncryptionAvailable()) {

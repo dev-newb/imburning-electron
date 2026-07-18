@@ -917,6 +917,26 @@ body.theme-light .settings-disclaimer {
     gap: 8px;
 }
 
+.settings-row-2col.tray-colors-row {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
+.tray-color-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tray-color-pair input[type="color"] {
+    width: 26px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
 .settings-col {
     display: flex;
     align-items: center;

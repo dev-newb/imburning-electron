@@ -65,9 +65,17 @@ Using the last few hours of collected history, the widget projects when your Wee
 
 Desktop notifications now also fire for scoped weekly limits: at your configured warn and danger thresholds, plus a dedicated **maxed out** alert at 99%+ that includes the reset time.
 
-### 🔄 Fork Update Channel
+### 🎨 Custom Tray Colors & Critical Outline
 
-The built-in update check now points at this fork's releases, so an upstream release can't prompt you into replacing the fork build with a version that lacks these features.
+Every stats tray icon's background and number colour is configurable in Settings. New defaults tell the icons apart at a glance: **Session = black number on purple, Weekly = white on blue, Fable = white on red**. When Anthropic's API reports a limit's severity as elevated (`critical`), the icon gets a **2px coloured outline** (default yellow) — toggle and colour are both configurable.
+
+### 🚨 Burn-spike Alert
+
+The widget learns your normal token burn rate from its usage history (robust median + MAD baseline over the retention window) and fires a **sound + notification** when a 10-minute window burns far outside that pattern — catching runaway token sinks you didn't intend. No config needed beyond an on/off toggle; the baseline adapts to *your* usage. Until enough history exists it falls back to a conservative absolute threshold.
+
+### 🔄 Auto-update (no installer wizard)
+
+Updates now download in the background from this fork's releases and apply **silently** — the banner becomes "click to restart & apply", or the update installs itself on next quit. No NSIS wizard, no clicking through pages. (Portable builds keep the banner + link flow, since a portable exe can't replace itself while running.) The legacy update check also points at the fork, so an upstream release can't replace the fork build.
 
 ---
 
