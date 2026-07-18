@@ -6,7 +6,7 @@
 
 **Burnwatch** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
-![Claude Usage Widget - Main](assets/screenshot-main.png)
+![Burnwatch — main view: Anthropic, OpenAI, and Google sections, Google frozen on ice](assets/screenshot-main.png)
 
 ---
 
@@ -131,7 +131,7 @@ Changes apply immediately when thresholds are adjusted in Settings.
 
 A toggleable usage history graph now sits below the main widget. Click the graph button in the toolbar to show or hide it.
 
-![Claude Usage Widget - Graph](assets/screenshot-graph.png)
+![Burnwatch — usage history graph with burn-rate projections](assets/screenshot-graph.png)
 
 - Displays up to **7 days** of collected usage data points
 - **Data points are captured each time the app refreshes** (every 5 minutes by default when running)
@@ -154,7 +154,7 @@ The Extra Usage row now displays the correct currency symbol based on your accou
 
 ### Settings Panel
 
-![Claude Usage Widget - Settings](assets/screenshot-settings.png)
+![Burnwatch — settings panel](assets/screenshot-settings.png)
 
 
 ### Settings Options

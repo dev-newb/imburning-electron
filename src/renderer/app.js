@@ -531,7 +531,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(510);
+        window.electronAPI.resizeWindow(560);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -996,6 +996,9 @@ function resizeWidget(bannerVisible) {
     void bannerVisible;
     requestAnimationFrame(() => {
         if (isCompactMode) return;
+        // Never re-measure while the settings overlay is up — a background
+        // refresh would stretch the window underneath the panel
+        if (elements.settingsOverlay.style.display !== 'none') return;
         const titleHeight = elements.titleBar ? elements.titleBar.offsetHeight : 0;
         const contentHeight = elements.mainContent.scrollHeight;
         // While minimized/hidden every measurement reads ~0 — resizing then
