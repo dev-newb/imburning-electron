@@ -36,7 +36,7 @@
 
 ## What's New in this Fork
 
-> This fork ([dev-newb/claude-usage-widget](https://github.com/dev-newb/claude-usage-widget)) adds support for the per-model weekly limits Claude.ai introduced with the Claude 5 (Fable) launch. It builds on upstream [PR #98](https://github.com/SlavomirDurej/claude-usage-widget/pull/98).
+> This fork ([dev-newb/claude-usage-widget](https://github.com/dev-newb/burnwatch)) adds support for the per-model weekly limits Claude.ai introduced with the Claude 5 (Fable) launch. It builds on upstream [PR #98](https://github.com/SlavomirDurej/claude-usage-widget/pull/98).
 
 ### 🤖 Fable / Scoped Weekly Limits
 

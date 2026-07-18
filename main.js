@@ -5,7 +5,7 @@ const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
 
 const GITHUB_OWNER = 'dev-newb';
-const GITHUB_REPO = 'claude-usage-widget';
+const GITHUB_REPO = 'burnwatch';
 
 // Migration: Handle old encrypted config files from v1.7.0 and earlier
 // Must happen BEFORE creating Store instance to prevent parse errors

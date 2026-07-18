@@ -615,6 +615,14 @@ body.theme-light .graph-btn.active {
     font-size: 13px;
     font-weight: 700;
     text-align: right;
+    /* Fixed width so every row's bar ends at the same x regardless of the
+       percent text ("2%" vs "56%" vs empty) */
+    width: 38px;
+    flex-shrink: 0;
+}
+
+.usage-percentage.extra-spending {
+    width: auto; /* currency amounts ($0.00/$20.00) need their room */
 }
 
 /* Progress Bar */

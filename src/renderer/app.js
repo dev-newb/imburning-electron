@@ -476,14 +476,14 @@ function setupEventListeners() {
         if (_updateReadyToInstall) {
             window.electronAPI.installUpdate();
         } else {
-            window.electronAPI.openExternal(`https://github.com/dev-newb/claude-usage-widget/releases/latest`);
+            window.electronAPI.openExternal(`https://github.com/dev-newb/burnwatch/releases/latest`);
         }
     });
     elements.settingsUpdateLink.addEventListener('click', () => {
         if (_updateReadyToInstall) {
             window.electronAPI.installUpdate();
         } else {
-            window.electronAPI.openExternal(`https://github.com/dev-newb/claude-usage-widget/releases/latest`);
+            window.electronAPI.openExternal(`https://github.com/dev-newb/burnwatch/releases/latest`);
         }
     });
 
@@ -894,8 +894,7 @@ function buildExtraRows(data) {
         barGroup.appendChild(progressBar);
         const percentage = document.createElement('span');
         percentage.className = 'usage-percentage';
-        percentage.textContent = '—';
-        barGroup.appendChild(percentage);
+        barGroup.appendChild(percentage); // empty — reserves the column width
         row.appendChild(barGroup);
 
         const elapsedGroup = document.createElement('div');
@@ -943,6 +942,9 @@ function buildExtraRows(data) {
             dotsWrap.appendChild(dot);
         }
         barGroup.appendChild(dotsWrap);
+        const dotsPct = document.createElement('span');
+        dotsPct.className = 'usage-percentage';
+        barGroup.appendChild(dotsPct); // empty — dots span exactly the bar width above
         row.appendChild(barGroup);
 
         const elapsedGroup = document.createElement('div');
