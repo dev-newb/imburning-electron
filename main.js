@@ -1534,13 +1534,13 @@ function createTray() {
   try {
     const staticIconPath = trayStaticIconPath();
 
-    // Create Weekly tray icon FIRST (left position, blue)
-    weeklyTray = new Tray(staticIconPath);
-    weeklyTray.setToolTip('Weekly Usage');
-
-    // Create Session tray icon SECOND (right position, purple)
+    // Create Session tray icon FIRST (leftmost — mirrors the app's row order)
     sessionTray = new Tray(staticIconPath);
     sessionTray.setToolTip('Session Usage');
+
+    // Create Weekly tray icon SECOND (to its right)
+    weeklyTray = new Tray(staticIconPath);
+    weeklyTray.setToolTip('Weekly Usage');
 
     const contextMenu = buildTrayContextMenu();
     sessionTray.setContextMenu(contextMenu);
