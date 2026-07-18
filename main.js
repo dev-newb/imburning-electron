@@ -212,7 +212,11 @@ function normalizeCodexLive(json) {
       resetsAt: w.reset_at ? new Date(w.reset_at * 1000).toISOString() : null
     });
   }
-  return limits.length ? { source: 'live', limits } : null;
+  if (!limits.length) return null;
+  const credits = json?.credits
+    ? { balance: json.credits.balance ?? null, hasCredits: !!json.credits.has_credits, unlimited: !!json.credits.unlimited }
+    : null;
+  return { source: 'live', limits, credits };
 }
 
 function fetchCodexUsageLive() {
@@ -516,25 +520,33 @@ ipcMain.on('alert-webhook', (event, { event: alertEvent, title, message }) => {
 });
 
 // ---- Session-window planner ----
-// Finds the user's heaviest 5-hour stretch of the day from a week of history
-// so they can align a fresh session window with it.
-function computeSessionPlan() {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const history = store.get(historyKey, []).filter((e) => e.timestamp > cutoff);
+// Finds the heaviest 5-hour stretch of the day from a week of history for
+// each provider. For Anthropic the hint includes aligning a fresh 5h session
+// window; external providers get the plain heavy-hours pattern.
+function fmtPlanHour(h, timeFormat) {
+  h = ((h % 24) + 24) % 24;
+  if (timeFormat === '24h') return `${String(h).padStart(2, '0')}:00`;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 || 12;
+  return `${h12}${ampm}`;
+}
+
+function computePlanFromSeries(history, pick, { minTotal, sessionAdvice }) {
   if (history.length < 100) return null;
 
   const hourly = new Array(24).fill(0);
   for (let i = 1; i < history.length; i++) {
     const dt = history[i].timestamp - history[i - 1].timestamp;
     if (dt <= 0 || dt > 3 * 60 * 1000) continue;
-    const dv = (history[i].session || 0) - (history[i - 1].session || 0);
+    const cur = pick(history[i]);
+    const prev = pick(history[i - 1]);
+    if (cur == null || prev == null) continue;
+    const dv = cur - prev;
     if (dv <= 0) continue;
     hourly[new Date(history[i].timestamp).getHours()] += dv;
   }
   const total = hourly.reduce((a, b) => a + b, 0);
-  if (total < 20) return null; // not enough burn to find a pattern
+  if (total < minTotal) return null; // not enough burn to find a pattern
 
   let bestStart = 0;
   let bestSum = -1;
@@ -546,17 +558,23 @@ function computeSessionPlan() {
   if (bestSum < total * 0.35) return null; // usage too evenly spread — no useful peak
 
   const timeFormat = store.get('settings.timeFormat', '12h');
-  const fmtHour = (h) => {
-    h = ((h % 24) + 24) % 24;
-    if (timeFormat === '24h') return `${String(h).padStart(2, '0')}:00`;
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const h12 = h % 12 || 12;
-    return `${h12}${ampm}`;
-  };
   const share = Math.round((bestSum / total) * 100);
+  const range = `${fmtPlanHour(bestStart, timeFormat)}–${fmtPlanHour(bestStart + 5, timeFormat)}`;
+  const text = sessionAdvice
+    ? `Planner: your heaviest hours are ${range} (${share}% of burn) — start a fresh session just before ${fmtPlanHour(bestStart, timeFormat)} to cover them in one 5h window.`
+    : `Planner: your heaviest hours here are ${range} (${share}% of burn).`;
+  return { startHour: bestStart, text };
+}
+
+function computeSessionPlans() {
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const history = store.get(historyKey, []).filter((e) => e.timestamp > cutoff);
   return {
-    startHour: bestStart,
-    text: `Planner: your heaviest hours are ${fmtHour(bestStart)}–${fmtHour(bestStart + 5)} (${share}% of burn) — start a fresh session just before ${fmtHour(bestStart)} to cover them in one 5h window.`
+    anthropic: computePlanFromSeries(history, (e) => e.session, { minTotal: 20, sessionAdvice: true }),
+    openai: computePlanFromSeries(history, (e) => e.codex, { minTotal: 10, sessionAdvice: false }),
+    google: computePlanFromSeries(history, (e) => e.gemini, { minTotal: 10, sessionAdvice: false })
   };
 }
 
@@ -812,6 +830,11 @@ function storeUsageHistory(data) {
     scoped[limit.slug] = limit.percent;
   }
 
+  // External provider samples (single percent each) power their planner hints
+  const codexPct = data.codex?.limits?.[0]?.percent;
+  const geminiPct = (data.gemini?.limits || []).reduce(
+    (worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
+
   history.push({
     timestamp,
     session: data.five_hour?.utilization || 0,
@@ -822,7 +845,9 @@ function storeUsageHistory(data) {
     design: data.seven_day_omelette?.utilization || 0,
     oauthApps: data.seven_day_oauth_apps?.utilization || 0,
     extraUsage: data.extra_usage?.utilization || 0,
-    ...(Object.keys(scoped).length ? { scoped } : {})
+    ...(Object.keys(scoped).length ? { scoped } : {}),
+    ...(codexPct != null ? { codex: codexPct } : {}),
+    ...(geminiPct != null ? { gemini: geminiPct } : {})
   });
 
   // Rotation: apply both time-based and count-based limits
@@ -2442,7 +2467,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
   // Burn-rate forecasts, anomaly check, planner, digest — after the new sample lands
   data.forecasts = computeForecasts();
-  data.sessionPlan = computeSessionPlan();
+  data.sessionPlans = computeSessionPlans();
   checkBurnAnomalies();
   checkDailyDigest(data);
 

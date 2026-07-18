@@ -970,7 +970,7 @@ body.theme-light .settings-disclaimer {
 }
 
 .section-header:hover .section-name {
-    color: #c0c0d0;
+    filter: brightness(1.18);
 }
 
 .section-arrow {
@@ -984,28 +984,74 @@ body.theme-light .settings-disclaimer {
 }
 
 .section-name {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: #8a8a9a;
+    font-size: 16px;
+    line-height: 1.15;
+    transition: filter 0.15s ease;
 }
 
+/* Anthropic — bookish serif in their clay/terracotta, letterpress warmth */
+.brand-anthropic {
+    font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: #d97757;
+    text-shadow: 0 0 12px rgba(217, 119, 87, 0.35);
+}
+
+/* OpenAI — clean geometric sans with a teal sheen sweeping through */
+.brand-openai {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    background: linear-gradient(100deg, #10a37f 0%, #7df0cd 45%, #10a37f 90%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: openaiSheen 6s ease-in-out infinite;
+}
+
+@keyframes openaiSheen {
+    0%, 100% { background-position: 0% 0; }
+    50% { background-position: 100% 0; }
+}
+
+/* Google — the classic four-colour wordmark, product-sans-ish */
+.brand-google {
+    font-family: 'Product Sans', Futura, 'Century Gothic', 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.brand-google .g-b { color: #4285f4; }
+.brand-google .g-r { color: #ea4335; }
+.brand-google .g-y { color: #fbbc05; }
+.brand-google .g-g { color: #34a853; }
+
 .section-tray {
-    margin-left: auto;
+    margin-left: 10px;
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 9px;
+    font-size: 8px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     color: #70707e;
     cursor: pointer;
+    padding: 1px 7px 1px 5px;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 9px;
+    background: rgba(128, 128, 128, 0.08);
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.section-tray:hover {
+    border-color: rgba(139, 92, 246, 0.6);
+    color: #9a9aae;
 }
 
 .section-tray input {
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
     accent-color: #8b5cf6;
     cursor: pointer;
     margin: 0;
@@ -1015,13 +1061,16 @@ body.theme-light .settings-disclaimer {
     display: none;
 }
 
-body.theme-light .section-name,
+.credits-note {
+    font-style: normal;
+}
+
 body.theme-light .section-arrow {
     color: #707090;
 }
 
-body.theme-light .section-header:hover .section-name {
-    color: #404060;
+body.theme-light .brand-anthropic {
+    text-shadow: 0 0 10px rgba(217, 119, 87, 0.25);
 }
 
 body.theme-light .section-tray {

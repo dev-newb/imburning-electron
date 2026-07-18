@@ -131,6 +131,9 @@ const elements = {
     fontColorToggle: document.getElementById('fontColorToggle'),
     fontColorPicker: document.getElementById('fontColorPicker'),
     planNote: document.getElementById('planNote'),
+    planNoteOpenai: document.getElementById('planNoteOpenai'),
+    planNoteGoogle: document.getElementById('planNoteGoogle'),
+    openaiCredits: document.getElementById('openaiCredits'),
     webhookToggle: document.getElementById('webhookToggle'),
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
@@ -1028,13 +1031,29 @@ function updateUI(data) {
             : '';
     }
 
-    // Session-window planner hint
-    if (elements.planNote) {
-        const plan = data.sessionPlan;
-        elements.planNote.style.display = plan ? '' : 'none';
+    // Session-window planner hints, one per provider section
+    const plans = data.sessionPlans || {};
+    for (const [el, plan] of [
+        [elements.planNote, plans.anthropic],
+        [elements.planNoteOpenai, plans.openai],
+        [elements.planNoteGoogle, plans.google]
+    ]) {
+        if (!el) continue;
+        el.style.display = plan ? '' : 'none';
         if (plan) {
-            elements.planNote.textContent = plan.text;
-            elements.planNote.title = plan.text;
+            el.textContent = plan.text;
+            el.title = plan.text;
+        }
+    }
+
+    // OpenAI credits line — symmetric with Anthropic's Account Credits display
+    if (elements.openaiCredits) {
+        const credits = data.codex?.credits;
+        elements.openaiCredits.style.display = credits ? '' : 'none';
+        if (credits) {
+            elements.openaiCredits.textContent = credits.unlimited
+                ? 'Credits: unlimited'
+                : `Credits: ${credits.balance ?? 0}${credits.hasCredits ? '' : ' (none purchased)'}`;
         }
     }
     if (!isCompactMode) resizeWidget();
