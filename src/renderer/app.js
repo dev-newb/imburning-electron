@@ -13,6 +13,7 @@ let appInitializing = true;  // suppresses _saveViewState during startup restore
 let isFetching = false;       // in-flight guard — prevents overlapping fetchUsageData calls
 let _updateReadyToInstall = false; // an auto-update is downloaded and ready to apply
 let isOpenaiExtrasOpen = true;     // OpenAI Credits + Limit Resets sub-panel
+let projectionsVisible = true;     // graph forecast lines (the psychic's trance)
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 155;
 const WIDGET_ROW_HEIGHT = 30;
@@ -86,6 +87,8 @@ const elements = {
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
     githubBtn: document.getElementById('githubBtn'),
+    psychicBtn: document.getElementById('psychicBtn'),
+    psychicImg: document.getElementById('psychicImg'),
     openaiExtras: document.getElementById('openaiExtras'),
     openaiExtraRows: document.getElementById('openaiExtraRows'),
     openaiExpandToggle: document.getElementById('openaiExpandToggle'),
@@ -236,6 +239,8 @@ async function init() {
     isOpenaiExtrasOpen = settings.openaiExtrasOpen !== false;
     elements.openaiExpandArrow.classList.toggle('expanded', isOpenaiExtrasOpen);
     elements.openaiExtras.style.display = isOpenaiExtrasOpen ? 'block' : 'none';
+    projectionsVisible = settings.projectionsOn !== false;
+    applyPsychicState();
 
     if (credentials.sessionKey && credentials.organizationId) {
         // Populate org selector if user has multiple orgs
@@ -439,6 +444,14 @@ function setupEventListeners() {
 
     elements.githubBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
+    });
+
+    // The psychic: toggles the forecast projection lines on the graph
+    elements.psychicBtn.addEventListener('click', async () => {
+        projectionsVisible = !projectionsVisible;
+        applyPsychicState();
+        if (graphVisible) await loadChart();
+        await _saveSettingsPatch({ projectionsOn: projectionsVisible });
     });
 
     // OpenAI extras (Credits + Limit Resets) collapse toggle
@@ -1637,6 +1650,18 @@ function sparkleRing(timerElement) {
     setTimeout(() => burst.remove(), 1900);
 }
 
+// Swap the psychic between idle (staring) and trance (beaming) states
+function applyPsychicState() {
+    if (!elements.psychicBtn) return;
+    elements.psychicBtn.classList.toggle('on', projectionsVisible);
+    elements.psychicImg.src = projectionsVisible
+        ? '../../assets/psychic-on.png'
+        : '../../assets/psychic-idle.png';
+    elements.psychicBtn.title = projectionsVisible
+        ? 'Forecast projections: ON — the psychic sees your future burn'
+        : 'Forecast projections: OFF — the psychic awaits your command';
+}
+
 // Update circular timer
 function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     if (!resetsAt) {
@@ -2013,8 +2038,8 @@ function renderChart(history) {
         });
         chartXMax = Math.max(chartXMax, eta);
     };
-    addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
-    {
+    if (projectionsVisible) {
+        addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
         const SCOPED_CHART_COLORS = { fable: '#d946ef' };
         for (const key of scopedKeys) {
             const scopedResetIso = latestUsageData?.['seven_day_scoped_' + key]?.resets_at;
@@ -2290,7 +2315,8 @@ async function saveSettings() {
         dailyDigest: elements.dailyDigestToggle.checked,
         showCodex: elements.showCodexToggle.checked,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
-        openaiExtrasOpen: isOpenaiExtrasOpen
+        openaiExtrasOpen: isOpenaiExtrasOpen,
+        projectionsOn: projectionsVisible
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;

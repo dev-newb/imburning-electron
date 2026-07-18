@@ -2074,6 +2074,7 @@ ipcMain.handle('get-settings', () => {
     graphVisible: store.get('settings.graphVisible', false),
     expandedOpen: store.get('settings.expandedOpen', true),
     openaiExtrasOpen: store.get('settings.openaiExtrasOpen', true),
+    projectionsOn: store.get('settings.projectionsOn', true),
     showTrayStats: store.get('settings.showTrayStats', false),
     showClaudeCode: store.get('settings.showClaudeCode', true),
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
@@ -2112,6 +2113,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.graphVisible', settings.graphVisible);
   store.set('settings.expandedOpen', settings.expandedOpen);
   if (settings.openaiExtrasOpen !== undefined) store.set('settings.openaiExtrasOpen', settings.openaiExtrasOpen !== false);
+  if (settings.projectionsOn !== undefined) store.set('settings.projectionsOn', settings.projectionsOn !== false);
   store.set('settings.showTrayStats', settings.showTrayStats);
   store.set('settings.showClaudeCode', settings.showClaudeCode !== false);
   if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);

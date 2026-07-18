@@ -80,7 +80,15 @@ const P = {
   E: [53, 224, 255, 255],   // cyan eye
   L: [214, 246, 255, 255],  // eye glint
   G: [24, 28, 36, 255],     // grill / dark slots
-  N: [255, 92, 74, 255]     // gauge needle red
+  N: [255, 92, 74, 255],    // gauge needle red
+  // psychic sprite colours
+  K: [237, 190, 149, 255],  // skin
+  k: [214, 163, 120, 255],  // skin shade
+  P: [139, 92, 246, 255],   // turban purple
+  p: [104, 63, 205, 255],   // turban shade
+  C: [53, 224, 255, 255],   // psionic cyan
+  F: [217, 70, 239, 255],   // psionic fuchsia
+  U: [255, 255, 255, 255]   // eye white
 };
 
 // ---- 32x32 base art ----
@@ -170,6 +178,62 @@ function buildHeroGrid() {
   return g.map((row) => row.join(''));
 }
 
+// ---- the psychic (graph forecast toggle) ----
+// Idle: eyes open, staring at you. On: eyes closed, psionic beams.
+const PSYCHIC_IDLE = [
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '.........DDDDDD.........',
+  '.......DDPPPPPPDD.......',
+  '......DPPPPPPPPPPD......',
+  '.....DPPPPYYPPPPPPD.....',
+  '.....DPPPPYYPPPPPPD.....',
+  '.....DPpPPPPPPPPpPD.....',
+  '......DppPPPPPPppD......',
+  '......DKKKKKKKKKKD......',
+  '.....DKKKKKKKKKKKKD.....',
+  '.....DKUDDKKKKUDDKD.....',
+  '.....DKUDDKKKKUDDKD.....',
+  '.....DKKKKKKKKKKKKD.....',
+  '.....DKKKKKkkKKKKKD.....',
+  '......DKKkDDDDkKKD......',
+  '.......DKKKKKKKKD.......',
+  '......DDpPPPPPPpDD......',
+  '.....DpPPPPPPPPPPpD.....',
+  '....DpPPPPPPPPPPPPpD....',
+  '....DDDDDDDDDDDDDDDD....'
+];
+
+const PSYCHIC_ON = [
+  '..C....F....C....F......',
+  '...C...F...C...F........',
+  '.C..C..F..C..F..C..F....',
+  '..C..C.F.C..F..C..F.....',
+  '...C..CFC..F..C..F......',
+  '....C..DDDDDD..F........',
+  '.......DDPPPPPPDD.......',
+  '......DPPPPPPPPPPD......',
+  '.....DPPPPYYPPPPPPD.....',
+  '.....DPPPPYYPPPPPPD.....',
+  '.....DPpPPPPPPPPpPD.....',
+  '......DppPPPPPPppD......',
+  '......DKKKKKKKKKKD......',
+  '.....DKKKKKKKKKKKKD.....',
+  '.....DKDDDKKKKDDDKD.....',
+  '.....DKKKKKKKKKKKKD.....',
+  '.....DKKKKKKKKKKKKD.....',
+  '.....DKKKKKkkKKKKKD.....',
+  '......DKKkDDDDkKKD......',
+  '.......DKKKKKKKKD.......',
+  '......DDpPPPPPPpDD......',
+  '.....DpPPPPPPPPPPpD.....',
+  '....DpPPPPPPPPPPPPpD....',
+  '....DDDDDDDDDDDDDDDD....'
+];
+
 function artToRGBA(art, scale) {
   const h = art.length, w = art[0].length;
   const out = Buffer.alloc(w * scale * h * scale * 4);
@@ -194,4 +258,6 @@ fs.writeFileSync(path.join(assets, 'tray-icon.png'), encodePNG(32, 32, artToRGBA
 fs.writeFileSync(path.join(assets, 'icon.ico'), encodeICO(encodePNG(256, 256, artToRGBA(ART, 8))));
 const hero = buildHeroGrid();
 fs.writeFileSync(path.join(assets, 'burnwatch-hero.png'), encodePNG(512, 512, artToRGBA(hero, 8)));
-console.log('logo.png, tray-icon.png, icon.ico, burnwatch-hero.png written');
+fs.writeFileSync(path.join(assets, 'psychic-idle.png'), encodePNG(24, 24, artToRGBA(PSYCHIC_IDLE, 1)));
+fs.writeFileSync(path.join(assets, 'psychic-on.png'), encodePNG(24, 24, artToRGBA(PSYCHIC_ON, 1)));
+console.log('logo.png, tray-icon.png, icon.ico, burnwatch-hero.png, psychic sprites written');

@@ -1177,6 +1177,43 @@ body.theme-light .section-header.frozen .section-name {
         0 0 10px rgba(130, 195, 255, 0.35);
 }
 
+/* The psychic — toggles the graph's forecast projection lines */
+.graph-section {
+    position: relative;
+}
+
+.psychic-btn {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    z-index: 5;
+    width: 26px;
+    height: 26px;
+    padding: 1px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.9;
+    transition: opacity 0.15s ease, filter 0.2s ease, background 0.15s ease;
+}
+
+.psychic-btn img {
+    width: 24px;
+    height: 24px;
+    display: block;
+    image-rendering: pixelated;
+}
+
+.psychic-btn:hover {
+    opacity: 1;
+    background: rgba(139, 92, 246, 0.15);
+}
+
+.psychic-btn.on {
+    filter: drop-shadow(0 0 5px rgba(53, 224, 255, 0.55));
+}
+
 /* Ring-reset sparkle — a wand-tap of gold when an elapsed circle completes */
 .sparkle-burst {
     position: absolute;
