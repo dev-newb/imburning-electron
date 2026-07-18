@@ -55,12 +55,31 @@ const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 let mainWindow = null;
 let sessionTray = null;  // Tray icon for Session usage
 let weeklyTray = null;   // Tray icon for Weekly usage
+let fableTray = null;    // Tray icon for the scoped weekly limit (e.g. Fable)
 
 const WIDGET_WIDTH = process.platform === 'darwin' ? 590 : 560;
 const WIDGET_HEIGHT = 155;
 const HISTORY_RETENTION_DAYS = 8;
 const CHART_DAYS = 7;
 const MAX_HISTORY_SAMPLES = 10000; // Cap total samples to prevent unbounded growth
+
+// Extract scoped weekly limits (e.g. Fable) from the `limits` array. The
+// legacy seven_day_<model> fields arrive null for these models, so the
+// array is the only source. Returns [{slug, name, percent, resetsAt}].
+function getScopedWeeklyLimits(data) {
+  const scoped = [];
+  for (const limit of (data?.limits || [])) {
+    if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
+    const name = String(limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped');
+    scoped.push({
+      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      name,
+      percent: limit.percent,
+      resetsAt: limit.resets_at
+    });
+  }
+  return scoped;
+}
 
 function storeUsageHistory(data) {
   // Skip write if the session is invalid — a live session always has resets_at timestamps.
@@ -76,15 +95,12 @@ function storeUsageHistory(data) {
   const timestamp = Date.now();
   let history = store.get(historyKey, []);
 
-  // Scoped weekly limits (e.g. Fable) arrive in the `limits` array; their
-  // legacy seven_day_<model> fields are null. Record them under a slug keyed
-  // by display name (same slug the renderer derives) so the chart can plot
-  // whatever scopes the API sends without a per-model release.
+  // Record scoped weekly limits (e.g. Fable) under a slug keyed by display
+  // name (same slug the renderer derives) so the chart can plot whatever
+  // scopes the API sends without a per-model release.
   const scoped = {};
-  for (const limit of (data.limits || [])) {
-    if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
-    const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
-    scoped[String(scopeName).toLowerCase().replace(/[^a-z0-9]+/g, '_')] = limit.percent;
+  for (const limit of getScopedWeeklyLimits(data)) {
+    scoped[limit.slug] = limit.percent;
   }
 
   history.push({
@@ -433,9 +449,10 @@ function drawChar(buffer, width, height, char, x, y, color, useNarrow = false) {
  * Generate a single percentage badge icon with colored background and bitmap text
  * @param {number} percent - Usage percentage (0-100)
  * @param {object} bgColor - Background color {r, g, b}
+ * @param {object} [textColor] - Text color {r, g, b, a}, defaults to white
  * @returns {NativeImage} Generated tray icon
  */
-function generatePercentageIcon(percent, bgColor) {
+function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255, a: 255 }) {
   const width = 20;  // Back to 20x20
   const height = 20;
   const buffer = Buffer.alloc(width * height * 4);
@@ -451,10 +468,9 @@ function generatePercentageIcon(percent, bgColor) {
     }
   }
   
-  // Draw white text
+  // Draw text (white unless a custom color was passed)
   const percentText = Math.round(percent).toString();
-  const textColor = { r: 255, g: 255, b: 255, a: 255 };
-  
+
   // Use narrow font for 3-digit numbers (100%)
   const useNarrow = percentText.length >= 3;
   const charWidth = useNarrow ? 6 : 8;
@@ -559,31 +575,25 @@ function showMainWindowClean() {
   mainWindow.focus();
 }
 
-function createTray() {
-  // Respect the tray stats setting even when createTray is called from generic refresh paths.
-  if (!store.get('settings.showTrayStats', false)) {
-    destroyTrayIcons();
-    return;
-  }
+function trayStaticIconPath() {
+  return path.join(__dirname, process.platform === 'darwin' ? 'assets/tray-icon-mac.png' : process.platform === 'linux' ? 'assets/tray-icon-linux.png' : 'assets/tray-icon.png');
+}
 
-  // Rebuild from a clean state if only one of the two stats tray icons survived.
-  const hasSessionTray = sessionTray && !sessionTray.isDestroyed();
-  const hasWeeklyTray = weeklyTray && !weeklyTray.isDestroyed();
-  if (hasSessionTray && hasWeeklyTray) return;
-  if (hasSessionTray || hasWeeklyTray) destroyTrayIcons();
+// Show/hide the widget when a stats tray icon is left-clicked
+function attachTrayToggleClick(tray) {
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
+        mainWindow.hide();
+      } else {
+        showMainWindowClean();
+      }
+    }
+  });
+}
 
-  try {
-    const staticIconPath = path.join(__dirname, process.platform === 'darwin' ? 'assets/tray-icon-mac.png' : process.platform === 'linux' ? 'assets/tray-icon-linux.png' : 'assets/tray-icon.png');
-    
-    // Create Weekly tray icon FIRST (left position, blue)
-    weeklyTray = new Tray(staticIconPath);
-    weeklyTray.setToolTip('Weekly Usage');
-    
-    // Create Session tray icon SECOND (right position, purple)
-    sessionTray = new Tray(staticIconPath);
-    sessionTray.setToolTip('Session Usage');
-
-    const contextMenu = Menu.buildFromTemplate([
+function buildTrayContextMenu() {
+  return Menu.buildFromTemplate([
       {
         label: 'Show Widget',
         click: () => {
@@ -629,41 +639,96 @@ function createTray() {
           app.quit();
         }
       }
-    ]);
+  ]);
+}
 
+function createTray() {
+  // Respect the tray stats setting even when createTray is called from generic refresh paths.
+  if (!store.get('settings.showTrayStats', false)) {
+    destroyTrayIcons();
+    return;
+  }
+
+  // Rebuild from a clean state if only one of the two stats tray icons survived.
+  const hasSessionTray = sessionTray && !sessionTray.isDestroyed();
+  const hasWeeklyTray = weeklyTray && !weeklyTray.isDestroyed();
+  if (hasSessionTray && hasWeeklyTray) return;
+  if (hasSessionTray || hasWeeklyTray) destroyTrayIcons();
+
+  try {
+    const staticIconPath = trayStaticIconPath();
+
+    // Create Weekly tray icon FIRST (left position, blue)
+    weeklyTray = new Tray(staticIconPath);
+    weeklyTray.setToolTip('Weekly Usage');
+
+    // Create Session tray icon SECOND (right position, purple)
+    sessionTray = new Tray(staticIconPath);
+    sessionTray.setToolTip('Session Usage');
+
+    const contextMenu = buildTrayContextMenu();
     sessionTray.setContextMenu(contextMenu);
     weeklyTray.setContextMenu(contextMenu);
 
-    // Click handlers - swapped order
-        weeklyTray.on('click', () => {
-      if (mainWindow) {
-        if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
-          mainWindow.hide();
-        } else {
-          showMainWindowClean();
-        }
-      }
-    });
-    
-        sessionTray.on('click', () => {
-      if (mainWindow) {
-        if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
-          mainWindow.hide();
-        } else {
-          showMainWindowClean();
-        }
-      }
-    });
+    attachTrayToggleClick(weeklyTray);
+    attachTrayToggleClick(sessionTray);
   } catch (error) {
     console.error('Failed to create tray:', error);
   }
 }
 
+/**
+ * Create/update or destroy the scoped-weekly (Fable) tray icon.
+ * Red background with a black number, unlike the threshold-coloured
+ * session/weekly icons. Exists only while tray stats are enabled AND the
+ * API reports a scoped weekly limit.
+ * @param {object|null} scopedLimit - {name, percent, resetsAt} or null
+ */
+function syncFableTray(scopedLimit) {
+  if (!scopedLimit || !store.get('settings.showTrayStats', false)) {
+    if (fableTray && !fableTray.isDestroyed()) {
+      try {
+        fableTray.removeAllListeners();
+        fableTray.setContextMenu(null);
+        fableTray.setToolTip('');
+        if (process.platform === 'linux') fableTray.setImage(nativeImage.createEmpty());
+        fableTray.destroy();
+      } catch (_) {}
+    }
+    fableTray = null;
+    return;
+  }
+
+  try {
+    if (!fableTray || fableTray.isDestroyed()) {
+      fableTray = new Tray(trayStaticIconPath());
+      fableTray.setContextMenu(buildTrayContextMenu());
+      attachTrayToggleClick(fableTray);
+    }
+
+    const red = { r: 239, g: 68, b: 68 };          // #ef4444
+    const black = { r: 0, g: 0, b: 0, a: 255 };
+    fableTray.setImage(generatePercentageIcon(scopedLimit.percent, red, black));
+
+    const timeFormat = store.get('settings.timeFormat', '12h');
+    let tooltip = `${scopedLimit.name} (weekly): ${Math.round(scopedLimit.percent)}%`;
+    const resetTime = formatResetTime(scopedLimit.resetsAt, timeFormat, true);
+    if (resetTime) {
+      tooltip += `\nResets: ${resetTime}`;
+    }
+    fableTray.setToolTip(tooltip);
+    debugLog('[Tray] Scoped tray updated:', scopedLimit.name, scopedLimit.percent + '%');
+  } catch (error) {
+    console.error('Failed to update Fable tray icon:', error);
+  }
+}
+
 function destroyTrayIcons() {
   // Centralized tray cleanup keeps Linux appindicator hosts from showing stale icons.
-  const trays = [sessionTray, weeklyTray];
+  const trays = [sessionTray, weeklyTray, fableTray];
   sessionTray = null;
   weeklyTray = null;
+  fableTray = null;
 
   for (const tray of trays) {
     if (!tray || tray.isDestroyed()) continue;
@@ -731,8 +796,9 @@ function updateTrayIcon(usageData) {
   const showTrayStats = store.get('settings.showTrayStats', false);
   
   if (!showTrayStats) {
-    // Destroy only weeklyTray, keeping sessionTray alive as a persistent restore
-    // icon. Without it, hide() on Windows leaves no way to restore the window.
+    // Destroy only weeklyTray (and the scoped/Fable tray), keeping sessionTray
+    // alive as a persistent restore icon. Without it, hide() on Windows leaves
+    // no way to restore the window.
     // Apply the same Linux appindicator cleanup that destroyTrayIcons() uses.
     if (weeklyTray && !weeklyTray.isDestroyed()) {
       try {
@@ -744,6 +810,7 @@ function updateTrayIcon(usageData) {
       } catch (_) {}
       weeklyTray = null;
     }
+    syncFableTray(null);
     return;
   }
 
@@ -751,6 +818,9 @@ function updateTrayIcon(usageData) {
   if (!sessionTray || sessionTray.isDestroyed() || !weeklyTray || weeklyTray.isDestroyed()) {
     createTray();
   }
+
+  // Scoped weekly tray (e.g. Fable): shown while the API reports one
+  syncFableTray(getScopedWeeklyLimits(usageData)[0] || null);
 
   if ((!sessionTray || sessionTray.isDestroyed()) && (!weeklyTray || weeklyTray.isDestroyed())) return;
 
