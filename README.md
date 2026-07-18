@@ -1,4 +1,8 @@
-# Burnwatch
+<p align="center">
+  <img src="assets/burnwatch-hero.png" width="256" alt="Burnwatch — a robot with its head on fire, keeping a gauge on its own burn">
+</p>
+
+<h1 align="center">Burnwatch</h1>
 
 **Burnwatch** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
