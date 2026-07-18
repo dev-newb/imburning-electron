@@ -122,6 +122,7 @@ const elements = {
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
+    showGeminiToggle: document.getElementById('showGeminiToggle'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -702,7 +703,7 @@ function buildExtraRows(data) {
             }
             row.appendChild(resetsText);
         } else {
-            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : 5 * 60;
+            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : key.includes('daily') ? 24 * 60 : 5 * 60;
 
             const barGroup = document.createElement('div');
             barGroup.className = 'usage-bar-group';
@@ -896,6 +897,20 @@ function normalizeUsageData(data) {
         for (const lim of cx.limits) {
             const key = 'codex_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'codex' };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+        }
+        const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
+        delete EXTRA_ROW_CONFIG.extra_usage;
+        EXTRA_ROW_CONFIG.extra_usage = extraUsage;
+    }
+
+    // Gemini (Google) account — daily per-family quota from the gemini CLI's
+    // backend, fetched by the main process with the CLI's own local login.
+    const gm = data.gemini;
+    if (gm && Array.isArray(gm.limits) && gm.limits.length) {
+        for (const lim of gm.limits) {
+            const key = 'gemini_' + lim.key;
+            if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'gemini' };
             data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
         }
         const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
@@ -1920,6 +1935,7 @@ async function loadSettings() {
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
+    if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
 
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
@@ -1988,7 +2004,8 @@ async function saveSettings() {
             url: elements.webhookUrl.value.trim()
         },
         dailyDigest: elements.dailyDigestToggle.checked,
-        showCodex: elements.showCodexToggle.checked
+        showCodex: elements.showCodexToggle.checked,
+        showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;

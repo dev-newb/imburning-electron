@@ -659,6 +659,11 @@ body.theme-light .graph-btn.active {
     box-shadow: 0 0 10px rgba(16, 163, 127, 0.3);
 }
 
+.progress-fill.gemini {
+    background: linear-gradient(90deg, #f4b400 0%, #fbd75b 100%);
+    box-shadow: 0 0 10px rgba(244, 180, 0, 0.3);
+}
+
 .progress-fill.opus {
     background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
@@ -737,6 +742,10 @@ body.theme-light .graph-btn.active {
 
 .timer-progress.codex {
     stroke: #10a37f;
+}
+
+.timer-progress.gemini {
+    stroke: #f4b400;
 }
 
 .timer-progress.opus {

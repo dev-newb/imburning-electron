@@ -308,6 +308,163 @@ async function fetchCodexUsage() {
   return (await fetchCodexUsageLive()) || readCodexSessionSnapshot();
 }
 
+// ---- Gemini (Google) account usage ----
+// The gemini CLI's backend exposes per-model daily quota buckets. Auth uses
+// the CLI's own local OAuth credentials; Google refresh tokens do not rotate,
+// so minting an access token here (exactly what the CLI does) cannot break
+// the CLI's login. Nothing is written back to oauth_creds.json.
+// The CLI's OAuth client id/secret are public constants shipped inside its
+// npm bundle — read them from the local install rather than embedding them
+// (matches whatever client the installed CLI actually uses).
+let _geminiClient = null; // { id, secret } after discovery, false when unavailable
+function getGeminiOAuthClient() {
+  if (_geminiClient !== null) return _geminiClient || null;
+  const npmPrefixes = [
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules') : null,
+    '/usr/local/lib/node_modules',
+    '/usr/lib/node_modules',
+    path.join(os.homedir(), '.npm-global', 'lib', 'node_modules'),
+    path.join(os.homedir(), '.nvm', 'versions')
+  ].filter(Boolean);
+  for (const prefix of npmPrefixes) {
+    const root = path.join(prefix, '@google', 'gemini-cli');
+    try {
+      if (!fs.existsSync(root)) continue;
+      const stack = [root];
+      while (stack.length) {
+        const dir = stack.pop();
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (entry.name !== 'node_modules') stack.push(p);
+            continue;
+          }
+          if (!entry.name.endsWith('.js') || fs.statSync(p).size > 30e6) continue;
+          const text = fs.readFileSync(p, 'utf-8');
+          const m = /([0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com)[\s\S]{0,300}?(GOCSPX-[A-Za-z0-9_-]+)/.exec(text);
+          if (m) {
+            _geminiClient = { id: m[1], secret: m[2] };
+            debugLog('[Gemini] OAuth client discovered from local CLI install');
+            return _geminiClient;
+          }
+        }
+      }
+    } catch (err) {
+      debugLog('[Gemini] CLI install scan failed:', err.message);
+    }
+  }
+  _geminiClient = false;
+  debugLog('[Gemini] gemini-cli install not found — Gemini rows unavailable');
+  return null;
+}
+let _geminiAccessToken = { token: null, expiresAt: 0 };
+
+function getGeminiAccessToken() {
+  return new Promise((resolve) => {
+    try {
+      const credPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+      if (!fs.existsSync(credPath)) return resolve(null);
+      const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+      if (creds.access_token && creds.expiry_date && creds.expiry_date - Date.now() > 60000) {
+        return resolve(creds.access_token);
+      }
+      if (_geminiAccessToken.token && Date.now() < _geminiAccessToken.expiresAt - 60000) {
+        return resolve(_geminiAccessToken.token);
+      }
+      if (!creds.refresh_token) return resolve(null);
+      const client = getGeminiOAuthClient();
+      if (!client) return resolve(null);
+      const body = new URLSearchParams({
+        client_id: client.id,
+        client_secret: client.secret,
+        refresh_token: creds.refresh_token,
+        grant_type: 'refresh_token'
+      }).toString();
+      const req = https.request({
+        hostname: 'oauth2.googleapis.com',
+        path: '/token',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 10000
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (!json.access_token) {
+              debugLog('[Gemini] Token refresh failed:', res.statusCode);
+              return resolve(null);
+            }
+            _geminiAccessToken = { token: json.access_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000 };
+            resolve(json.access_token);
+          } catch { resolve(null); }
+        });
+      });
+      req.on('error', (err) => { debugLog('[Gemini] Token refresh error:', err.message); resolve(null); });
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+      req.end(body);
+    } catch (err) {
+      debugLog('[Gemini] Could not read oauth_creds.json:', err.message);
+      resolve(null);
+    }
+  });
+}
+
+// Group per-model buckets into Pro / Flash family rows (worst bucket wins)
+function normalizeGeminiQuota(json) {
+  const buckets = json?.buckets || [];
+  const families = { pro: null, flash: null };
+  for (const b of buckets) {
+    if (b.remainingFraction == null || !b.modelId) continue;
+    const family = /pro/i.test(b.modelId) ? 'pro' : /flash/i.test(b.modelId) ? 'flash' : null;
+    if (!family) continue;
+    if (!families[family] || b.remainingFraction < families[family].remainingFraction) {
+      families[family] = b;
+    }
+  }
+  const limits = [];
+  for (const [family, bucket] of Object.entries(families)) {
+    if (!bucket) continue;
+    limits.push({
+      key: `${family}_daily`,
+      label: `Gemini ${family.charAt(0).toUpperCase() + family.slice(1)} (daily)`,
+      percent: Math.round((1 - bucket.remainingFraction) * 1000) / 10,
+      resetsAt: bucket.resetTime || null
+    });
+  }
+  return limits.length ? { source: 'live', limits } : null;
+}
+
+function fetchGeminiUsage() {
+  return getGeminiAccessToken().then((token) => {
+    if (!token) return null;
+    return new Promise((resolve) => {
+      const body = JSON.stringify({});
+      const req = https.request({
+        hostname: 'cloudcode-pa.googleapis.com',
+        path: '/v1internal:retrieveUserQuota',
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 10000
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode !== 200) {
+            debugLog('[Gemini] Quota fetch failed with status', res.statusCode);
+            return resolve(null);
+          }
+          try { resolve(normalizeGeminiQuota(JSON.parse(data))); } catch { resolve(null); }
+        });
+      });
+      req.on('error', (err) => { debugLog('[Gemini] Quota fetch error:', err.message); resolve(null); });
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+      req.end(body);
+    });
+  });
+}
+
 // The widget refreshes every 30s, but external provider endpoints rate-limit
 // aggressive polling (429s) — cache each provider's result for 5 minutes.
 const PROVIDER_CACHE_MS = 5 * 60 * 1000;
@@ -1752,7 +1909,8 @@ ipcMain.handle('get-settings', () => {
     fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' }),
     webhook: store.get('settings.webhook', { enabled: false, url: '' }),
     dailyDigest: store.get('settings.dailyDigest', true),
-    showCodex: store.get('settings.showCodex', true)
+    showCodex: store.get('settings.showCodex', true),
+    showGemini: store.get('settings.showGemini', true)
   };
 });
 
@@ -1782,6 +1940,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.webhook) store.set('settings.webhook', settings.webhook);
   store.set('settings.dailyDigest', settings.dailyDigest !== false);
   store.set('settings.showCodex', settings.showCodex !== false);
+  store.set('settings.showGemini', settings.showGemini !== false);
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -2069,6 +2228,9 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   const codexPromise = store.get('settings.showCodex', true)
     ? cachedProviderFetch('codex', fetchCodexUsage)
     : Promise.resolve(null);
+  const geminiPromise = store.get('settings.showGemini', true)
+    ? cachedProviderFetch('gemini', fetchGeminiUsage)
+    : Promise.resolve(null);
 
   // Ensure cookie is set
   await setSessionCookie(sessionKey);
@@ -2191,6 +2353,8 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   }
   const codex = await codexPromise;
   if (codex) data.codex = codex;
+  const gemini = await geminiPromise;
+  if (gemini) data.gemini = gemini;
 
   storeUsageHistory(data);
 
