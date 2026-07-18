@@ -1,6 +1,6 @@
-# Claude Usage Widget
+# Burnwatch
 
-A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that displays your Claude.ai usage statistics in real-time.
+**Burnwatch** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
 ![Claude Usage Widget - Main](assets/screenshot-main.png)
 

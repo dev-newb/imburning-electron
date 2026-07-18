@@ -1083,6 +1083,92 @@ body.theme-light .section-eye.on {
     color: #7c5ce0;
 }
 
+/* Frozen provider — the logo sits encased in a block of real ice:
+   irregular melt-rounded edges, frost patches, a travelling sheen,
+   and jagged icicles hanging off the bottom */
+.section-header.frozen .section-name {
+    position: relative;
+    filter: saturate(0.28) brightness(1.15);
+    background:
+        radial-gradient(ellipse at 22% 24%, rgba(255, 255, 255, 0.38) 0%, transparent 30%),
+        radial-gradient(ellipse at 74% 72%, rgba(180, 225, 255, 0.32) 0%, transparent 36%),
+        radial-gradient(ellipse at 55% 10%, rgba(255, 255, 255, 0.20) 0%, transparent 22%),
+        linear-gradient(133deg,
+            rgba(165, 215, 255, 0.46) 0%,
+            rgba(240, 251, 255, 0.20) 36%,
+            rgba(150, 205, 250, 0.38) 62%,
+            rgba(118, 184, 240, 0.52) 100%);
+    border: 1px solid rgba(185, 228, 255, 0.6);
+    border-radius: 9px 6px 11px 7px / 7px 10px 6px 9px; /* uneven, half-melted */
+    padding: 1px 11px 2px;
+    box-shadow:
+        inset 0 1px 6px rgba(255, 255, 255, 0.6),
+        inset -2px -3px 8px rgba(110, 170, 235, 0.42),
+        inset 2px 1px 5px rgba(255, 255, 255, 0.25),
+        0 0 14px rgba(130, 195, 255, 0.3);
+    text-shadow: 0 0 8px rgba(180, 225, 255, 0.9);
+}
+
+/* Travelling gloss sheen across the cube face + a frost flake in the corner */
+.section-header.frozen .section-name::before {
+    content: '❄';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    font-size: 8px;
+    line-height: 1;
+    text-align: right;
+    padding: 2px 4px 0 0;
+    color: rgba(205, 237, 255, 0.95);
+    text-shadow: 0 0 5px rgba(160, 215, 255, 0.9);
+    background: linear-gradient(115deg,
+        transparent 22%,
+        rgba(255, 255, 255, 0.00) 36%,
+        rgba(255, 255, 255, 0.50) 45%,
+        rgba(255, 255, 255, 0.12) 52%,
+        transparent 64%);
+    background-size: 240% 100%;
+    animation: iceSheen 4.5s ease-in-out infinite;
+}
+
+@keyframes iceSheen {
+    0%   { background-position: 130% 0; }
+    60%  { background-position: -70% 0; }
+    100% { background-position: -70% 0; }
+}
+
+/* Icicles: irregular teeth dripping from the bottom edge */
+.section-header.frozen .section-name::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    right: 5px;
+    top: 100%;
+    margin-top: -1px;
+    height: 13px;
+    pointer-events: none;
+    background: linear-gradient(180deg,
+        rgba(205, 236, 255, 0.85) 0%,
+        rgba(180, 224, 255, 0.55) 40%,
+        rgba(165, 218, 255, 0.18) 100%);
+    clip-path: polygon(
+        0% 0%, 100% 0%,
+        97% 38%, 93% 12%, 88% 72%, 84% 18%, 79% 45%, 74% 10%,
+        69% 95%, 64% 22%, 58% 55%, 52% 14%, 47% 80%, 41% 20%,
+        35% 40%, 30% 8%, 25% 66%, 19% 16%, 13% 34%, 8% 100%, 3% 25%, 0% 45%
+    );
+    filter: drop-shadow(0 1px 2px rgba(140, 200, 255, 0.45));
+}
+
+body.theme-light .section-header.frozen .section-name {
+    border-color: rgba(120, 180, 235, 0.65);
+    box-shadow:
+        inset 0 1px 6px rgba(255, 255, 255, 0.85),
+        inset -2px -3px 8px rgba(110, 170, 235, 0.35),
+        0 0 10px rgba(130, 195, 255, 0.35);
+}
+
 /* Ring-reset sparkle — a wand-tap of gold when an elapsed circle completes */
 .sparkle-burst {
     position: absolute;
@@ -1104,8 +1190,8 @@ body.theme-light .section-eye.on {
 }
 
 @keyframes sparkleFly {
-    0%   { transform: translate(-50%, -50%) scale(0.2) rotate(0deg); opacity: 0; }
-    18%  { transform: translate(-50%, -50%) scale(1.15) rotate(45deg); opacity: 1; }
+    0%   { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) scale(0.2) rotate(0deg); opacity: 0; }
+    18%  { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) scale(1.15) rotate(45deg); opacity: 1; }
     100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.25) rotate(180deg); opacity: 0; }
 }
 

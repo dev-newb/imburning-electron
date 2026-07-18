@@ -1134,6 +1134,19 @@ function updateUI(data) {
             : '';
     }
 
+    // Frozen providers — logo goes on ice when an account has sat unused
+    const frozen = data.frozenProviders || {};
+    for (const [header, isFrozen] of [
+        [elements.headerAnthropic, frozen.anthropic],
+        [elements.headerOpenai, frozen.openai],
+        [elements.headerGoogle, frozen.google]
+    ]) {
+        if (!header) continue;
+        header.classList.toggle('frozen', !!isFrozen);
+        const name = header.querySelector('.section-name');
+        if (name) name.title = isFrozen ? 'On ice — no usage here in a while. Send a prompt to thaw it out.' : '';
+    }
+
     // Session-window planner hints, one per provider section. When there is
     // not enough burn history yet, show a learning placeholder rather than
     // nothing — the line stays put instead of appearing days later.
@@ -1194,14 +1207,14 @@ function checkUsageAlerts(data) {
         alertFired.session_danger = true;
         alertFired.session_warn = true; // suppress warn if we jumped straight to danger
         window.electronAPI.showNotification(
-            'Claude Usage Widget',
+            'Burnwatch',
             `Current Session usage is at ${Math.round(sessionPct)}% — running low`
         );
     // Current Session — warn threshold
     } else if (sessionPct >= warnThreshold && !alertFired.session_warn) {
         alertFired.session_warn = true;
         window.electronAPI.showNotification(
-            'Claude Usage Widget',
+            'Burnwatch',
             `Current Session usage has reached ${Math.round(sessionPct)}%`
         );
     }
@@ -1211,7 +1224,7 @@ function checkUsageAlerts(data) {
         alertFired.weekly_danger = true;
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
-            'Claude Usage Widget',
+            'Burnwatch',
             `Weekly Limit usage is at ${Math.round(weeklyPct)}% — running low`
         );
         window.electronAPI.sendAlertWebhook('weekly_danger', 'Claude usage warning',
@@ -1220,7 +1233,7 @@ function checkUsageAlerts(data) {
     } else if (weeklyPct >= warnThreshold && !alertFired.weekly_warn) {
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
-            'Claude Usage Widget',
+            'Burnwatch',
             `Weekly Limit usage has reached ${Math.round(weeklyPct)}%`
         );
     }
@@ -1249,7 +1262,7 @@ function checkUsageAlerts(data) {
                 ? ` — resets ${formatResetsAt(value.resets_at, true, settings.timeFormat || '12h', 'date-day-time')}`
                 : '';
             window.electronAPI.showNotification(
-                'Claude Usage Widget',
+                'Burnwatch',
                 `${label} limit is maxed out${resetStr}`
             );
             window.electronAPI.sendAlertWebhook('scoped_maxed', 'Claude limit maxed',
@@ -1258,7 +1271,7 @@ function checkUsageAlerts(data) {
             alertFired[`${key}_danger`] = true;
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
-                'Claude Usage Widget',
+                'Burnwatch',
                 `${label} usage is at ${Math.round(pct)}% — running low`
             );
             window.electronAPI.sendAlertWebhook('scoped_danger', 'Claude usage warning',
@@ -1266,7 +1279,7 @@ function checkUsageAlerts(data) {
         } else if (pct >= warnThreshold && !alertFired[`${key}_warn`]) {
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
-                'Claude Usage Widget',
+                'Burnwatch',
                 `${label} usage has reached ${Math.round(pct)}%`
             );
         }
@@ -1594,22 +1607,27 @@ function sparkleRing(timerElement) {
     burst.className = 'sparkle-burst';
     const glyphs = ['✦', '✧', '✨', '⋆', '✦'];
     const colors = ['#ffd700', '#fff3b0', '#ffe066', '#ffffff', '#ffec99'];
-    const count = 14;
+    // A window reset is a rare event — make the burst lavish: double the
+    // sparkles, born all around the ring's edge, flying further out
+    const count = 28;
+    const ringRadius = 10;
     for (let i = 0; i < count; i++) {
         const s = document.createElement('span');
         s.className = 'sparkle';
         s.textContent = glyphs[i % glyphs.length];
-        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
-        const dist = 13 + Math.random() * 19;
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+        const dist = ringRadius + 12 + Math.random() * 24;
+        s.style.setProperty('--sx', `${(Math.cos(angle) * ringRadius).toFixed(1)}px`);
+        s.style.setProperty('--sy', `${(Math.sin(angle) * ringRadius).toFixed(1)}px`);
         s.style.setProperty('--dx', `${(Math.cos(angle) * dist).toFixed(1)}px`);
         s.style.setProperty('--dy', `${(Math.sin(angle) * dist).toFixed(1)}px`);
         s.style.color = colors[i % colors.length];
-        s.style.animationDelay = `${(Math.random() * 0.3).toFixed(2)}s`;
-        s.style.fontSize = `${Math.round(5 + Math.random() * 5)}px`;
+        s.style.animationDelay = `${(Math.random() * 0.45).toFixed(2)}s`;
+        s.style.fontSize = `${Math.round(5 + Math.random() * 6)}px`;
         burst.appendChild(s);
     }
     anchor.appendChild(burst);
-    setTimeout(() => burst.remove(), 1700);
+    setTimeout(() => burst.remove(), 1900);
 }
 
 // Update circular timer

@@ -558,7 +558,7 @@ function sendAlertWebhook(event, title, message) {
 }
 
 ipcMain.on('alert-webhook', (event, { event: alertEvent, title, message }) => {
-  sendAlertWebhook(alertEvent || 'alert', title || 'Claude Usage Widget', message || '');
+  sendAlertWebhook(alertEvent || 'alert', title || 'Burnwatch', message || '');
 });
 
 // ---- Session-window planner ----
@@ -606,6 +606,39 @@ function computePlanFromSeries(history, pick, { minTotal, sessionAdvice }) {
     ? `Planner: your heaviest hours are ${range} (${share}% of burn) — start a fresh session just before ${fmtPlanHour(bestStart, timeFormat)} to cover them in one 5h window.`
     : `Planner: your heaviest hours here are ${range} (${share}% of burn).`;
   return { startHour: bestStart, text };
+}
+
+// ---- Frozen ("on ice") provider detection ----
+// A provider whose limits all read 0% and whose history shows no burn for a
+// long quiet stretch gets its logo frozen in ice. Anthropic is exempt — the
+// widget's own login is in active use by definition, and 0% right after a
+// reset would be a false positive.
+const FROZEN_QUIET_MS = 72 * 60 * 60 * 1000;
+const FROZEN_MIN_COVERAGE_MS = 6 * 60 * 60 * 1000;
+
+function isProviderFrozen(limits, history, pick) {
+  if (!limits || !limits.length) return false;
+  if (limits.some((l) => (l.percent || 0) > 0)) return false;
+  const samples = history.map((e) => ({ t: e.timestamp, v: pick(e) })).filter((s) => s.v != null);
+  if (!samples.length) return false;
+  if (Date.now() - samples[0].t < FROZEN_MIN_COVERAGE_MS) return false; // too little history to judge
+  const quietCutoff = Date.now() - FROZEN_QUIET_MS;
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i].t < quietCutoff) continue;
+    if (samples[i].v > samples[i - 1].v) return false; // burned recently
+  }
+  return true;
+}
+
+function computeFrozenProviders(data) {
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const history = store.get(historyKey, []);
+  return {
+    anthropic: false,
+    openai: isProviderFrozen(data.codex?.limits, history, (e) => e.codex),
+    google: isProviderFrozen(data.gemini?.limits, history, (e) => e.gemini)
+  };
 }
 
 function computeSessionPlans() {
@@ -674,7 +707,7 @@ function checkDailyDigest(data) {
 
   store.set('digest.lastShown', today);
   try {
-    new Notification({ title: 'Daily usage digest', body }).show();
+    new Notification({ title: 'Burnwatch daily digest', body }).show();
   } catch (err) {
     console.error('Digest notification failed:', err.message);
   }
@@ -840,7 +873,7 @@ function checkBurnAnomalies() {
     try {
       shell.beep();
       new Notification({
-        title: 'Unusual token burn',
+        title: 'Burnwatch — unusual token burn',
         body: alertBody
       }).show();
     } catch (err) {
@@ -2512,6 +2545,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   // Burn-rate forecasts, anomaly check, planner, digest — after the new sample lands
   data.forecasts = computeForecasts();
   data.sessionPlans = computeSessionPlans();
+  data.frozenProviders = computeFrozenProviders(data);
   checkBurnAnomalies();
   checkDailyDigest(data);
 
