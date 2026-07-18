@@ -84,7 +84,7 @@ If the `codex` CLI is installed, the widget also shows your **Codex plan limits*
 
 ### 🗂️ Provider Sections
 
-The widget is organised into **Anthropic / OpenAI / Google** sections, each with a labelled header. Sections **collapse and expand** with a click (state persists across restarts), and each header carries its own **tray checkbox** controlling that provider's tray icons — Anthropic's session/weekly/Fable badges, an OpenAI Codex badge (teal), and a Google Gemini badge (yellow, worst bucket). Provider sections appear only when their CLI is installed and reporting data. Window height adapts automatically to whatever is visible.
+The widget is organised into **Anthropic / OpenAI / Google** sections, each with a labelled header. Sections **collapse and expand** with a click (state persists across restarts), and each header carries an **eye toggle** (open = that provider's tray icons shown, closed slash = hidden) — Anthropic's session/weekly/Fable badges, an OpenAI Codex badge (teal), and a Google Gemini badge (yellow, worst bucket). Provider sections appear only when their CLI is installed and reporting data. Window height adapts automatically to whatever is visible.
 
 ### 🟡 Gemini (Google) Account Tracking
 

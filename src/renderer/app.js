@@ -66,17 +66,17 @@ const elements = {
     titleBar: document.getElementById('titleBar'),
     headerAnthropic: document.getElementById('headerAnthropic'),
     bodyAnthropic: document.getElementById('bodyAnthropic'),
-    trayCheckAnthropic: document.getElementById('trayCheckAnthropic'),
+    eyeAnthropic: document.getElementById('eyeAnthropic'),
     sectionOpenai: document.getElementById('sectionOpenai'),
     headerOpenai: document.getElementById('headerOpenai'),
     bodyOpenai: document.getElementById('bodyOpenai'),
     openaiRows: document.getElementById('openaiRows'),
-    trayCheckOpenai: document.getElementById('trayCheckOpenai'),
+    eyeOpenai: document.getElementById('eyeOpenai'),
     sectionGoogle: document.getElementById('sectionGoogle'),
     headerGoogle: document.getElementById('headerGoogle'),
     bodyGoogle: document.getElementById('bodyGoogle'),
     googleRows: document.getElementById('googleRows'),
-    trayCheckGoogle: document.getElementById('trayCheckGoogle'),
+    eyeGoogle: document.getElementById('eyeGoogle'),
     graphSection: document.getElementById('graphSection'),
     usageChart: document.getElementById('usageChart'),
 
@@ -276,27 +276,27 @@ function sectionEls(key) {
     return {
         header: elements['header' + cap],
         body: elements['body' + cap],
-        check: elements['trayCheck' + cap]
+        eye: elements['eye' + cap]
     };
 }
 
 function applySectionStates(settings) {
     const collapsed = settings.sectionCollapsed || {};
     for (const { key, traySetting } of PROVIDER_SECTIONS) {
-        const { header, body, check } = sectionEls(key);
+        const { header, body, eye } = sectionEls(key);
         if (!header) continue;
         header.classList.toggle('collapsed', !!collapsed[key]);
         body.classList.toggle('collapsed', !!collapsed[key]);
-        if (check) check.checked = settings[traySetting] === true;
+        if (eye) eye.classList.toggle('on', settings[traySetting] === true);
     }
 }
 
 function setupProviderSections() {
     for (const { key, traySetting } of PROVIDER_SECTIONS) {
-        const { header, body, check } = sectionEls(key);
+        const { header, body, eye } = sectionEls(key);
         if (!header) continue;
         header.addEventListener('click', async (e) => {
-            if (e.target.closest('.section-tray')) return; // checkbox handles itself
+            if (e.target.closest('.section-eye')) return; // eye handles itself
             const nowCollapsed = !body.classList.contains('collapsed');
             header.classList.toggle('collapsed', nowCollapsed);
             body.classList.toggle('collapsed', nowCollapsed);
@@ -305,15 +305,18 @@ function setupProviderSections() {
             const sectionCollapsed = { ...(settings.sectionCollapsed || {}), [key]: nowCollapsed };
             await _saveSettingsPatch({ sectionCollapsed });
         });
-        if (check) {
-            check.addEventListener('change', async () => {
-                // Unchecking the Anthropic tray while hidden from taskbar would
+        if (eye) {
+            eye.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const nowOn = !eye.classList.contains('on');
+                eye.classList.toggle('on', nowOn);
+                // Closing the Anthropic eye while hidden from taskbar would
                 // leave no icon to restore the app from
-                if (key === 'anthropic' && !check.checked && elements.minimizeToTrayToggle.checked) {
+                if (key === 'anthropic' && !nowOn && elements.minimizeToTrayToggle.checked) {
                     elements.minimizeToTrayToggle.checked = false;
                     await _saveSettingsPatch({ minimizeToTray: false });
                 }
-                await _saveSettingsPatch({ [traySetting]: check.checked });
+                await _saveSettingsPatch({ [traySetting]: nowOn });
             });
         }
     }
@@ -443,8 +446,8 @@ function setupEventListeners() {
     // Prevent accidental app hiding: enabling "Hide from Taskbar" force-enables
     // the Anthropic tray icons (ensures a tray icon exists to restore from)
     elements.minimizeToTrayToggle.addEventListener('change', () => {
-        if (elements.minimizeToTrayToggle.checked && !elements.trayCheckAnthropic.checked) {
-            elements.trayCheckAnthropic.checked = true;
+        if (elements.minimizeToTrayToggle.checked && !elements.eyeAnthropic.classList.contains('on')) {
+            elements.eyeAnthropic.classList.add('on');
             _saveSettingsPatch({ showTrayStats: true });
         }
     });
@@ -2083,9 +2086,9 @@ async function saveSettings() {
         autoStart: (window.electronAPI.platform === 'linux' || window.electronAPI.isPortable) ? false : elements.autoStartToggle.checked,
         minimizeToTray: elements.minimizeToTrayToggle.checked,
         alwaysOnTop: elements.alwaysOnTopToggle.checked,
-        showTrayStats: elements.trayCheckAnthropic.checked,
-        trayOpenai: elements.trayCheckOpenai.checked,
-        trayGoogle: elements.trayCheckGoogle.checked,
+        showTrayStats: elements.eyeAnthropic.classList.contains('on'),
+        trayOpenai: elements.eyeOpenai.classList.contains('on'),
+        trayGoogle: elements.eyeGoogle.classList.contains('on'),
         sectionCollapsed: window._cachedSettings?.sectionCollapsed || {},
         theme: activeThemeBtn ? activeThemeBtn.dataset.theme : 'dark',
         warnThreshold: warn,

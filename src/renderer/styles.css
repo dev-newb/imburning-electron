@@ -984,7 +984,7 @@ body.theme-light .settings-disclaimer {
 }
 
 .section-name {
-    font-size: 16px;
+    font-size: 24px;
     line-height: 1.15;
     transition: filter 0.15s ease;
 }
@@ -1027,35 +1027,33 @@ body.theme-light .settings-disclaimer {
 .brand-google .g-y { color: #fbbc05; }
 .brand-google .g-g { color: #34a853; }
 
-.section-tray {
-    margin-left: 10px;
+/* Eye toggle: open = provider tray icons visible, closed = hidden */
+.section-eye {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: #70707e;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #8a8a9a;
     cursor: pointer;
-    padding: 1px 7px 1px 5px;
-    border: 1px solid rgba(128, 128, 128, 0.3);
-    border-radius: 9px;
-    background: rgba(128, 128, 128, 0.08);
-    transition: border-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background 0.15s ease;
 }
 
-.section-tray:hover {
-    border-color: rgba(139, 92, 246, 0.6);
-    color: #9a9aae;
+.section-eye:hover {
+    background: rgba(139, 92, 246, 0.15);
+    color: #b0b0c4;
 }
 
-.section-tray input {
-    width: 10px;
-    height: 10px;
-    accent-color: #8b5cf6;
-    cursor: pointer;
-    margin: 0;
-}
+.section-eye .eye-open { display: none; }
+.section-eye .eye-closed { display: block; opacity: 0.55; }
+.section-eye.on .eye-open { display: block; }
+.section-eye.on .eye-closed { display: none; }
+.section-eye.on { color: #a78bfa; }
 
 .section-body.collapsed {
     display: none;
@@ -1073,8 +1071,12 @@ body.theme-light .brand-anthropic {
     text-shadow: 0 0 10px rgba(217, 119, 87, 0.25);
 }
 
-body.theme-light .section-tray {
-    color: #808098;
+body.theme-light .section-eye {
+    color: #707090;
+}
+
+body.theme-light .section-eye.on {
+    color: #7c5ce0;
 }
 
 /* Session planner hint under the pinned rows */
