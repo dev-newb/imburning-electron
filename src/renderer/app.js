@@ -61,6 +61,7 @@ const elements = {
     expandArrow: document.getElementById('expandArrow'),
     expandSection: document.getElementById('expandSection'),
     extraRows: document.getElementById('extraRows'),
+    scopedRows: document.getElementById('scopedRows'),
     graphSection: document.getElementById('graphSection'),
     usageChart: document.getElementById('usageChart'),
 
@@ -99,6 +100,11 @@ const elements = {
     compactSessionPct: document.getElementById('compactSessionPct'),
     compactWeeklyFill: document.getElementById('compactWeeklyFill'),
     compactWeeklyPct: document.getElementById('compactWeeklyPct'),
+    compactScopedRow: document.getElementById('compactScopedRow'),
+    compactScopedLabel: document.getElementById('compactScopedLabel'),
+    compactScopedFill: document.getElementById('compactScopedFill'),
+    compactScopedPct: document.getElementById('compactScopedPct'),
+    showClaudeCodeToggle: document.getElementById('showClaudeCodeToggle'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -565,11 +571,12 @@ function buildExtraRows(data) {
     });
     
     // Only rebuild if we have data, otherwise keep existing rows
-    if (!hasAnyExtendedData && elements.extraRows.children.length > 0) {
+    if (!hasAnyExtendedData && (elements.extraRows.children.length > 0 || elements.scopedRows.children.length > 0)) {
         return; // Keep existing rows
     }
-    
+
     elements.extraRows.innerHTML = '';
+    elements.scopedRows.innerHTML = '';
     let count = 0;
 
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
@@ -714,8 +721,21 @@ function buildExtraRows(data) {
             row.appendChild(resetsText);
         }
 
-        elements.extraRows.appendChild(row);
-        count++;
+        // Scoped weekly limits (e.g. Fable) are pinned below the Weekly row and
+        // never hidden by the collapse toggle; everything else stays in the
+        // expandable panel and counts toward its row tally.
+        if (key.startsWith('seven_day_scoped_')) {
+            const slug = key.slice('seven_day_scoped_'.length);
+            const forecastAt = data.forecasts?.scoped?.[slug];
+            if (forecastAt) {
+                const settings = window._cachedSettings || {};
+                row.title = `At the current pace, 100% by ${formatResetsAt(forecastAt, true, settings.timeFormat || '12h', 'date-day-time')}`;
+            }
+            elements.scopedRows.appendChild(row);
+        } else {
+            elements.extraRows.appendChild(row);
+            count++;
+        }
     }
 
     // Hide toggle if no extra rows
@@ -734,16 +754,19 @@ function refreshExtraTimers() {
     // querySelectorAll lists by index breaks as soon as one row has a text
     // but no circle (the extra_usage row), leaving every later row's timer
     // stuck at --:--.
-    elements.extraRows.querySelectorAll('.usage-section').forEach((row) => {
-        const textEl = row.querySelector('.timer-text');
-        const circleEl = row.querySelector('.timer-progress');
-        if (!textEl || !circleEl) return;
-        const resetsAt = textEl.dataset.resets;
-        const totalMinutes = parseInt(textEl.dataset.total);
-        if (resetsAt) {
-            updateTimer(circleEl, textEl, resetsAt, totalMinutes);
-        }
-    });
+    // Covers both the pinned scoped rows (always visible) and the expandable panel.
+    for (const container of [elements.scopedRows, elements.extraRows]) {
+        container.querySelectorAll('.usage-section').forEach((row) => {
+            const textEl = row.querySelector('.timer-text');
+            const circleEl = row.querySelector('.timer-progress');
+            if (!textEl || !circleEl) return;
+            const resetsAt = textEl.dataset.resets;
+            const totalMinutes = parseInt(textEl.dataset.total);
+            if (resetsAt) {
+                updateTimer(circleEl, textEl, resetsAt, totalMinutes);
+            }
+        });
+    }
 }
 
 const BANNER_HEIGHT = 28;
@@ -758,8 +781,10 @@ function resizeWidget(bannerVisible) {
     const expandedOffset = isExpanded && extraCount > 0
         ? EXPAND_OVERHEAD + (extraCount * WIDGET_ROW_HEIGHT)
         : 0;
+    // Pinned scoped rows (e.g. Fable) are visible even when collapsed
+    const scopedOffset = elements.scopedRows.children.length * WIDGET_ROW_HEIGHT;
     const graphOffset = graphVisible ? GRAPH_HEIGHT : 0;
-    const totalHeight = WIDGET_HEIGHT_COLLAPSED + expandedOffset + graphOffset + bannerOffset;
+    const totalHeight = WIDGET_HEIGHT_COLLAPSED + scopedOffset + expandedOffset + graphOffset + bannerOffset;
     window.electronAPI.resizeWindow(totalHeight);
 }
 
@@ -786,6 +811,42 @@ function normalizeUsageData(data) {
         }
         data[key] = { utilization: limit.percent, resets_at: limit.resets_at };
     }
+
+    // Claude Code (CLI) account — fetched by the main process using the local
+    // OAuth credentials; same response shape as the claude.ai endpoint. Rows
+    // render in the expandable panel under Code-prefixed labels.
+    const cc = data.claude_code;
+    if (cc) {
+        const ccRows = [];
+        if (cc.five_hour?.utilization != null) {
+            ccRows.push(['cc_five_hour',
+                { label: 'Code Session', color: 'cc' },
+                { utilization: cc.five_hour.utilization, resets_at: cc.five_hour.resets_at }]);
+        }
+        if (cc.seven_day?.utilization != null) {
+            ccRows.push(['cc_seven_day',
+                { label: 'Code Weekly (7d)', color: 'weekly' },
+                { utilization: cc.seven_day.utilization, resets_at: cc.seven_day.resets_at }]);
+        }
+        for (const limit of (cc.limits || [])) {
+            if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
+            const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
+            const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            ccRows.push(['cc_seven_day_scoped_' + slug,
+                { label: `Code ${scopeName} (7d)`, color: SCOPED_COLOR_CLASSES[slug] || 'opus' },
+                { utilization: limit.percent, resets_at: limit.resets_at }]);
+        }
+        if (ccRows.length) {
+            for (const [key, config, value] of ccRows) {
+                if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = config;
+                data[key] = value;
+            }
+            // Re-insert extra_usage so account rows stay grouped above it
+            const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
+            delete EXTRA_ROW_CONFIG.extra_usage;
+            EXTRA_ROW_CONFIG.extra_usage = extraUsage;
+        }
+    }
     return data;
 }
 
@@ -795,7 +856,16 @@ function updateUI(data) {
     showMainContent();
     buildExtraRows(data);
     refreshTimers();
-    if (isExpanded) refreshExtraTimers();
+    refreshExtraTimers(); // pinned scoped rows tick even when collapsed
+
+    // Burn-rate forecast tooltip on the Weekly row
+    const weeklySection = elements.weeklyProgress.closest('.usage-section');
+    if (weeklySection) {
+        const settings = window._cachedSettings || {};
+        weeklySection.title = data.forecasts?.weekly
+            ? `At the current pace, 100% by ${formatResetsAt(data.forecasts.weekly, true, settings.timeFormat || '12h', 'date-day-time')}`
+            : '';
+    }
     if (!isCompactMode) resizeWidget();
     startCountdown();
     if (graphVisible) {
@@ -866,6 +936,49 @@ function checkUsageAlerts(data) {
             'Claude Usage Widget',
             `Weekly Limit usage has reached ${Math.round(weeklyPct)}%`
         );
+    }
+
+    // Scoped weekly limits (e.g. Fable) — same warn/danger pattern, plus a
+    // maxed-out alert at 99%+ with the reset time
+    for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
+        if (!key.startsWith('seven_day_scoped_')) continue;
+        const value = data[key];
+        if (!value || value.utilization == null) continue;
+        const pct = value.utilization;
+        const label = config.label;
+
+        if (pct < warnThreshold) {
+            alertFired[`${key}_warn`] = false;
+            alertFired[`${key}_danger`] = false;
+            alertFired[`${key}_maxed`] = false;
+        }
+
+        if (pct >= 99 && !alertFired[`${key}_maxed`]) {
+            alertFired[`${key}_maxed`] = true;
+            alertFired[`${key}_danger`] = true;
+            alertFired[`${key}_warn`] = true;
+            const settings = window._cachedSettings || {};
+            const resetStr = value.resets_at
+                ? ` — resets ${formatResetsAt(value.resets_at, true, settings.timeFormat || '12h', 'date-day-time')}`
+                : '';
+            window.electronAPI.showNotification(
+                'Claude Usage Widget',
+                `${label} limit is maxed out${resetStr}`
+            );
+        } else if (pct >= dangerThreshold && !alertFired[`${key}_danger`]) {
+            alertFired[`${key}_danger`] = true;
+            alertFired[`${key}_warn`] = true;
+            window.electronAPI.showNotification(
+                'Claude Usage Widget',
+                `${label} usage is at ${Math.round(pct)}% — running low`
+            );
+        } else if (pct >= warnThreshold && !alertFired[`${key}_warn`]) {
+            alertFired[`${key}_warn`] = true;
+            window.electronAPI.showNotification(
+                'Claude Usage Widget',
+                `${label} usage has reached ${Math.round(pct)}%`
+            );
+        }
     }
 }
 
@@ -948,6 +1061,27 @@ function updateCompactBars(data) {
     elements.compactWeeklyFill.className = 'compact-bar-fill weekly';
     if (weeklyPct >= dangerThreshold) elements.compactWeeklyFill.classList.add('danger');
     else if (weeklyPct >= warnThreshold) elements.compactWeeklyFill.classList.add('warning');
+
+    // Scoped weekly limit (e.g. Fable) — third slim red bar, shown while the
+    // API reports one. normalizeUsageData has already synthesized the keys.
+    let scopedShown = false;
+    for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
+        if (!key.startsWith('seven_day_scoped_')) continue;
+        const value = data[key];
+        if (!value || value.utilization == null) continue;
+        const pct = Math.min(Math.max(value.utilization, 0), 100);
+        elements.compactScopedLabel.textContent = config.label.replace(/ \(7d\)$/, '');
+        elements.compactScopedFill.style.width = `${pct}%`;
+        elements.compactScopedPct.textContent = `${Math.round(pct)}%`;
+        scopedShown = true;
+        break; // one compact row — first scoped limit wins
+    }
+    const wasHidden = elements.compactScopedRow.style.display === 'none';
+    elements.compactScopedRow.style.display = scopedShown ? '' : 'none';
+    // Resize the compact window when the scoped row appears or disappears
+    if (isCompactMode && wasHidden === scopedShown) {
+        window.electronAPI.setCompactMode(true);
+    }
 }
 // Persist compact mode setting without touching the rest of settings — debounced
 let _saveCompactTimer = null;
@@ -1009,6 +1143,17 @@ function seedAlertFlags(data) {
         alertFired.weekly_warn = true;
     } else if (weeklyPct >= warnThreshold) {
         alertFired.weekly_warn = true;
+    }
+
+    // Scoped weekly limits (e.g. Fable): thresholds already exceeded at launch
+    // are treated as fired so startup doesn't notify about visible state
+    for (const key of Object.keys(EXTRA_ROW_CONFIG)) {
+        if (!key.startsWith('seven_day_scoped_')) continue;
+        const pct = data[key]?.utilization;
+        if (pct == null) continue;
+        if (pct >= 99) alertFired[`${key}_maxed`] = true;
+        if (pct >= dangerThreshold) alertFired[`${key}_danger`] = true;
+        if (pct >= warnThreshold) alertFired[`${key}_warn`] = true;
     }
 }
 
@@ -1093,7 +1238,7 @@ function startCountdown() {
     if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = setInterval(() => {
         refreshTimers();
-        if (isExpanded) refreshExtraTimers();
+        refreshExtraTimers(); // pinned scoped rows tick even when collapsed
     }, 30000);
 }
 
@@ -1297,9 +1442,10 @@ function renderChart(history) {
     const showDesign = isExpanded && !!latestUsageData?.seven_day_omelette;
     const showOAuthApps = isExpanded && !!latestUsageData?.seven_day_oauth_apps;
     const showExtraUsage = isExpanded && !!latestUsageData?.extra_usage;
-    // Scoped weekly series (e.g. Fable) recorded by main.js under entry.scoped
+    // Scoped weekly series (e.g. Fable) recorded by main.js under entry.scoped.
+    // Not gated on isExpanded — the scoped bar is pinned to the main view.
     const scopedKeys = [];
-    if (isExpanded) {
+    {
         const seen = new Set();
         for (const entry of history) {
             for (const key of Object.keys(entry.scoped || {})) {
@@ -1616,6 +1762,7 @@ async function loadSettings() {
     if (elements.refreshInterval) elements.refreshInterval.value = settings.refreshInterval || '300';
     elements.usageAlertsToggle.checked = settings.usageAlerts !== false;
     if (elements.compactModeToggle) elements.compactModeToggle.checked = !!settings.compactMode;
+    if (elements.showClaudeCodeToggle) elements.showClaudeCodeToggle.checked = settings.showClaudeCode !== false;
 
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
@@ -1663,7 +1810,8 @@ async function saveSettings() {
         usageAlerts: elements.usageAlertsToggle.checked,
         compactMode: isCompactMode,
         graphVisible: graphVisible,
-        expandedOpen: isExpanded
+        expandedOpen: isExpanded,
+        showClaudeCode: elements.showClaudeCodeToggle ? elements.showClaudeCodeToggle.checked : true
     };
     await window.electronAPI.saveSettings(settings);
     window._cachedSettings = settings;

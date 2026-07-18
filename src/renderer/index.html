@@ -170,6 +170,9 @@
                     <div class="resets-at-text" id="weeklyResetsAt">--</div>
                 </div>
 
+                <!-- Scoped weekly limits (e.g. Fable) — always visible, never collapsed -->
+                <div id="scopedRows"></div>
+
                 <!-- Expand Toggle -->
                 <div class="expand-toggle" id="expandToggle">
                     <svg class="expand-arrow" id="expandArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -211,6 +214,15 @@
                             <div class="compact-bar-bg">
                                 <div class="compact-bar-fill weekly" id="compactWeeklyFill" style="width: 0%"></div>
                                 <span class="compact-pct" id="compactWeeklyPct">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="compact-row" id="compactScopedRow" style="display: none;">
+                        <span class="compact-label" id="compactScopedLabel">Fable</span>
+                        <div class="compact-bar-wrap">
+                            <div class="compact-bar-bg">
+                                <div class="compact-bar-fill fable" id="compactScopedFill" style="width: 0%"></div>
+                                <span class="compact-pct" id="compactScopedPct">0%</span>
                             </div>
                         </div>
                     </div>
@@ -328,6 +340,19 @@
                                     </label>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Row: Claude Code (CLI) account tracking -->
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Claude Code account</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showClaudeCodeToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="settings-row-hint">Rows from your local CLI login</span>
+                            </div>
+                            <div class="settings-col"></div>
                         </div>
 
                         <!-- Row 6: date format + auto refresh -->

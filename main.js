@@ -4,7 +4,7 @@ const https = require('https');
 const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
 
-const GITHUB_OWNER = 'SlavomirDurej';
+const GITHUB_OWNER = 'dev-newb';
 const GITHUB_REPO = 'claude-usage-widget';
 
 // Migration: Handle old encrypted config files from v1.7.0 and earlier
@@ -79,6 +79,126 @@ function getScopedWeeklyLimits(data) {
     });
   }
   return scoped;
+}
+
+// ---- Claude Code (CLI) account usage ----
+// Claude Code stores an OAuth token locally; api.anthropic.com's usage
+// endpoint returns the same shape as the claude.ai one (limits[] included),
+// so the widget can track the CLI account with no extra login.
+function readClaudeCodeToken() {
+  try {
+    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+    if (!fs.existsSync(credPath)) return null;
+    const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+    const oauth = creds.claudeAiOauth;
+    if (!oauth?.accessToken) return null;
+    // Use the token only while it is fresh. Deliberately NO refresh-token flow:
+    // consuming a (potentially rotating) refresh token here could invalidate
+    // the CLI's own login. Claude Code refreshes this file whenever it runs.
+    if (oauth.expiresAt && Date.now() >= oauth.expiresAt) {
+      debugLog('[ClaudeCode] CLI token expired', new Date(oauth.expiresAt).toISOString(), '— skipping (runs of the claude CLI refresh it)');
+      return null;
+    }
+    return oauth.accessToken;
+  } catch (err) {
+    debugLog('[ClaudeCode] Could not read CLI credentials:', err.message);
+    return null;
+  }
+}
+
+function fetchClaudeCodeUsage() {
+  return new Promise((resolve) => {
+    const token = readClaudeCodeToken();
+    if (!token) return resolve(null);
+    const req = https.request({
+      hostname: 'api.anthropic.com',
+      path: '/api/oauth/usage',
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          debugLog('[ClaudeCode] Usage fetch failed with status', res.statusCode);
+          return resolve(null);
+        }
+        try { resolve(JSON.parse(body)); } catch { resolve(null); }
+      });
+    });
+    req.on('error', (err) => {
+      debugLog('[ClaudeCode] Usage fetch error:', err.message);
+      resolve(null);
+    });
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+// ---- Burn-rate forecast ----
+// Least-squares slope over recent history → projected time of hitting 100%.
+// Samples before the most recent value drop (a window reset) are discarded
+// so a reset never poisons the slope.
+const FORECAST_WINDOW_MS = 6 * 60 * 60 * 1000;
+const FORECAST_MIN_SPAN_MS = 30 * 60 * 1000;
+const FORECAST_MAX_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+
+function forecastSeries(samples) {
+  if (samples.length < 3) return null;
+  let start = 0;
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i].v < samples[i - 1].v) start = i;
+  }
+  const win = samples.slice(start);
+  if (win.length < 3) return null;
+  const last = win[win.length - 1];
+  if (last.v >= 100 || last.t - win[0].t < FORECAST_MIN_SPAN_MS) return null;
+
+  const t0 = win[0].t;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const { t, v } of win) {
+    const x = (t - t0) / 3600000; // hours
+    sx += x; sy += v; sxx += x * x; sxy += x * v;
+  }
+  const n = win.length;
+  const denom = n * sxx - sx * sx;
+  if (!denom) return null;
+  const slope = (n * sxy - sx * sy) / denom; // percent per hour
+  if (slope < 0.1) return null; // flat or falling — no meaningful forecast
+
+  const etaMs = last.t + ((100 - last.v) / slope) * 3600000;
+  if (etaMs - Date.now() > FORECAST_MAX_HORIZON_MS) return null;
+  return new Date(etaMs).toISOString();
+}
+
+// Projected 100% timestamps for weekly + each scoped series, from stored history
+function computeForecasts() {
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const cutoff = Date.now() - FORECAST_WINDOW_MS;
+  const recent = store.get(historyKey, []).filter((entry) => entry.timestamp > cutoff);
+
+  const series = (pick) => recent
+    .map((entry) => ({ t: entry.timestamp, v: pick(entry) }))
+    .filter((sample) => sample.v != null);
+
+  const forecasts = {
+    weekly: forecastSeries(series((entry) => entry.weekly)),
+    scoped: {}
+  };
+  const slugs = new Set();
+  for (const entry of recent) {
+    for (const slug of Object.keys(entry.scoped || {})) slugs.add(slug);
+  }
+  for (const slug of slugs) {
+    forecasts.scoped[slug] = forecastSeries(series((entry) => entry.scoped?.[slug]));
+  }
+  return forecasts;
 }
 
 function storeUsageHistory(data) {
@@ -490,16 +610,18 @@ function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, 
 }
 
 /**
- * Generate a Red X icon for 99-100% usage (maxed out)
- * @returns {NativeImage} Generated red X tray icon
+ * Generate an X icon for 99-100% usage (maxed out)
+ * @param {object} [bgColor] - Background color {r, g, b}, defaults to #dc3545
+ * @param {object} [xColor] - X color {r, g, b, a}, defaults to white
+ * @returns {NativeImage} Generated X tray icon
  */
-function generateRedXIcon() {
+function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255, g: 255, b: 255, a: 255 }) {
   const width = 20;
   const height = 20;
   const buffer = Buffer.alloc(width * height * 4);
-  
-  // Red background
-  const red = { r: 220, g: 53, b: 69 }; // #dc3545
+
+  // Filled background
+  const red = bgColor;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const offset = (y * width + x) * 4;
@@ -509,9 +631,9 @@ function generateRedXIcon() {
       buffer[offset + 3] = 255;
     }
   }
-  
-  // Draw white X (2 pixel thick lines)
-  const white = { r: 255, g: 255, b: 255, a: 255 };
+
+  // Draw X (2 pixel thick lines)
+  const white = xColor;
   
   // Diagonal line from top-left to bottom-right
   for (let i = 0; i < 11; i++) {
@@ -683,8 +805,9 @@ function createTray() {
  * session/weekly icons. Exists only while tray stats are enabled AND the
  * API reports a scoped weekly limit.
  * @param {object|null} scopedLimit - {name, percent, resetsAt} or null
+ * @param {string|null} [forecastAt] - projected 100% ISO timestamp, if any
  */
-function syncFableTray(scopedLimit) {
+function syncFableTray(scopedLimit, forecastAt = null) {
   if (!scopedLimit || !store.get('settings.showTrayStats', false)) {
     if (fableTray && !fableTray.isDestroyed()) {
       try {
@@ -708,13 +831,20 @@ function syncFableTray(scopedLimit) {
 
     const red = { r: 239, g: 68, b: 68 };          // #ef4444
     const black = { r: 0, g: 0, b: 0, a: 255 };
-    fableTray.setImage(generatePercentageIcon(scopedLimit.percent, red, black));
+    // Black X on red when maxed out, otherwise the black number
+    fableTray.setImage(scopedLimit.percent >= 99
+      ? generateRedXIcon(red, black)
+      : generatePercentageIcon(scopedLimit.percent, red, black));
 
     const timeFormat = store.get('settings.timeFormat', '12h');
     let tooltip = `${scopedLimit.name} (weekly): ${Math.round(scopedLimit.percent)}%`;
     const resetTime = formatResetTime(scopedLimit.resetsAt, timeFormat, true);
     if (resetTime) {
       tooltip += `\nResets: ${resetTime}`;
+    }
+    const forecastTime = formatResetTime(forecastAt, timeFormat, true);
+    if (forecastTime && scopedLimit.percent < 99) {
+      tooltip += `\nAt current pace, 100% by ${forecastTime}`;
     }
     fableTray.setToolTip(tooltip);
     debugLog('[Tray] Scoped tray updated:', scopedLimit.name, scopedLimit.percent + '%');
@@ -820,7 +950,8 @@ function updateTrayIcon(usageData) {
   }
 
   // Scoped weekly tray (e.g. Fable): shown while the API reports one
-  syncFableTray(getScopedWeeklyLimits(usageData)[0] || null);
+  const scopedLimit = getScopedWeeklyLimits(usageData)[0] || null;
+  syncFableTray(scopedLimit, scopedLimit ? usageData?.forecasts?.scoped?.[scopedLimit.slug] : null);
 
   if ((!sessionTray || sessionTray.isDestroyed()) && (!weeklyTray || weeklyTray.isDestroyed())) return;
 
@@ -850,6 +981,10 @@ function updateTrayIcon(usageData) {
       const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat, true);
       if (weeklyResetTime) {
         weeklyTooltip += `\nResets: ${weeklyResetTime}`;
+      }
+      const weeklyForecastTime = formatResetTime(usageData?.forecasts?.weekly, timeFormat, true);
+      if (weeklyForecastTime && weeklyPercent < 99) {
+        weeklyTooltip += `\nAt current pace, 100% by ${weeklyForecastTime}`;
       }
       weeklyTray.setToolTip(weeklyTooltip);
     }
@@ -1078,7 +1213,11 @@ ipcMain.on('set-compact-mode', (event, compact) => {
   if (mainWindow) {
     const bounds = mainWindow.getBounds();
     const width = compact ? 290 : WIDGET_WIDTH;
-    const height = compact ? 105 : WIDGET_HEIGHT;
+    // Compact view grows by one slim row per scoped weekly limit (e.g. Fable)
+    const scopedCount = compact
+      ? getScopedWeeklyLimits(store.get('latestUsageData') || {}).length
+      : 0;
+    const height = compact ? 105 + (scopedCount * 26) : WIDGET_HEIGHT;
     mainWindow.setBounds({ x: bounds.x, y: bounds.y, width, height });
   }
 });
@@ -1099,7 +1238,8 @@ ipcMain.handle('get-settings', () => {
     refreshInterval: store.get('settings.refreshInterval', '300'),
     graphVisible: store.get('settings.graphVisible', false),
     expandedOpen: store.get('settings.expandedOpen', false),
-    showTrayStats: store.get('settings.showTrayStats', false)
+    showTrayStats: store.get('settings.showTrayStats', false),
+    showClaudeCode: store.get('settings.showClaudeCode', true)
   };
 });
 
@@ -1121,6 +1261,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.graphVisible', settings.graphVisible);
   store.set('settings.expandedOpen', settings.expandedOpen);
   store.set('settings.showTrayStats', settings.showTrayStats);
+  store.set('settings.showClaudeCode', settings.showClaudeCode !== false);
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -1353,6 +1494,12 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     throw new Error('Missing credentials');
   }
 
+  // Kick off the Claude Code (CLI) account fetch concurrently with the
+  // claude.ai one; it resolves to null on any failure and never blocks login.
+  const claudeCodePromise = store.get('settings.showClaudeCode', true)
+    ? fetchClaudeCodeUsage()
+    : Promise.resolve(null);
+
   // Ensure cookie is set
   await setSessionCookie(sessionKey);
 
@@ -1466,7 +1613,17 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     debugLog('Prepaid fetch skipped or failed:', prepaidResult.reason?.message || 'no data');
   }
 
+  // Attach the Claude Code (CLI) account usage, if available. A live account
+  // always carries resets_at timestamps — anything else is a dead session.
+  const claudeCode = await claudeCodePromise;
+  if (claudeCode && (claudeCode.five_hour?.resets_at || claudeCode.seven_day?.resets_at)) {
+    data.claude_code = claudeCode;
+  }
+
   storeUsageHistory(data);
+
+  // Burn-rate forecasts (computed after the new sample is stored)
+  data.forecasts = computeForecasts();
 
   // Store latest usage data for settings refresh
   store.set('latestUsageData', data);

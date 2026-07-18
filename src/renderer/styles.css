@@ -1497,6 +1497,10 @@ body.compact-mode .title {
     background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
 }
 
+.compact-bar-fill.fable {
+    background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
+}
+
 .compact-bar-fill.warning {
     background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
 }

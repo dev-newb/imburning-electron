@@ -9,7 +9,9 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 ## Features
 
 🎯 **Real-time Usage Tracking** — Monitor both session and weekly usage limits  
-🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own bar, timer, and chart line  
+🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own always-visible bar, timer, chart line, tray icon, and alerts  
+💻 **Claude Code Account** — also tracks your local Claude Code (CLI) login's limits, no extra sign-in  
+⏳ **Burn-rate Forecast** — projects when Weekly/Fable hit 100% at your current pace  
 📊 **Visual Progress Bars** — Clean, gradient progress indicators with configurable warning thresholds  
 ⏱️ **Countdown Timers** — Circular timers showing time elapsed in the current session window  
 🔄 **Auto-refresh** — Updates every 5 minutes automatically, with animated refresh indicator  
@@ -39,11 +41,31 @@ Claude.ai now reports per-model weekly limits (e.g. **Fable**) in a new `limits`
 - **Charts Fable usage over time** as a series in the usage history graph
 - Is **generic**: whatever scoped weekly limits Anthropic sends next (new models, surfaces) render automatically, labelled from the API's own display name
 
+The Fable bar is **pinned to the main view** — it sits directly under the Weekly row and stays visible even when the details panel is collapsed. In **compact mode** it appears as a third slim red bar.
+
 ### 🔴 Fable Tray Icon
 
-A third tray icon (menu bar icon on macOS) shows your Fable weekly percentage at a glance — **red badge with a black number**, so it's instantly distinguishable from the purple Session and blue Weekly icons. It appears whenever **Show Tray Stats** is enabled and your account has a scoped weekly limit, and its tooltip shows the exact percentage and reset time.
+A third tray icon (menu bar icon on macOS) shows your Fable weekly percentage at a glance — **red badge with a black number**, so it's instantly distinguishable from the purple Session and blue Weekly icons. At 99%+ it switches to a black **X** on red. It appears whenever **Show Tray Stats** is enabled and your account has a scoped weekly limit, and its tooltip shows the exact percentage, reset time, and burn-rate forecast.
 
 > **Windows note:** Windows hides new tray icons in the overflow area (the **^** chevron) by default. Drag the red icon onto the taskbar once to keep it visible at a glance.
+
+### 💻 Claude Code Account Tracking
+
+If Claude Code (the CLI coding agent) is installed on the same machine, the widget also shows **that account's** session, weekly, and Fable usage — read from the CLI's own local login, no extra sign-in needed. Useful when your claude.ai login and your Claude Code login are different accounts with separate limits. Rows appear in the expandable panel with `Code` labels; toggle with **Claude Code account** in Settings.
+
+> The widget never touches the CLI's refresh token (that could log the CLI out), so these rows appear only while the CLI's short-lived access token is fresh — any run of the `claude` CLI renews it. If the rows are missing, the token has simply expired.
+
+### 📈 Burn-rate Forecast
+
+Using the last few hours of collected history, the widget projects when your Weekly and Fable limits will hit 100% at the current pace. The forecast appears in the tray tooltips and as a hover tooltip on the Weekly and Fable rows. Forecasts only show when there's a meaningful upward trend and the projected time is within the next 7 days.
+
+### 🔔 Fable Usage Alerts
+
+Desktop notifications now also fire for scoped weekly limits: at your configured warn and danger thresholds, plus a dedicated **maxed out** alert at 99%+ that includes the reset time.
+
+### 🔄 Fork Update Channel
+
+The built-in update check now points at this fork's releases, so an upstream release can't prompt you into replacing the fork build with a version that lacks these features.
 
 ---
 
