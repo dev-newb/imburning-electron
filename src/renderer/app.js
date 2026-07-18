@@ -871,7 +871,7 @@ function buildExtraRows(data) {
     const codexCredits = data.codex?.credits;
     if (codexCredits && elements.openaiRows.children.length) {
         const row = document.createElement('div');
-        row.className = 'usage-section';
+        row.className = 'usage-section stretch-bar';
 
         const label = document.createElement('span');
         label.className = 'usage-label';
@@ -892,14 +892,7 @@ function buildExtraRows(data) {
         progressFill.style.width = '0%';
         progressBar.appendChild(progressFill);
         barGroup.appendChild(progressBar);
-        const percentage = document.createElement('span');
-        percentage.className = 'usage-percentage';
-        barGroup.appendChild(percentage); // empty — reserves the column width
-        row.appendChild(barGroup);
-
-        const elapsedGroup = document.createElement('div');
-        elapsedGroup.className = 'usage-elapsed-group';
-        row.appendChild(elapsedGroup);
+        row.appendChild(barGroup); // spans bar+elapsed columns (stretch-bar)
 
         const balLabel = document.createElement('span');
         balLabel.className = 'timer-text extra-balance-label';
@@ -919,7 +912,7 @@ function buildExtraRows(data) {
     const resetCredits = data.codex?.resetCredits;
     if (resetCredits && elements.openaiRows.children.length) {
         const row = document.createElement('div');
-        row.className = 'usage-section';
+        row.className = 'usage-section stretch-bar';
         row.title = resetCredits.applicable > 0
             ? `${resetCredits.applicable} reset${resetCredits.applicable > 1 ? 's' : ''} usable right now to clear a hit limit`
             : 'Banked limit resets — become usable when a limit is reached';
@@ -942,14 +935,7 @@ function buildExtraRows(data) {
             dotsWrap.appendChild(dot);
         }
         barGroup.appendChild(dotsWrap);
-        const dotsPct = document.createElement('span');
-        dotsPct.className = 'usage-percentage';
-        barGroup.appendChild(dotsPct); // empty — dots span exactly the bar width above
-        row.appendChild(barGroup);
-
-        const elapsedGroup = document.createElement('div');
-        elapsedGroup.className = 'usage-elapsed-group';
-        row.appendChild(elapsedGroup);
+        row.appendChild(barGroup); // spans bar+elapsed columns (stretch-bar)
 
         const balLabel = document.createElement('span');
         balLabel.className = 'timer-text extra-balance-label';
@@ -1646,8 +1632,12 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     textElement.style.fontSize = '';
     textElement.title = '';
 
-    // A new resets_at means the previous window just completed — sparkle once
-    if (timerElement.dataset.lastResets && timerElement.dataset.lastResets !== resetsAt) {
+    // A genuinely NEW window (reset time jumped forward) — sparkle once.
+    // Strict inequality is not enough: the API stamps resets_at with
+    // sub-second jitter on every response, so require a real forward jump.
+    const prevResets = Date.parse(timerElement.dataset.lastResets || '');
+    const curResets = Date.parse(resetsAt);
+    if (!isNaN(prevResets) && !isNaN(curResets) && curResets - prevResets > 60000) {
         sparkleRing(timerElement);
     }
     timerElement.dataset.lastResets = resetsAt;
@@ -1660,8 +1650,10 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
         textElement.textContent = 'Resetting...';
         timerElement.style.strokeDashoffset = 0;
         timerElement.style.stroke = 'hsl(142, 70%, 47%)'; // full green — reset imminent
-        // The circle just completed — one wand-tap per window
-        if (timerElement.dataset.sparkledFor !== resetsAt) {
+        // The circle just completed — one wand-tap per window. Tolerant
+        // dedupe: resets_at jitters sub-second between responses.
+        const sparkled = Date.parse(timerElement.dataset.sparkledFor || '');
+        if (isNaN(sparkled) || Math.abs(curResets - sparkled) > 60000) {
             timerElement.dataset.sparkledFor = resetsAt;
             sparkleRing(timerElement);
         }

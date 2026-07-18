@@ -1214,6 +1214,12 @@ body.theme-light .section-header.frozen .section-name {
     white-space: normal;
 }
 
+/* Credits / reset-dot rows stretch their bar area through the elapsed
+   column, ending right where the label column begins */
+.usage-section.stretch-bar .usage-bar-group {
+    grid-column: 2 / 4;
+}
+
 /* Codex limit-reset dots — magic teal orbs, spread edge to edge */
 .reset-dots {
     flex: 1;
