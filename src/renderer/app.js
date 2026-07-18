@@ -133,7 +133,6 @@ const elements = {
     planNote: document.getElementById('planNote'),
     planNoteOpenai: document.getElementById('planNoteOpenai'),
     planNoteGoogle: document.getElementById('planNoteGoogle'),
-    openaiCredits: document.getElementById('openaiCredits'),
     webhookToggle: document.getElementById('webhookToggle'),
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
@@ -867,6 +866,55 @@ function buildExtraRows(data) {
         }
     }
 
+    // Codex credits — styled exactly like Anthropic's Extra Usage row
+    // (ON/OFF tag, muted bar, right-aligned "Account Credits: N")
+    const codexCredits = data.codex?.credits;
+    if (codexCredits && elements.openaiRows.children.length) {
+        const row = document.createElement('div');
+        row.className = 'usage-section';
+
+        const label = document.createElement('span');
+        label.className = 'usage-label';
+        const creditsOn = codexCredits.unlimited || codexCredits.hasCredits;
+        const statusTag = document.createElement('span');
+        statusTag.className = `extra-status ${creditsOn ? 'on' : 'off'}`;
+        statusTag.textContent = creditsOn ? 'ON' : 'OFF';
+        label.appendChild(statusTag);
+        label.appendChild(document.createTextNode(' Credits'));
+        row.appendChild(label);
+
+        const barGroup = document.createElement('div');
+        barGroup.className = 'usage-bar-group';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        const progressFill = document.createElement('div');
+        progressFill.className = 'progress-fill extra';
+        progressFill.style.width = '0%';
+        progressBar.appendChild(progressFill);
+        barGroup.appendChild(progressBar);
+        const percentage = document.createElement('span');
+        percentage.className = 'usage-percentage';
+        percentage.textContent = '—';
+        barGroup.appendChild(percentage);
+        row.appendChild(barGroup);
+
+        const elapsedGroup = document.createElement('div');
+        elapsedGroup.className = 'usage-elapsed-group';
+        row.appendChild(elapsedGroup);
+
+        const balLabel = document.createElement('span');
+        balLabel.className = 'timer-text extra-balance-label';
+        balLabel.textContent = 'Account Credits:';
+        row.appendChild(balLabel);
+
+        const balAmount = document.createElement('span');
+        balAmount.className = 'resets-at-text extra-balance-amount';
+        balAmount.textContent = codexCredits.unlimited ? 'unlimited' : String(codexCredits.balance ?? 0);
+        row.appendChild(balAmount);
+
+        elements.openaiRows.appendChild(row);
+    }
+
     // Provider sections appear only when they have rows
     elements.sectionOpenai.style.display = elements.openaiRows.children.length ? '' : 'none';
     elements.sectionGoogle.style.display = elements.googleRows.children.length ? '' : 'none';
@@ -952,8 +1000,10 @@ function normalizeUsageData(data) {
 
     // Claude Code (CLI) account — fetched by the main process using the local
     // OAuth credentials; same response shape as the claude.ai endpoint. Rows
-    // render in the expandable panel under Code-prefixed labels.
-    const cc = data.claude_code;
+    // render in the expandable panel under CLI-prefixed labels — but only when
+    // the CLI login is a DIFFERENT account than the web login; when the two
+    // match, the rows would be pure duplication (merged mode).
+    const cc = data.claude_code_same_account ? null : data.claude_code;
     if (cc) {
         const ccRows = [];
         if (cc.five_hour?.utilization != null) {
@@ -1049,16 +1099,6 @@ function updateUI(data) {
         }
     }
 
-    // OpenAI credits line — symmetric with Anthropic's Account Credits display
-    if (elements.openaiCredits) {
-        const credits = data.codex?.credits;
-        elements.openaiCredits.style.display = credits ? '' : 'none';
-        if (credits) {
-            elements.openaiCredits.textContent = credits.unlimited
-                ? 'Credits: unlimited'
-                : `Credits: ${credits.balance ?? 0}${credits.hasCredits ? '' : ' (none purchased)'}`;
-        }
-    }
     if (!isCompactMode) resizeWidget();
     startCountdown();
     if (graphVisible) {

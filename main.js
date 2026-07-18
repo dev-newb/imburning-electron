@@ -141,6 +141,43 @@ function fetchClaudeCodeUsage() {
   });
 }
 
+// ---- CLI vs web account comparison (Anthropic) ----
+// Same account ⇔ identical limit windows: the 5h and weekly reset timestamps
+// are unique to an account down to the second, so both matching means the CLI
+// login and the widget's claude.ai login share one limit pool and the CLI
+// rows would be pure duplication. Mode changes are debounced over two
+// consecutive fetches so a stale provider cache can't flap rows in and out.
+let _ccSameState = { mode: null, candidate: null, streak: 0 };
+function detectClaudeCliSameAccount(data) {
+  const cc = data.claude_code;
+  if (!cc) return _ccSameState.mode === true; // no CLI data — rows absent anyway
+  const t = (iso) => iso ? new Date(iso).getTime() : null;
+  // The two endpoints stamp resets_at with sub-second jitter (computed at
+  // response time), so compare with a small tolerance; different accounts'
+  // windows differ by minutes to days.
+  const close = (a, b) => a !== null && b !== null && Math.abs(a - b) < 5000;
+  const fiveMatch = close(t(cc.five_hour?.resets_at), t(data.five_hour?.resets_at));
+  const weekMatch = close(t(cc.seven_day?.resets_at), t(data.seven_day?.resets_at));
+  const observed = fiveMatch && weekMatch;
+
+  if (_ccSameState.mode === null) {
+    _ccSameState.mode = observed;
+  } else if (observed === _ccSameState.mode) {
+    _ccSameState.candidate = null;
+    _ccSameState.streak = 0;
+  } else if (_ccSameState.candidate === observed) {
+    if (++_ccSameState.streak >= 2) {
+      _ccSameState.mode = observed;
+      _ccSameState.candidate = null;
+      _ccSameState.streak = 0;
+    }
+  } else {
+    _ccSameState.candidate = observed;
+    _ccSameState.streak = 1;
+  }
+  return _ccSameState.mode;
+}
+
 // ---- Codex (OpenAI) account usage ----
 // Reads the Codex CLI's local OAuth token (~/.codex/auth.json) and queries the
 // same usage endpoint the CLI polls. The stored access token is used as-is —
@@ -2458,6 +2495,8 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (claudeCode && (claudeCode.five_hour?.resets_at || claudeCode.seven_day?.resets_at)) {
     data.claude_code = claudeCode;
   }
+  // Merged mode: CLI login matches the web login — CLI rows would duplicate
+  data.claude_code_same_account = detectClaudeCliSameAccount(data);
   const codex = await codexPromise;
   if (codex) data.codex = codex;
   const gemini = await geminiPromise;

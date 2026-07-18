@@ -955,9 +955,17 @@ body.theme-light .settings-disclaimer {
     cursor: pointer;
 }
 
-/* Provider sections (Anthropic / OpenAI / Google) */
+/* Provider sections (Anthropic / OpenAI / Google) — one line-height of
+   breathing room between companies, closed by a faint rule */
 .provider-section {
     margin-top: 2px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+body.theme-light .provider-section {
+    border-bottom-color: rgba(60, 60, 100, 0.12);
 }
 
 .section-header {
@@ -1057,10 +1065,6 @@ body.theme-light .settings-disclaimer {
 
 .section-body.collapsed {
     display: none;
-}
-
-.credits-note {
-    font-style: normal;
 }
 
 body.theme-light .section-arrow {
