@@ -9,6 +9,7 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 ## Features
 
 🎯 **Real-time Usage Tracking** — Monitor both session and weekly usage limits  
+🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own bar, timer, and chart line  
 📊 **Visual Progress Bars** — Clean, gradient progress indicators with configurable warning thresholds  
 ⏱️ **Countdown Timers** — Circular timers showing time elapsed in the current session window  
 🔄 **Auto-refresh** — Updates every 5 minutes automatically, with animated refresh indicator  
@@ -23,6 +24,26 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 🔔 **Update Notifications** — Automatic check for new releases on startup  
 🕐 **Configurable Date & Time Formats** — 12h/24h time, and flexible weekly reset date display  
 📐 **Compact Mode** — Minimal view for when you just need a quick glance  
+
+---
+
+## What's New in this Fork
+
+> This fork ([dev-newb/claude-usage-widget](https://github.com/dev-newb/claude-usage-widget)) adds support for the per-model weekly limits Claude.ai introduced with the Claude 5 (Fable) launch. It builds on upstream [PR #98](https://github.com/SlavomirDurej/claude-usage-widget/pull/98).
+
+### 🤖 Fable / Scoped Weekly Limits
+
+Claude.ai now reports per-model weekly limits (e.g. **Fable**) in a new `limits` array, and stopped populating the legacy `seven_day_opus` / `seven_day_sonnet` fields — so v1.7.5 shows no model-specific usage at all on current accounts. This fork:
+
+- Shows a **`Fable (7d)` row** in the expanded panel — progress bar, percentage, and reset countdown — with its own fuchsia colour
+- **Charts Fable usage over time** as a series in the usage history graph
+- Is **generic**: whatever scoped weekly limits Anthropic sends next (new models, surfaces) render automatically, labelled from the API's own display name
+
+### 🔴 Fable Tray Icon
+
+A third tray icon (menu bar icon on macOS) shows your Fable weekly percentage at a glance — **red badge with a black number**, so it's instantly distinguishable from the purple Session and blue Weekly icons. It appears whenever **Show Tray Stats** is enabled and your account has a scoped weekly limit, and its tooltip shows the exact percentage and reset time.
+
+> **Windows note:** Windows hides new tray icons in the overflow area (the **^** chevron) by default. Drag the red icon onto the taskbar once to keep it visible at a glance.
 
 ---
 
