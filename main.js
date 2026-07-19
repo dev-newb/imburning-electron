@@ -2738,7 +2738,8 @@ ipcMain.handle('get-settings', () => {
     trayGoogle: store.get('settings.trayGoogle', false),
     sectionCollapsed: store.get('settings.sectionCollapsed', {}),
     subgroupHidden: store.get('settings.subgroupHidden', {}),
-    pizazz: store.get('settings.pizazz', true)
+    pizazz: store.get('settings.pizazz', true),
+    hiddenRows: store.get('settings.hiddenRows', {})
   };
 });
 
@@ -2782,6 +2783,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
   if (settings.subgroupHidden !== undefined) store.set('settings.subgroupHidden', settings.subgroupHidden || {});
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
+  if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 

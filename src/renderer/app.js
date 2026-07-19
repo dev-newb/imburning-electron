@@ -860,12 +860,14 @@ function buildExtraRows(data) {
     elements.googleCliRows.innerHTML = '';
     let count = 0;
 
+    const hiddenRows = hiddenRowsMap();
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
         // extra_usage is valid with utilization OR balance_cents (prepaid only)
         const hasUtilization = value && value.utilization !== undefined;
         const hasBalance = key === 'extra_usage' && value && value.balance_cents != null;
         if (!hasUtilization && !hasBalance) continue;
+        if (hiddenRows[key]) continue;
 
         const utilization = value.utilization || 0;
         const resetsAt = value.resets_at;
@@ -1020,6 +1022,8 @@ function buildExtraRows(data) {
             row.appendChild(resetsText);
         }
 
+        attachHideBtn(row, key, config.label);
+
         // Route rows to their provider section. Anthropic scoped limits
         // (e.g. Fable) are pinned below the Weekly row; CLI + extra-usage rows
         // stay in Anthropic's expandable panel and count toward its tally;
@@ -1065,7 +1069,7 @@ function buildExtraRows(data) {
     // Codex credits — styled exactly like Anthropic's Extra Usage row
     // (ON/OFF tag, muted bar, right-aligned "Account Credits: N")
     const codexCredits = data.codex?.credits;
-    if (codexCredits && elements.openaiRows.children.length) {
+    if (codexCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_credits) {
         const row = document.createElement('div');
         row.className = 'usage-section stretch-bar';
 
@@ -1115,13 +1119,14 @@ function buildExtraRows(data) {
         balAmount.textContent = codexCredits.unlimited ? 'unlimited' : String(codexCredits.balance ?? 0);
         row.appendChild(balAmount);
 
+        attachHideBtn(row, 'codex_row_credits', 'Credits');
         elements.openaiExtraRows.appendChild(row);
     }
 
     // OpenAI weekly-limit reset feature — banked resets shown as magic dots
     // (no ON/OFF: resets aren't a toggle, they simply exist)
     const resetCredits = data.codex?.resetCredits;
-    if (resetCredits && elements.openaiRows.children.length) {
+    if (resetCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_resets) {
         const row = document.createElement('div');
         row.className = 'usage-section stretch-bar';
         row.title = resetCredits.applicable > 0
@@ -1161,6 +1166,7 @@ function buildExtraRows(data) {
         balAmount.textContent = String(resetCredits.available);
         row.appendChild(balAmount);
 
+        attachHideBtn(row, 'codex_row_resets', 'Limit Resets');
         elements.openaiExtraRows.appendChild(row);
     }
 
@@ -1179,6 +1185,7 @@ function buildExtraRows(data) {
 
     applySubgroups();
     applyLabelMode();
+    updateHiddenChips();
 
     return count;
 }
@@ -1239,6 +1246,67 @@ function rowCode(key, label) {
         return (ver + fam) || 'GEM';
     }
     return clean.replace(/\s*\(.*\)$/, '').slice(0, 3).toUpperCase();
+}
+
+// ---- Hide individual trackers ----
+// Hover any pool row for a small minus; hiding persists in
+// settings.hiddenRows. Each section footer shows an "N hidden" chip that
+// restores that provider's rows.
+function rowProvider(key) {
+    if (key.startsWith('codex_')) return 'openai';
+    if (key.startsWith('gemini_')) return 'google';
+    return 'anthropic';
+}
+
+function hiddenRowsMap() {
+    return (window._cachedSettings || {}).hiddenRows || {};
+}
+
+async function hideRow(key) {
+    const hiddenRows = { ...hiddenRowsMap(), [key]: true };
+    await _saveSettingsPatch({ hiddenRows });
+    if (latestUsageData) updateUI(latestUsageData);
+}
+
+async function restoreRows(provider) {
+    const hiddenRows = { ...hiddenRowsMap() };
+    for (const k of Object.keys(hiddenRows)) {
+        if (rowProvider(k) === provider) delete hiddenRows[k];
+    }
+    await _saveSettingsPatch({ hiddenRows });
+    if (latestUsageData) updateUI(latestUsageData);
+}
+
+function attachHideBtn(row, key, label) {
+    const btn = document.createElement('button');
+    btn.className = 'row-hide-btn';
+    btn.textContent = '–';
+    btn.title = 'Hide "' + String(label || key).replace(/^CLI /, '') + '" — restore from the "hidden" chip at the section bottom';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); hideRow(key); });
+    row.appendChild(btn);
+}
+
+function updateHiddenChips() {
+    const hidden = Object.keys(hiddenRowsMap());
+    for (const [provider, footerSel] of [
+        ['anthropic', '#sectionAnthropic .section-footer'],
+        ['openai', '#sectionOpenai .section-footer'],
+        ['google', '#sectionGoogle .section-footer']
+    ]) {
+        const footer = document.querySelector(footerSel);
+        if (!footer) continue;
+        let chip = footer.querySelector('.hidden-rows-chip');
+        const count = hidden.filter((k) => rowProvider(k) === provider).length;
+        if (!count) { if (chip) chip.remove(); continue; }
+        if (!chip) {
+            chip = document.createElement('button');
+            chip.className = 'hidden-rows-chip';
+            chip.addEventListener('click', () => restoreRows(provider));
+            footer.appendChild(chip);
+        }
+        chip.textContent = count + ' hidden';
+        chip.title = 'Click to restore the ' + count + ' hidden tracker' + (count > 1 ? 's' : '') + ' in this section';
+    }
 }
 
 // ---- Desktop / CLI subgroups with burnable subheadings ----
@@ -1921,9 +1989,11 @@ function updateCompactBars(data) {
 
     pools.push({ co: 'anthropic', code: 'CLA 5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
     pools.push({ co: 'anthropic', code: 'CLA 7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
+    const hiddenRows = hiddenRowsMap();
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
         if (!value || value.utilization == null) continue;
+        if (hiddenRows[key]) continue;
         if (key.startsWith('seven_day_scoped_')) {
             pools.push({ co: 'anthropic', code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || '#d946ef' });
         } else if (key.startsWith('cc_')) {
@@ -1931,12 +2001,14 @@ function updateCompactBars(data) {
         }
     }
     for (const lim of (data.codex?.limits || [])) {
+        if (hiddenRows['codex_' + lim.key]) continue;
         pools.push({ co: 'openai', code: rowCode('codex_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
     }
     for (const lim of (data.codex?.cli?.limits || [])) {
         pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
     }
     (data.gemini?.limits || []).forEach((lim, i) => {
+        if (hiddenRows['gemini_' + lim.key]) return;
         pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
     });
     (data.gemini?.cli?.limits || []).forEach((lim, i) => {
