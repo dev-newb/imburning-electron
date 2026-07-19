@@ -252,7 +252,13 @@ function normalizeCodexLive(json) {
   }
   if (!limits.length) return null;
   const credits = json?.credits
-    ? { balance: json.credits.balance ?? null, hasCredits: !!json.credits.has_credits, unlimited: !!json.credits.unlimited }
+    ? {
+        balance: json.credits.balance ?? null,
+        hasCredits: !!json.credits.has_credits,
+        unlimited: !!json.credits.unlimited,
+        approxLocal: json.credits.approx_local_messages || null,   // [min, max] range
+        approxCloud: json.credits.approx_cloud_messages || null
+      }
     : null;
   // OpenAI's weekly-limit reset feature: banked resets that can be spent to
   // clear a hit limit early (applicable_available_count = usable right now)

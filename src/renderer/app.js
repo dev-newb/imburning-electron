@@ -1000,15 +1000,27 @@ function buildExtraRows(data) {
         label.appendChild(document.createTextNode(' Credits'));
         row.appendChild(label);
 
+        // Credits are a wallet, not a meter — no bar. Show the API's own
+        // message-count estimate for the balance instead.
         const barGroup = document.createElement('div');
         barGroup.className = 'usage-bar-group';
-        const progressBar = document.createElement('div');
-        progressBar.className = 'progress-bar';
-        const progressFill = document.createElement('div');
-        progressFill.className = 'progress-fill extra';
-        progressFill.style.width = '0%';
-        progressBar.appendChild(progressFill);
-        barGroup.appendChild(progressBar);
+        const approx = document.createElement('span');
+        approx.className = 'credits-approx';
+        const fmtRange = (r) => (Array.isArray(r) && r.length === 2)
+            ? (r[0] === r[1] ? String(r[0]) : `${r[0]}–${r[1]}`)
+            : null;
+        if (codexCredits.unlimited) {
+            approx.textContent = 'unlimited';
+        } else if (codexCredits.hasCredits) {
+            const local = fmtRange(codexCredits.approxLocal);
+            const cloud = fmtRange(codexCredits.approxCloud);
+            approx.textContent = [local && `≈ ${local} local msgs`, cloud && `${cloud} cloud`]
+                .filter(Boolean).join(' · ') || 'balance available';
+        } else {
+            approx.textContent = 'none purchased';
+            approx.classList.add('dim');
+        }
+        barGroup.appendChild(approx);
         row.appendChild(barGroup); // spans bar+elapsed columns (stretch-bar)
 
         const balLabel = document.createElement('span');
@@ -1040,8 +1052,8 @@ function buildExtraRows(data) {
         row.appendChild(label);
 
         // One teal dot per banked reset, spread edge to edge across the column
-        const barGroup = document.createElement('div');
-        barGroup.className = 'usage-bar-group';
+        const barGroupDots = document.createElement('div');
+        barGroupDots.className = 'usage-bar-group';
         const dotsWrap = document.createElement('div');
         const dotCount = Math.min(resetCredits.available, 12);
         dotsWrap.className = 'reset-dots' + (dotCount === 1 ? ' single' : '');
@@ -1051,8 +1063,8 @@ function buildExtraRows(data) {
             dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
             dotsWrap.appendChild(dot);
         }
-        barGroup.appendChild(dotsWrap);
-        row.appendChild(barGroup); // spans bar+elapsed columns (stretch-bar)
+        barGroupDots.appendChild(dotsWrap);
+        row.appendChild(barGroupDots); // spans bar+elapsed columns (stretch-bar)
 
         const balLabel = document.createElement('span');
         balLabel.className = 'timer-text extra-balance-label';

@@ -1388,6 +1388,19 @@ body.theme-light .section-header.frozen .section-name {
     grid-column: 2 / 4;
 }
 
+/* Codex credits: the balance's message-count estimate, centred in the row */
+.credits-approx {
+    flex: 1;
+    text-align: center;
+    font-size: 10px;
+    font-style: italic;
+    color: #8a8a9a;
+}
+
+.credits-approx.dim {
+    opacity: 0.55;
+}
+
 /* Codex limit-reset dots — magic teal orbs, spread edge to edge */
 .reset-dots {
     flex: 1;
