@@ -1075,12 +1075,22 @@ body.theme-light .provider-section {
     display: none;
 }
 
-/* Brand name + status chip stacked, chip centered under the logo */
-.section-title-block {
+/* Section footer: planner text left, account chip pinned bottom-right */
+.section-footer {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 10px;
+    padding-right: 14px;
+}
+
+.section-footer .plan-note {
+    flex: 1;
+    min-width: 0;
+}
+
+.section-footer .section-chip {
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 /* Per-section column labels, under each company's logo */
