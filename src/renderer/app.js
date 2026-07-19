@@ -679,7 +679,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(700);
+        window.electronAPI.resizeWindow(700 + 34);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -1190,6 +1190,14 @@ function buildExtraRows(data) {
     return count;
 }
 
+// Title bar + bottom toolbar heights — every window-height computation
+// includes both chrome strips
+function _chromeHeight() {
+    const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+    const bar = document.getElementById('bottomBar');
+    return th + (bar ? bar.offsetHeight : 0);
+}
+
 // ---- Row identity codes + colours ----
 // At narrow widths the row labels compress to short colour-matched codes;
 // compact mode uses the same codes. Colour follows the row's bar colour.
@@ -1443,7 +1451,7 @@ function _followResize(durationMs) {
             const b = document.body.classList;
             if (!isCompactMode && !b.contains('tall') && !b.contains('landscape')
                 && elements.settingsOverlay.style.display === 'none') {
-                const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+                const th = _chromeHeight();
                 const ch = elements.mainContent.scrollHeight;
                 const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
                 if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true);
@@ -1453,7 +1461,7 @@ function _followResize(durationMs) {
             return;
         }
         if ((tick++ % 3) === 0 && elements.settingsOverlay.style.display === 'none') {
-            const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+            const th = _chromeHeight();
             const ch = elements.mainContent.scrollHeight;
             if (th >= 10 && ch >= 40) {
                 const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
@@ -1580,7 +1588,7 @@ function resizeWidget(bannerVisible) {
         // Never re-measure while the settings overlay is up — a background
         // refresh would stretch the window underneath the panel
         if (elements.settingsOverlay.style.display !== 'none') return;
-        const titleHeight = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+        const titleHeight = _chromeHeight();
         const contentHeight = elements.mainContent.scrollHeight;
         // While minimized/hidden every measurement reads ~0 — resizing then
         // would shrink the window to a sliver. Skip; the focus listener
@@ -2051,8 +2059,7 @@ function updateCompactBars(data) {
     // the rows container stretches to fill the window (so bars can expand
     // when the user makes it bigger), which makes measuring it circular.
     if (isCompactMode) {
-        const th = elements.titleBar ? elements.titleBar.offsetHeight : 28;
-        window.electronAPI.resizeWindow(th + pools.length * 26 + 18);
+        window.electronAPI.resizeWindow(_chromeHeight() + pools.length * 26 + 18);
     }
 }
 // Persist compact mode setting without touching the rest of settings — debounced

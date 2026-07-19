@@ -26,27 +26,7 @@
                     <img src="../../assets/logo.png" alt="Logo" class="app-logo">
                     <span>Burnwatch</span>
                 </div>
-                <div class="controls">
-                    <button class="control-btn sprite-btn" id="compactPressBtn" title="Compact mode — stomp the widget down">
-                        <img id="pressImg" src="../../assets/press-up.png" alt="Compact toggle">
-                    </button>
-                    <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
-                    <button class="control-btn refresh-btn" id="refreshBtn" title="Refresh">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M23 4v6h-6M1 20v-6h6" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                        </svg>
-                    </button>
-                    <button class="control-btn graph-btn" id="graphBtn" title="Toggle Usage Graph">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg>
-                    </button>
-                    <button class="control-btn minimize-btn" id="minimizeBtn" title="Minimise to System Tray">−</button>
-                    <button class="control-btn close-btn" id="closeBtn" title="Exit Application">×</button>
-                </div>
-            </div>
+                            </div>
 
             <!-- Update Banner (hidden by default) -->
             <div class="update-banner" id="updateBanner" style="display: none;">
@@ -118,10 +98,6 @@
 
             <!-- Main Content -->
             <div class="content" id="mainContent" style="display: none;">
-
-                <button class="clown-btn-content" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
-                    <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
-                </button>
 
                 <!-- Compact toggle chevron — fixed position, does not move with expand -->
                 <button class="compact-collapse-btn" id="compactCollapseBtn" title="Compact mode" style="display: none;">
@@ -564,6 +540,29 @@
                 </div>
             </div>
 
+            <!-- Bottom toolbar: minimize · press · clown · refresh · graph · settings · close -->
+            <div class="bottom-bar" id="bottomBar">
+                <button class="control-btn minimize-btn" id="minimizeBtn" title="Minimise to System Tray">−</button>
+                <button class="control-btn sprite-btn" id="compactPressBtn" title="Compact mode — stomp the widget down">
+                    <img id="pressImg" src="../../assets/press-up.png" alt="Compact toggle">
+                </button>
+                <button class="control-btn sprite-btn" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
+                    <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
+                </button>
+                <button class="control-btn refresh-btn" id="refreshBtn" title="Refresh">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                </button>
+                <button class="control-btn graph-btn" id="graphBtn" title="Toggle Usage Graph">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                </button>
+                <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+                <button class="control-btn close-btn" id="closeBtn" title="Exit Application">×</button>
+            </div>
         </div>
     </div>
 
