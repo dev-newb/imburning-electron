@@ -2860,7 +2860,10 @@ body.landscape .section-body.has-dual > .subgroup { display: none !important; }
 
 .dual-table.hide-cli .dual-pair.cli,
 .dual-table.hide-cli .dual-gap,
-.dual-table.hide-cli .dual-head .cli-head { display: none; }
+.dual-table.hide-cli .dual-group-head.cli-head { display: none; }
+
+/* The charred pill survives the burn, parked beside the Desktop heading */
+.dual-table.hide-cli .dual-head { grid-template-columns: 46px 110px auto; }
 
 .dual-label {
     font-size: 9px;
@@ -2922,3 +2925,26 @@ body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
 /* Wide mode: nothing collapses — chevrons go, expandables stay open */
 body.landscape .expand-toggle { display: none !important; }
 body.landscape .expand-section { display: block !important; }
+
+
+/* Landscape: non-dual columns reserve the group-heading space so row tops
+   line up across all three companies */
+body.landscape .section-body:not(.has-dual) > .usage-headers {
+    margin-top: 20px;
+    height: 20px;
+    align-items: end;
+}
+
+/* Burning leaves things visibly charred until reversed */
+.subheading.cli-pill.burnt {
+    background: rgba(70, 58, 45, 0.25);
+    border-color: rgba(90, 75, 60, 0.65);
+}
+
+.dual-pill { position: relative; overflow: visible; }
+
+.dual-table.hide-cli .dual-pill {
+    background: rgba(70, 58, 45, 0.25);
+    border-color: rgba(90, 75, 60, 0.65);
+    color: #6b5d4e;
+}

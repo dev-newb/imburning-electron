@@ -1692,6 +1692,7 @@ function renderDualTables(data) {
         pill.title = 'Second account (CLI login) — click to hide/show its columns';
         pill.addEventListener('click', async () => {
             const hidden = !table.classList.contains('hide-cli');
+            runPixelSweep(pill, hidden);
             table.classList.toggle('hide-cli', hidden);
             const subgroupHidden = { ...((window._cachedSettings || {}).subgroupHidden || {}), [company + '_cli']: hidden };
             await _saveSettingsPatch({ subgroupHidden });
