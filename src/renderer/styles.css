@@ -32,6 +32,9 @@ body {
 
 body.theme-light { background: #f0f0f8; }
 
+html { background: #1e1e2e; }
+body.theme-light:root, html:has(body.theme-light) { background: #e8e8f0; }
+
 /* When snapped to a half/quarter screen the window is far wider than the
    widget — keep the rows readable by capping and centering the content */
 .content, .compact-content { max-width: 600px; width: 100%; margin: 0 auto; }

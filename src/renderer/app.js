@@ -405,7 +405,7 @@ function setupEventListeners() {
         if (graphVisible) {
             await loadChart();
         }
-        if (!isCompactMode) resizeWidget();
+        _forceFitHeight();
         _saveViewState();
     });
 
@@ -1188,6 +1188,20 @@ function buildExtraRows(data) {
     updateHiddenChips();
 
     return count;
+}
+
+// Fit the window height to the content, keeping the user's width — used by
+// toggles that change content height (graph, subgroup rolls) so the window
+// grows and contracts with what it shows
+function _forceFitHeight() {
+    if (isCompactMode) return;
+    if (elements.settingsOverlay.style.display !== 'none') return;
+    requestAnimationFrame(() => {
+        const th = _chromeHeight();
+        const ch = elements.mainContent.scrollHeight;
+        const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
+        if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true);
+    });
 }
 
 // Title bar + bottom toolbar heights — every window-height computation
