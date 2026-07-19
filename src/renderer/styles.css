@@ -2917,3 +2917,8 @@ body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
     border-radius: 50%;
     background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
 }
+
+
+/* Wide mode: nothing collapses — chevrons go, expandables stay open */
+body.landscape .expand-toggle { display: none !important; }
+body.landscape .expand-section { display: block !important; }

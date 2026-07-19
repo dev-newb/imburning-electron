@@ -1425,6 +1425,10 @@ function applySqueezeClasses() {
     // Landscape: wider than tall with room for three columns — the provider
     // sections sit side by side and every width band keys on COLUMN width
     const landscape = on && w > h && w >= 760;
+    if (window._lastLandscapeMin !== landscape) {
+        window._lastLandscapeMin = landscape;
+        if (window.electronAPI.setMinHeight) window.electronAPI.setMinHeight(landscape ? 340 : 180);
+    }
     document.body.classList.toggle('landscape', landscape);
     document.body.classList.toggle('vh-short', landscape && h < 420);
     const eff = landscape ? Math.floor(w / 3) - 10 : w;

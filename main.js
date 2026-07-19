@@ -2591,6 +2591,12 @@ function windowIsUserSized() {
   return _lastSetHeight != null && Math.abs(ch - _lastSetHeight) > 24;
 }
 
+// Landscape needs a taller floor: below ~340px the three columns and their
+// planners would crush (compact mode exists for smaller footprints)
+ipcMain.on('set-min-height', (event, h) => {
+  if (mainWindow) mainWindow.setMinimumSize(200, Math.max(120, Math.round(h)));
+});
+
 ipcMain.on('resize-window', (event, height, force) => {
   if (!mainWindow) return;
   if (force) {
