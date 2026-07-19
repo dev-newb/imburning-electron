@@ -1075,9 +1075,23 @@ body.theme-light .provider-section {
     display: none;
 }
 
+/* Brand name + status chip stacked, chip centered under the logo */
+.section-title-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+/* Per-section column labels, under each company's logo */
+.section-col-headers {
+    margin-top: 3px;
+    margin-bottom: 2px;
+}
+
 /* Account-status chip beside the brand name */
 .section-chip {
-    margin-left: 8px;
+    margin-left: 0;
     font-size: 8px;
     font-weight: 700;
     letter-spacing: 0.5px;
