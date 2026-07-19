@@ -24,9 +24,17 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     overflow: hidden;
-    background: transparent;
+    /* The window is opaque now (needed for Windows Snap) — body matches the
+       widget gradient's base so snapped/stretched edges blend in */
+    background: #1e1e2e;
     -webkit-app-region: no-drag;
 }
+
+body.theme-light { background: #f0f0f8; }
+
+/* When snapped to a half/quarter screen the window is far wider than the
+   widget — keep the rows readable by capping and centering the content */
+.content, .compact-content { max-width: 600px; width: 100%; margin: 0 auto; }
 
 #app {
     width: 100%;
@@ -2185,59 +2193,36 @@ body.theme-light .subheading { color: #8a8aa0; }
     100% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
 }
 
-/* The travelling pixel flame — a 2px cell fanned out into a flame shape
-   with box-shadows, two flicker frames, swept across the subheading */
-.fire-line {
+/* JS-driven pixel fire: the sweep engine in app.js spawns these particles.
+   Flames are chunky 2px-cell sprites (box-shadow art in the robot palette);
+   smoke is blocky grey cells rising in steps. */
+.subheading .fx {
     position: absolute;
-    top: -4px;
-    left: calc(100% - 6px);
-    width: 2px;
-    height: 2px;
-    opacity: 0;
+    inset: 0;
     pointer-events: none;
+    overflow: visible;
+    z-index: 5;
 }
 
-.subheading.burning .fire-line {
-    opacity: 1;
-    animation: fireSweepL 0.9s linear both, fireFlicker 0.14s steps(1) infinite;
+.fx .fp {
+    position: absolute;
+    pointer-events: none;
+    transform-origin: 50% 100%;
+    will-change: transform, opacity;
 }
 
-.subheading.unburning .fire-line {
-    opacity: 1;
-    animation: fireSweepR 0.9s linear both, fireFlicker 0.14s steps(1) infinite;
+@keyframes pxFlame {
+    0% { transform: scale(.5, .3); opacity: 0; }
+    10% { opacity: 1; transform: scale(1, 1); }
+    45% { transform: scale(.9, .85); }
+    75% { transform: scale(1.02, 1.05); }
+    100% { transform: scale(.55, .4) translateY(-3px); opacity: 0; }
 }
 
-@keyframes fireSweepL {
-    from { left: calc(100% - 6px); }
-    to { left: -4px; }
-}
-
-@keyframes fireSweepR {
-    from { left: -4px; }
-    to { left: calc(100% - 6px); }
-}
-
-@keyframes fireFlicker {
-    0%, 100% {
-        box-shadow:
-            0px 0px 0 0 #ff922b,
-            0px 2px 0 0 #ffd43b,
-            -2px 4px 0 0 #ff922b, 0px 4px 0 0 #ffd43b, 2px 4px 0 0 #ff922b,
-            -2px 6px 0 0 #ff922b, 0px 6px 0 0 #fff3bf, 2px 6px 0 0 #ffd43b,
-            -4px 8px 0 0 #e8590c, -2px 8px 0 0 #ffd43b, 0px 8px 0 0 #fff3bf, 2px 8px 0 0 #ffd43b, 4px 8px 0 0 #e8590c,
-            -4px 10px 0 0 #e8590c, -2px 10px 0 0 #ff922b, 0px 10px 0 0 #ffd43b, 2px 10px 0 0 #ff922b, 4px 10px 0 0 #e8590c,
-            -2px 12px 0 0 #e8590c, 0px 12px 0 0 #ff922b, 2px 12px 0 0 #e8590c;
-    }
-    50% {
-        box-shadow:
-            2px 0px 0 0 #ffd43b,
-            0px 2px 0 0 #ff922b, 2px 2px 0 0 #ffd43b,
-            -2px 4px 0 0 #ffd43b, 0px 4px 0 0 #fff3bf, 2px 4px 0 0 #ff922b,
-            -2px 6px 0 0 #ff922b, 0px 6px 0 0 #ffd43b, 2px 6px 0 0 #fff3bf, 4px 6px 0 0 #ff922b,
-            -4px 8px 0 0 #e8590c, -2px 8px 0 0 #ff922b, 0px 8px 0 0 #fff3bf, 2px 8px 0 0 #ffd43b, 4px 8px 0 0 #e8590c,
-            -4px 10px 0 0 #e8590c, -2px 10px 0 0 #ffd43b, 0px 10px 0 0 #ff922b, 2px 10px 0 0 #ff922b, 4px 10px 0 0 #e8590c,
-            -2px 12px 0 0 #e8590c, 0px 12px 0 0 #e8590c, 2px 12px 0 0 #e8590c;
-    }
+@keyframes pxSmoke {
+    0% { transform: translate(0, 0); opacity: 0; }
+    20% { opacity: .55; }
+    100% { transform: translate(var(--dx), var(--ry)) scale(1.5); opacity: 0; }
 }
 
 /* Roll-up/down of the subgroup body — fr-unit grid transition, no JS measuring.
@@ -2310,3 +2295,76 @@ body.theme-light .subheading { color: #8a8aa0; }
 body.theme-light .settings-credit { color: #8080a0; }
 body.theme-light .credit-link { color: #606080; }
 body.theme-light .coffee-btn { background: rgba(200, 160, 0, 0.1); color: #8a6d00; border-color: rgba(200, 160, 0, 0.4); }
+
+/* ---- Settings: per-company columns (logins pinned to the bottom) ---- */
+
+.settings-providers {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.provider-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 8px 9px;
+    min-height: 190px;
+}
+
+.provider-col-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pct-anthropic { color: #d97757; }
+.pct-openai { color: #2dd4bf; }
+.pct-google { color: #f4b400; }
+
+.provider-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.provider-col-body .settings-row-label {
+    margin-top: 4px;
+}
+
+.provider-col-login {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.provider-col-login .settings-row-hint {
+    font-size: 9px;
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.provider-col-login .settings-connect-btn,
+.provider-col-login .disconnect-btn,
+.provider-col-login .logout-btn {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 10px;
+}
+
+body.theme-light .provider-col {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .provider-col-title { border-bottom-color: rgba(0, 0, 0, 0.08); }
+body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }

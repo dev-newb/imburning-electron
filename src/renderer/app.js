@@ -145,6 +145,10 @@ const elements = {
     compactScopedFill: document.getElementById('compactScopedFill'),
     compactScopedPct: document.getElementById('compactScopedPct'),
     showClaudeCodeToggle: document.getElementById('showClaudeCodeToggle'),
+    trayOpenaiBg: document.getElementById('trayOpenaiBg'),
+    trayOpenaiText: document.getElementById('trayOpenaiText'),
+    trayGoogleBg: document.getElementById('trayGoogleBg'),
+    trayGoogleText: document.getElementById('trayGoogleText'),
     traySessionBg: document.getElementById('traySessionBg'),
     traySessionText: document.getElementById('traySessionText'),
     trayWeeklyBg: document.getElementById('trayWeeklyBg'),
@@ -654,7 +658,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(615);
+        window.electronAPI.resizeWindow(700);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -1138,9 +1142,101 @@ function buildExtraRows(data) {
 // ---- Desktop / CLI subgroups with burnable subheadings ----
 // In dual mode (CLI logged into a different account than the primary sign-in)
 // each provider splits into "Desktop" and "CLI" subgroups. Clicking a
-// subheading sends a line of fire across it right-to-left, charring the
-// letters and rolling the rows up; clicking again reverses the burn.
-const SUBGROUP_SWEEP_MS = 900;
+// subheading ignites a fast pixel-fire sweep across it right-to-left — a hot
+// front with a lit trail behind it and smoke rising — charring the letters
+// and rolling the rows up; clicking again reverses the burn.
+const SUBGROUP_SWEEP_MS = 380;
+
+const _PXCOLS = { deep: '#e8590c', mid: '#ff922b', bright: '#ffd43b', core: '#fff3bf' };
+const _rnd = (a, b) => a + Math.random() * (b - a);
+const _pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Chunky flame sprite out of 2px cells (box-shadow art, robot-logo palette)
+function _spawnPixelFlame(layer, x, lifeMs) {
+    const cells = [];
+    const rows = Math.floor(_rnd(4, 7));
+    for (let r = 0; r < rows; r++) {
+        for (const c of [-1, 0, 1]) {
+            const edge = Math.abs(c) === 1;
+            if (r === rows - 1 && edge) continue;
+            if (r === rows - 1 && Math.random() < 0.4) continue;
+            if (edge && Math.random() < 0.25) continue;
+            const col = r >= rows - 2 ? (Math.random() < 0.5 ? _PXCOLS.mid : _PXCOLS.bright)
+                : edge ? (Math.random() < 0.5 ? _PXCOLS.deep : _PXCOLS.mid)
+                    : (Math.random() < 0.45 ? _PXCOLS.core : _PXCOLS.bright);
+            cells.push(`${c * 2}px ${-r * 2}px 0 0 ${col}`);
+        }
+    }
+    const f = document.createElement('div');
+    f.className = 'fp';
+    f.style.cssText = `left:${x}px; bottom:1px; width:2px; height:2px; background:transparent;
+        box-shadow:${cells.join(',')};
+        animation: pxFlame ${Math.round(lifeMs)}ms steps(5) forwards;`;
+    layer.appendChild(f);
+}
+
+function _spawnPixelSmoke(layer, x) {
+    const s = document.createElement('div');
+    s.className = 'fp';
+    s.style.cssText = `left:${x}px; bottom:${_rnd(8, 13)}px; width:3px; height:3px;
+        background:${_pick(['#6a6a78', '#7c7c8a', '#585866'])};
+        --dx:${Math.round(_rnd(-2, 3)) * 3}px; --ry:${-Math.round(_rnd(5, 11)) * 3}px;
+        animation: pxSmoke ${Math.round(_rnd(650, 1100))}ms steps(6) forwards;`;
+    layer.appendChild(s);
+}
+
+// The sweep itself: a hot front races across the word; every few px it leaves
+// a trail flame that keeps burning until the front finishes, and smoke rises
+// from both the front and random lit spots along the trail.
+function runPixelSweep(btn, hide) {
+    const layer = document.createElement('div');
+    layer.className = 'fx';
+    btn.appendChild(layer);
+    const W = Math.max(10, btn.offsetWidth - 14);
+    const t0 = performance.now();
+    let trailX = hide ? W : 0;
+    let lastFront = 0, lastSmoke = 0;
+    const lit = [];
+    function frame(now) {
+        const t = Math.min(1, (now - t0) / SUBGROUP_SWEEP_MS);
+        const x = hide ? W * (1 - t) : W * t;
+        const remaining = SUBGROUP_SWEEP_MS - (now - t0);
+        if (now - lastFront > 22) { lastFront = now; _spawnPixelFlame(layer, x, _rnd(160, 300)); }
+        while (hide ? trailX > x : trailX < x) {
+            _spawnPixelFlame(layer, trailX + _rnd(-1, 1), remaining + _rnd(60, 220));
+            lit.push(trailX);
+            trailX += (hide ? -1 : 1) * 5;
+        }
+        if (now - lastSmoke > 45) {
+            lastSmoke = now;
+            const sx = (lit.length && Math.random() < 0.55) ? _pick(lit) : x + _rnd(-4, 6);
+            _spawnPixelSmoke(layer, sx);
+        }
+        if (t < 1) requestAnimationFrame(frame);
+        else setTimeout(() => layer.remove(), 1200);
+    }
+    requestAnimationFrame(frame);
+}
+
+// Track the window height every few frames while a subgroup rolls, so the
+// window shrinks/grows WITH the content instead of snapping at the end
+function _followResize(durationMs) {
+    if (isCompactMode) return;
+    const end = performance.now() + durationMs;
+    let tick = 0;
+    (function step() {
+        if (performance.now() >= end) { resizeWidget(); return; }
+        if ((tick++ % 3) === 0 && elements.settingsOverlay.style.display === 'none') {
+            const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+            const ch = elements.mainContent.scrollHeight;
+            if (th >= 10 && ch >= 40) {
+                const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
+                window.electronAPI.resizeWindow(th + bh + ch + 10);
+            }
+        }
+        requestAnimationFrame(step);
+    })();
+}
 
 const SUBGROUP_PROVIDERS = [
     { key: 'anthropic', cliRows: 'anthropicCliRows', desk: 'sgAnthropicDesktop', cli: 'sgAnthropicCli' },
@@ -1152,9 +1248,9 @@ function initSubheadings() {
     document.querySelectorAll('.subheading').forEach((btn) => {
         const letters = [...(btn.dataset.label || '')];
         btn.textContent = '';
-        // Letters char in the order the flame reaches them (right to left);
-        // healing runs the opposite way
-        const span = Math.max(SUBGROUP_SWEEP_MS - 300, 100);
+        // Letters char in the order the flame front reaches them (right to
+        // left); healing runs the opposite way
+        const span = Math.max(SUBGROUP_SWEEP_MS - 80, 100);
         letters.forEach((ch, i) => {
             const s = document.createElement('span');
             s.className = 'sub-letter';
@@ -1164,9 +1260,6 @@ function initSubheadings() {
             s.style.setProperty('--rot', `${((i * 37) % 7) - 3}deg`);
             btn.appendChild(s);
         });
-        const flame = document.createElement('span');
-        flame.className = 'fire-line';
-        btn.appendChild(flame);
         btn.addEventListener('click', () => onSubheadingClick(btn));
     });
 }
@@ -1180,14 +1273,15 @@ async function onSubheadingClick(btn) {
     btn.classList.remove('burnt', 'burning', 'unburning');
     void btn.offsetWidth; // restart letter animations from a clean slate
     btn.classList.add(nowHidden ? 'burning' : 'unburning');
+    runPixelSweep(btn, nowHidden);
     group.classList.add('rolling');
     group.classList.toggle('hidden-group', nowHidden);
+    _followResize(SUBGROUP_SWEEP_MS + 550);
     setTimeout(() => {
         btn.classList.remove('burning', 'unburning');
         btn.classList.toggle('burnt', nowHidden);
         delete btn.dataset.animating;
         group.classList.remove('rolling');
-        if (!isCompactMode) resizeWidget();
     }, SUBGROUP_SWEEP_MS + 300);
     const settings = window._cachedSettings || {};
     const subgroupHidden = { ...(settings.subgroupHidden || {}), [btn.dataset.key]: nowHidden };
@@ -2492,12 +2586,16 @@ async function loadSettings() {
     const colorDefaults = {
         session: { bg: '#3b82f6', text: '#000000' },
         weekly: { bg: '#3b82f6', text: '#ffffff' },
-        fable: { bg: '#ef4444', text: '#000000' }
+        fable: { bg: '#ef4444', text: '#000000' },
+        codex: { bg: '#10a37f', text: '#ffffff' },
+        gemini: { bg: '#f4b400', text: '#000000' }
     };
     for (const [key, ids] of [
         ['session', ['traySessionBg', 'traySessionText']],
         ['weekly', ['trayWeeklyBg', 'trayWeeklyText']],
-        ['fable', ['trayFableBg', 'trayFableText']]
+        ['fable', ['trayFableBg', 'trayFableText']],
+        ['codex', ['trayOpenaiBg', 'trayOpenaiText']],
+        ['gemini', ['trayGoogleBg', 'trayGoogleText']]
     ]) {
         if (elements[ids[0]]) elements[ids[0]].value = trayColors[key]?.bg || colorDefaults[key].bg;
         if (elements[ids[1]]) elements[ids[1]].value = trayColors[key]?.text || colorDefaults[key].text;
@@ -2583,7 +2681,9 @@ async function saveSettings() {
         trayColors: {
             session: { bg: elements.traySessionBg.value, text: elements.traySessionText.value },
             weekly: { bg: elements.trayWeeklyBg.value, text: elements.trayWeeklyText.value },
-            fable: { bg: elements.trayFableBg.value, text: elements.trayFableText.value }
+            fable: { bg: elements.trayFableBg.value, text: elements.trayFableText.value },
+            codex: { bg: elements.trayOpenaiBg.value, text: elements.trayOpenaiText.value },
+            gemini: { bg: elements.trayGoogleBg.value, text: elements.trayGoogleText.value }
         },
         trayOutline: {
             enabled: elements.trayOutlineToggle.checked,

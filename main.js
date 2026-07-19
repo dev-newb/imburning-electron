@@ -1341,9 +1341,18 @@ function createMainWindow() {
     width: WIDGET_WIDTH,
     height: WIDGET_HEIGHT,
     frame: false,
-    transparent: true,
+    // Opaque + thickFrame so Windows treats us as a normal top-level window:
+    // Win+Arrow and drag-to-edge Snap work, and Win11 DWM rounds the corners.
+    // (transparent windows are excluded from Snap entirely)
+    transparent: false,
+    backgroundColor: '#16161e',
+    roundedCorners: true,
+    thickFrame: true,
     alwaysOnTop: true,
-    resizable: false,
+    resizable: true,
+    maximizable: true,
+    minWidth: 320,
+    minHeight: 60,
     skipTaskbar: false,
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
     webPreferences: {
@@ -1400,11 +1409,14 @@ function getBackgroundColor(percent, defaultColor, warnThreshold, dangerThreshol
 
 // ---- Tray icon colours (customizable in Settings) ----
 const DEFAULT_TRAY_COLORS = {
-  // Weekly (left) and Session (right) share the blue background; the number
-  // colour tells them apart — white = Weekly, black = Session
+  // One colour family per company so all three are tellable at a glance:
+  // Anthropic = blue (Weekly white / Session black numbers), Fable = red,
+  // OpenAI = their green, Google = their yellow
   session: { bg: '#3b82f6', text: '#000000' },
   weekly:  { bg: '#3b82f6', text: '#ffffff' },
-  fable:   { bg: '#ef4444', text: '#000000' }
+  fable:   { bg: '#ef4444', text: '#000000' },
+  codex:   { bg: '#10a37f', text: '#ffffff' },
+  gemini:  { bg: '#f4b400', text: '#000000' }
 };
 const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
 
@@ -1427,6 +1439,8 @@ function getTrayColorSettings() {
     session: resolve('session'),
     weekly: resolve('weekly'),
     fable: resolve('fable'),
+    codex: resolve('codex'),
+    gemini: resolve('gemini'),
     outline: {
       enabled: savedOutline.enabled !== false,
       color: hexToRgb(savedOutline.color, hexToRgb(DEFAULT_TRAY_OUTLINE.color))
@@ -1627,6 +1641,110 @@ const BITMAP_FONT_NARROW = {
     0b001100,
     0b111111,
     0b111111
+  ],
+  '2': [
+    0b011110,
+    0b111111,
+    0b110011,
+    0b000011,
+    0b000110,
+    0b001100,
+    0b011000,
+    0b110000,
+    0b110000,
+    0b111111,
+    0b111111
+  ],
+  '3': [
+    0b011110,
+    0b111111,
+    0b110011,
+    0b000011,
+    0b001110,
+    0b001110,
+    0b000011,
+    0b000011,
+    0b110011,
+    0b111111,
+    0b011110
+  ],
+  '4': [
+    0b000110,
+    0b001110,
+    0b011110,
+    0b110110,
+    0b110110,
+    0b111111,
+    0b111111,
+    0b000110,
+    0b000110,
+    0b000110,
+    0b000110
+  ],
+  '5': [
+    0b111111,
+    0b111111,
+    0b110000,
+    0b110000,
+    0b111110,
+    0b111111,
+    0b000011,
+    0b000011,
+    0b110011,
+    0b111111,
+    0b011110
+  ],
+  '6': [
+    0b011110,
+    0b111111,
+    0b110011,
+    0b110000,
+    0b111110,
+    0b111111,
+    0b110011,
+    0b110011,
+    0b110011,
+    0b111111,
+    0b011110
+  ],
+  '7': [
+    0b111111,
+    0b111111,
+    0b000011,
+    0b000110,
+    0b000110,
+    0b001100,
+    0b001100,
+    0b011000,
+    0b011000,
+    0b011000,
+    0b011000
+  ],
+  '8': [
+    0b011110,
+    0b111111,
+    0b110011,
+    0b110011,
+    0b011110,
+    0b011110,
+    0b110011,
+    0b110011,
+    0b110011,
+    0b111111,
+    0b011110
+  ],
+  '9': [
+    0b011110,
+    0b111111,
+    0b110011,
+    0b110011,
+    0b110011,
+    0b111111,
+    0b011111,
+    0b000011,
+    0b110011,
+    0b111111,
+    0b011110
   ]
 };
 
@@ -1700,6 +1818,87 @@ function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, 
     drawChar(buffer, width, height, percentText[i], startX, startY, textColor, useNarrow);
     startX += charWidth + gap;
   }
+
+  if (outlineColor) drawIconOutline(buffer, width, height, outlineColor);
+
+  return nativeImage.createFromBuffer(buffer, { width, height });
+}
+
+// Tiny 3x5 letters for the vertical "CLI" column on second-account badges
+const CLI_LETTERS = {
+  C: [0b111, 0b100, 0b100, 0b100, 0b111],
+  L: [0b100, 0b100, 0b100, 0b100, 0b111],
+  I: [0b111, 0b010, 0b010, 0b010, 0b111]
+};
+
+/**
+ * Second-account (CLI login) badge: the number squeezed into the left of the
+ * icon with narrow digits, and the letters C-L-I stacked vertically along the
+ * right edge. At >=99% the number becomes a small X, same as the main badges.
+ */
+function generateCliIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255, a: 255 }, outlineColor = null) {
+  const width = 20;
+  const height = 20;
+  const buffer = Buffer.alloc(width * height * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      buffer[offset] = bgColor.b;
+      buffer[offset + 1] = bgColor.g;
+      buffer[offset + 2] = bgColor.r;
+      buffer[offset + 3] = 255;
+    }
+  }
+
+  const setPx = (px, py) => {
+    if (px < 0 || px >= width || py < 0 || py >= height) return;
+    const offset = (py * width + px) * 4;
+    buffer[offset] = textColor.b;
+    buffer[offset + 1] = textColor.g;
+    buffer[offset + 2] = textColor.r;
+    buffer[offset + 3] = textColor.a;
+  };
+
+  if (percent >= 99) {
+    // Small X in the left region
+    for (let i = 0; i < 9; i++) {
+      for (let d = 0; d < 2; d++) {
+        setPx(3 + i + d, 5 + i);
+        setPx(11 - i + d, 5 + i);
+      }
+    }
+  } else {
+    // Narrow digits squeezed into the left 14px
+    const percentText = Math.max(0, Math.round(percent)).toString();
+    const charWidth = 6;
+    const totalWidth = percentText.length * charWidth + (percentText.length - 1);
+    let startX = Math.max(0, Math.floor((14 - totalWidth) / 2));
+    const startY = Math.floor((height - 11) / 2);
+    for (let i = 0; i < percentText.length; i++) {
+      drawChar(buffer, width, height, percentText[i], startX, startY, textColor, true);
+      startX += charWidth + 1;
+    }
+  }
+
+  // Vertical C-L-I down the right edge, separated by a 1px gutter
+  for (let y = 0; y < height; y++) {
+    const offset = (y * width + 14) * 4;
+    // gutter: darken the background column slightly so the letters read
+    buffer[offset] = Math.floor(bgColor.b * 0.6);
+    buffer[offset + 1] = Math.floor(bgColor.g * 0.6);
+    buffer[offset + 2] = Math.floor(bgColor.r * 0.6);
+    buffer[offset + 3] = 255;
+  }
+  ['C', 'L', 'I'].forEach((ch, idx) => {
+    const rows = CLI_LETTERS[ch];
+    const y0 = 1 + idx * 6;
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (rows[r] & (1 << (2 - c))) setPx(16 + c, y0 + r);
+      }
+    }
+  });
 
   if (outlineColor) drawIconOutline(buffer, width, height, outlineColor);
 
@@ -1957,12 +2156,11 @@ function syncFableTray(scopedLimit, forecastAt = null) {
 
 function destroyTrayIcons() {
   // Centralized tray cleanup keeps Linux appindicator hosts from showing stale icons.
-  const trays = [sessionTray, weeklyTray, fableTray, _providerTrays.codex, _providerTrays.gemini];
+  const trays = [sessionTray, weeklyTray, fableTray, ...Object.values(_providerTrays)];
   sessionTray = null;
   weeklyTray = null;
   fableTray = null;
-  _providerTrays.codex = null;
-  _providerTrays.gemini = null;
+  for (const key of Object.keys(_providerTrays)) _providerTrays[key] = null;
 
   for (const tray of trays) {
     if (!tray || tray.isDestroyed()) continue;
@@ -2025,7 +2223,7 @@ function formatResetTime(resetsAt, timeFormat, includeDate = false) {
 // ---- External provider tray icons (OpenAI / Google sections) ----
 // Independent of the Anthropic tray setting: each provider section's
 // checkbox controls its own badge.
-const _providerTrays = { codex: null, gemini: null };
+const _providerTrays = { codex: null, codexCli: null, gemini: null, geminiCli: null, claudeCli: null };
 
 function syncProviderTray(name, enabled, badge) {
   let tray = _providerTrays[name];
@@ -2054,9 +2252,11 @@ function syncProviderTray(name, enabled, badge) {
     const colors = getTrayColorSettings();
     const outline = colors.outline.enabled && badge.percent >= dangerThreshold
       ? colors.outline.color : null;
-    tray.setImage(badge.percent >= 99
-      ? generateRedXIcon(badge.bg, badge.text, outline)
-      : generatePercentageIcon(badge.percent, badge.bg, badge.text, outline));
+    tray.setImage(badge.cli
+      ? generateCliIcon(badge.percent, badge.bg, badge.text, outline)
+      : (badge.percent >= 99
+        ? generateRedXIcon(badge.bg, badge.text, outline)
+        : generatePercentageIcon(badge.percent, badge.bg, badge.text, outline)));
     const timeFormat = store.get('settings.timeFormat', '12h');
     let tooltip = `${badge.label}: ${Math.round(badge.percent)}%`;
     const resetTime = formatResetTime(badge.resetsAt, timeFormat, true);
@@ -2068,23 +2268,60 @@ function syncProviderTray(name, enabled, badge) {
 }
 
 function syncExternalProviderTrays(usageData) {
+  const colors = getTrayColorSettings();
+  const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+
+  const trayOpenai = store.get('settings.trayOpenai', false);
   const codexLimit = usageData?.codex?.limits?.[0] || null;
-  syncProviderTray('codex', store.get('settings.trayOpenai', false), codexLimit && {
+  syncProviderTray('codex', trayOpenai, codexLimit && {
     percent: codexLimit.percent,
-    label: codexLimit.label,
+    label: 'OpenAI — ' + codexLimit.label,
     resetsAt: codexLimit.resetsAt,
-    bg: { r: 16, g: 163, b: 127 },                 // OpenAI teal
-    text: { r: 255, g: 255, b: 255, a: 255 }
+    bg: colors.codex.bg,
+    text: colors.codex.text
+  });
+  // Second account (codex CLI logged into a different account): same colours,
+  // squeezed number + vertical CLI letters
+  const codexCliLimit = usageData?.codex?.cli?.limits?.[0] || null;
+  syncProviderTray('codexCli', trayOpenai, codexCliLimit && {
+    percent: codexCliLimit.percent,
+    label: 'OpenAI — ' + codexCliLimit.label + ' (CLI account)',
+    resetsAt: codexCliLimit.resetsAt,
+    bg: colors.codex.bg,
+    text: colors.codex.text,
+    cli: true
   });
 
-  const geminiLimits = usageData?.gemini?.limits || [];
-  const worstGemini = geminiLimits.reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
-  syncProviderTray('gemini', store.get('settings.trayGoogle', false), worstGemini && {
+  const trayGoogle = store.get('settings.trayGoogle', false);
+  const worstGemini = worstOf(usageData?.gemini?.limits);
+  syncProviderTray('gemini', trayGoogle, worstGemini && {
     percent: worstGemini.percent,
-    label: worstGemini.label,
+    label: 'Google — ' + worstGemini.label,
     resetsAt: worstGemini.resetsAt,
-    bg: { r: 244, g: 180, b: 0 },                  // Google yellow
-    text: { r: 0, g: 0, b: 0, a: 255 }
+    bg: colors.gemini.bg,
+    text: colors.gemini.text
+  });
+  const worstGeminiCli = worstOf(usageData?.gemini?.cli?.limits);
+  syncProviderTray('geminiCli', trayGoogle, worstGeminiCli && {
+    percent: worstGeminiCli.percent,
+    label: 'Google — ' + worstGeminiCli.label + ' (CLI account)',
+    resetsAt: worstGeminiCli.resetsAt,
+    bg: colors.gemini.bg,
+    text: colors.gemini.text,
+    cli: true
+  });
+
+  // Anthropic second account (claude CLI differs from the primary login):
+  // weekly percent on the Anthropic weekly colours, CLI-badged
+  const cc = usageData?.claude_code_same_account === false ? usageData?.claude_code : null;
+  const ccWeekly = cc?.seven_day?.utilization != null ? cc.seven_day : null;
+  syncProviderTray('claudeCli', store.get('settings.showTrayStats', false), ccWeekly && {
+    percent: ccWeekly.utilization,
+    label: 'Anthropic — Weekly (CLI account)',
+    resetsAt: ccWeekly.resets_at,
+    bg: colors.weekly.bg,
+    text: colors.weekly.text,
+    cli: true
   });
 }
 
@@ -2330,9 +2567,21 @@ ipcMain.on('close-window', () => {
   }
 });
 
+// While the window is snapped (Win+Arrow / drag-to-edge) or hand-resized, its
+// width differs from the widget's own — stop fighting the shell over geometry
+// until it's back at normal size (un-snapping restores the pre-snap bounds).
+let _expectedWidth = WIDGET_WIDTH;
+
+function windowIsUserSized() {
+  if (!mainWindow) return false;
+  if (mainWindow.isMaximized()) return true;
+  const [cw] = mainWindow.getContentSize();
+  return Math.abs(cw - _expectedWidth) > 24;
+}
+
 ipcMain.on('resize-window', (event, height) => {
-  if (mainWindow) {
-    mainWindow.setContentSize(WIDGET_WIDTH, height);
+  if (mainWindow && !windowIsUserSized()) {
+    mainWindow.setContentSize(_expectedWidth, height);
   }
 });
 
@@ -2353,7 +2602,7 @@ ipcMain.handle('set-window-position', (event, { x, y }) => {
 
 ipcMain.on('open-external', (event, url) => {
   // Trust boundary enforcement: duplicate allowlist check in main process
-  const allowedDomains = ['claude.ai', 'github.com', 'paypal.me'];
+  const allowedDomains = ['claude.ai', 'github.com', 'paypal.me', 'buymeacoffee.com'];
   try {
     const parsedUrl = new URL(url);
     const isAllowed = allowedDomains.some(domain => 
@@ -2397,6 +2646,7 @@ ipcMain.on('set-compact-mode', (event, compact) => {
   if (mainWindow) {
     const bounds = mainWindow.getBounds();
     const width = compact ? 290 : WIDGET_WIDTH;
+    _expectedWidth = width;
     // Compact view grows by one slim row per scoped weekly limit (e.g. Fable)
     const scopedCount = compact
       ? getScopedWeeklyLimits(store.get('latestUsageData') || {}).length

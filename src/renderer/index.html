@@ -370,58 +370,38 @@
                     </div>
 
                     <div class="settings-rows">
-                        <!-- Row 1: two toggles -->
+                        <!-- Global settings -->
                         <div class="settings-row-2col">
                             <div class="settings-col" id="autoStartCol">
                                 <span class="settings-row-label">Launch at startup</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="autoStartToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <label class="toggle-switch"><input type="checkbox" id="autoStartToggle"><span class="toggle-slider"></span></label>
                                 <span class="settings-row-hint" id="autoStartHint" style="display: none;">Not supported on Linux</span>
                             </div>
                             <div class="settings-col">
                                 <span class="settings-row-label" id="trayLabel">Hide from taskbar</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="minimizeToTrayToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <label class="toggle-switch"><input type="checkbox" id="minimizeToTrayToggle"><span class="toggle-slider"></span></label>
                             </div>
                         </div>
-
-                        <!-- Row 2: two toggles -->
                         <div class="settings-row-2col">
                             <div class="settings-col">
                                 <span class="settings-row-label">Always on top</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="alwaysOnTopToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <label class="toggle-switch"><input type="checkbox" id="alwaysOnTopToggle"><span class="toggle-slider"></span></label>
                             </div>
-                            <div class="settings-col">
-                                <span class="settings-row-hint">Tray icons are toggled per provider — use the eye beside each section name.</span>
-                            </div>
-                        </div>
-
-                        <!-- Row 3: compact mode + usage alerts -->
-                        <div class="settings-row-2col">
                             <div class="settings-col">
                                 <span class="settings-row-label">Compact mode</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="compactModeToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Usage Alerts</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="usageAlertsToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <label class="toggle-switch"><input type="checkbox" id="compactModeToggle"><span class="toggle-slider"></span></label>
                             </div>
                         </div>
-
-                        <!-- Row 4: theme + organization selector -->
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Usage Alerts</span>
+                                <label class="toggle-switch"><input type="checkbox" id="usageAlertsToggle"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Burn-spike alert</span>
+                                <label class="toggle-switch"><input type="checkbox" id="burnAlertsToggle"><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
                         <div class="settings-row-2col">
                             <div class="settings-col">
                                 <span class="settings-row-label">Theme</span>
@@ -439,8 +419,6 @@
                                 </select>
                             </div>
                         </div>
-
-                        <!-- Row 5: time format + warn thresholds -->
                         <div class="settings-row-2col">
                             <div class="settings-col">
                                 <span class="settings-row-label">Time format</span>
@@ -449,6 +427,16 @@
                                     <option value="24h">24h (15:59)</option>
                                 </select>
                             </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Date format</span>
+                                <select id="weeklyDateFormat" class="settings-select">
+                                    <option value="date">Mar 13</option>
+                                    <option value="date-day">Fri Mar 13</option>
+                                    <option value="date-day-time">Fri Mar 13 + time</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="settings-row-2col">
                             <div class="settings-col">
                                 <span class="settings-row-label">Warn at</span>
                                 <div class="threshold-group">
@@ -464,143 +452,6 @@
                                     </label>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Row: tray icon colors (background / number per icon) -->
-                        <div class="settings-row-2col tray-colors-row">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Session tray</span>
-                                <span class="tray-color-pair">
-                                    <input type="color" id="traySessionBg" title="Background">
-                                    <input type="color" id="traySessionText" title="Number">
-                                </span>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Weekly tray</span>
-                                <span class="tray-color-pair">
-                                    <input type="color" id="trayWeeklyBg" title="Background">
-                                    <input type="color" id="trayWeeklyText" title="Number">
-                                </span>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Fable tray</span>
-                                <span class="tray-color-pair">
-                                    <input type="color" id="trayFableBg" title="Background">
-                                    <input type="color" id="trayFableText" title="Number">
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Row: critical outline + burn alerts -->
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Critical outline</span>
-                                <span class="tray-color-pair">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="trayOutlineToggle">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                    <input type="color" id="trayOutlineColor" title="Outline color">
-                                </span>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Burn-spike alert</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="burnAlertsToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Row: CLI account tracking (Claude Code CLI login) -->
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label">CLI account</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="showClaudeCodeToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="settings-row-hint">Rows from your local claude CLI login</span>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Font colour</span>
-                                <span class="tray-color-pair">
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="fontColorToggle">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                    <input type="color" id="fontColorPicker" title="Widget text colour">
-                                </span>
-                                <span class="settings-row-hint">Off = theme default</span>
-                            </div>
-                        </div>
-
-                        <!-- Row: phone alerts webhook (ntfy or generic JSON POST) -->
-                        <div class="settings-row-2col webhook-row">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Phone alerts</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="webhookToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Webhook / ntfy URL</span>
-                                <input type="text" id="webhookUrl" class="settings-select webhook-url" placeholder="https://ntfy.sh/your-topic" spellcheck="false">
-                            </div>
-                        </div>
-
-                        <!-- Row: daily digest + Codex + Gemini accounts -->
-                        <div class="settings-row-2col tray-colors-row">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Daily digest</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="dailyDigestToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Codex account</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="showCodexToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Gemini account</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="showGeminiToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Row: widget-owned OAuth logins -->
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label">OpenAI login</span>
-                                <button class="settings-connect-btn" id="settingsConnectOpenaiBtn">Connect</button>
-                                <button class="disconnect-btn" id="disconnectOpenaiBtn" style="display: none;">Disconnect</button>
-                                <span class="settings-row-hint" id="openaiLoginStatus">Not connected</span>
-                            </div>
-                            <div class="settings-col">
-                                <span class="settings-row-label">Google login</span>
-                                <button class="settings-connect-btn" id="settingsConnectGoogleBtn">Connect</button>
-                                <button class="disconnect-btn" id="disconnectGoogleBtn" style="display: none;">Disconnect</button>
-                                <span class="settings-row-hint" id="googleLoginStatus">Not connected</span>
-                            </div>
-                        </div>
-
-                        <!-- Row 6: date format + auto refresh -->
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Date format</span>
-                                <select id="weeklyDateFormat" class="settings-select">
-                                    <option value="date">Mar 13</option>
-                                    <option value="date-day">Fri Mar 13</option>
-                                    <option value="date-day-time">Fri Mar 13 + time</option>
-                                </select>
-                            </div>
                             <div class="settings-col">
                                 <span class="settings-row-label">Auto-refresh</span>
                                 <select id="refreshInterval" class="settings-select">
@@ -612,13 +463,94 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Critical outline</span>
+                                <span class="tray-color-pair">
+                                    <label class="toggle-switch"><input type="checkbox" id="trayOutlineToggle"><span class="toggle-slider"></span></label>
+                                    <input type="color" id="trayOutlineColor" title="Outline color">
+                                </span>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Font colour</span>
+                                <span class="tray-color-pair">
+                                    <label class="toggle-switch"><input type="checkbox" id="fontColorToggle"><span class="toggle-slider"></span></label>
+                                    <input type="color" id="fontColorPicker" title="Widget text colour">
+                                </span>
+                                <span class="settings-row-hint">Off = theme default</span>
+                            </div>
+                        </div>
+                        <div class="settings-row-2col webhook-row">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Phone alerts</span>
+                                <label class="toggle-switch"><input type="checkbox" id="webhookToggle"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Webhook / ntfy URL</span>
+                                <input type="text" id="webhookUrl" class="settings-select webhook-url" placeholder="https://ntfy.sh/your-topic" spellcheck="false">
+                            </div>
+                        </div>
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Daily digest</span>
+                                <label class="toggle-switch"><input type="checkbox" id="dailyDigestToggle"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="settings-col"></div>
+                        </div>
+
+                        <!-- Per-company settings: one column per provider, login controls lowest -->
+                        <div class="settings-providers">
+                            <div class="provider-col">
+                                <div class="provider-col-title pct-anthropic">Anthropic</div>
+                                <div class="provider-col-body">
+                                    <span class="settings-row-label">Session tray</span>
+                                    <span class="tray-color-pair"><input type="color" id="traySessionBg" title="Background"><input type="color" id="traySessionText" title="Number"></span>
+                                    <span class="settings-row-label">Weekly tray</span>
+                                    <span class="tray-color-pair"><input type="color" id="trayWeeklyBg" title="Background"><input type="color" id="trayWeeklyText" title="Number"></span>
+                                    <span class="settings-row-label">Fable tray</span>
+                                    <span class="tray-color-pair"><input type="color" id="trayFableBg" title="Background"><input type="color" id="trayFableText" title="Number"></span>
+                                    <span class="settings-row-label" title="Rows from your local claude CLI login">CLI account</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="showClaudeCodeToggle"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div class="provider-col-login">
+                                    <button class="logout-btn" id="logoutBtn" title="Clears the widget's own claude.ai login. OpenAI and Google have their own Disconnect buttons.">Log Out</button>
+                                </div>
+                            </div>
+                            <div class="provider-col">
+                                <div class="provider-col-title pct-openai">OpenAI</div>
+                                <div class="provider-col-body">
+                                    <span class="settings-row-label">Codex tray</span>
+                                    <span class="tray-color-pair"><input type="color" id="trayOpenaiBg" title="Background"><input type="color" id="trayOpenaiText" title="Number"></span>
+                                    <span class="settings-row-label" title="Track your codex CLI login's usage">Codex account</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="showCodexToggle"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div class="provider-col-login">
+                                    <span class="settings-row-hint" id="openaiLoginStatus">Not connected</span>
+                                    <button class="settings-connect-btn" id="settingsConnectOpenaiBtn">Connect</button>
+                                    <button class="disconnect-btn" id="disconnectOpenaiBtn" style="display: none;">Disconnect</button>
+                                </div>
+                            </div>
+                            <div class="provider-col">
+                                <div class="provider-col-title pct-google">Google</div>
+                                <div class="provider-col-body">
+                                    <span class="settings-row-label">Gemini tray</span>
+                                    <span class="tray-color-pair"><input type="color" id="trayGoogleBg" title="Background"><input type="color" id="trayGoogleText" title="Number"></span>
+                                    <span class="settings-row-label" title="Track your gemini CLI login's usage">Gemini account</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="showGeminiToggle"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div class="provider-col-login">
+                                    <span class="settings-row-hint" id="googleLoginStatus">Not connected</span>
+                                    <button class="settings-connect-btn" id="settingsConnectGoogleBtn">Connect</button>
+                                    <button class="disconnect-btn" id="disconnectGoogleBtn" style="display: none;">Disconnect</button>
+                                </div>
+                            </div>
+                        </div>
 
                     </div>
 
                     <div class="settings-footer">
                         <span class="settings-version-label" id="settingsVersionLabel">v1.5.0</span>
                         <span class="settings-update-link" id="settingsUpdateLink" style="display: none;"></span>
-                        <button class="logout-btn" id="logoutBtn" title="Clears the widget's own claude.ai login. Codex and Gemini use your CLI logins — flip their account toggles to disconnect them without logging the CLIs out.">Log Out (Anthropic)</button>
                         <button class="github-btn" id="githubBtn">
                             <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
