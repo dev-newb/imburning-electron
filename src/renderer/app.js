@@ -1234,6 +1234,11 @@ function applySqueezeClasses() {
     document.body.classList.toggle('vh-1', on && h < 520);
     document.body.classList.toggle('vh-2', on && h < 430);
     document.body.classList.toggle('vh-3', on && h < 340);
+    // Tall mode: scale 0→1 between 820px and 1320px of height — sections
+    // spread, text grows, and the wordmarks eat the extra vertical space
+    const tall = on ? Math.min(Math.max((h - 820) / 500, 0), 1) : 0;
+    document.body.classList.toggle('tall', tall > 0);
+    document.body.style.setProperty('--tall', tall.toFixed(3));
 }
 
 if (window.electronAPI.onWindowUserSized) {

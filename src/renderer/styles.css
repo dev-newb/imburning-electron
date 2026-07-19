@@ -2444,3 +2444,49 @@ body.vh-2 .subheading-row { padding-top: 0; }
 body.vh-3 .graph-section { display: none !important; }
 body.vh-3 .section-header { padding-top: 1px; padding-bottom: 0; }
 body.vh-3 .section-name { font-size: 15px; }
+
+/* =================== Tall mode =================== */
+/* When the user stretches the window taller than the widget needs, fill the
+   space instead of leaving a void: sections spread out evenly, text scales
+   up, and the company wordmarks grow progressively with height. Driven by
+   --tall (0..1), set by the renderer ONLY while the window is user-sized —
+   same anti-spiral gating as the squeeze classes. */
+
+body.tall .content {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    overflow-y: auto;
+    flex: 1;
+}
+
+body.tall .usage-percentage { width: auto; min-width: 38px; }
+body.tall .progress-bar { min-width: 56px; }
+
+body.tall .section-name { font-size: calc(24px + var(--tall, 0) * 32px); }
+body.tall .section-header { padding-top: calc(4px + var(--tall, 0) * 10px); padding-bottom: calc(2px + var(--tall, 0) * 8px); }
+body.tall .provider-section { margin-bottom: calc(12px + var(--tall, 0) * 30px); }
+
+body.tall .usage-label { font-size: calc(11px + var(--tall, 0) * 4px); }
+body.tall .usage-percentage { font-size: calc(12px + var(--tall, 0) * 5px); }
+body.tall .timer-text:not(.extra-balance-label) { font-size: calc(11px + var(--tall, 0) * 4px); }
+body.tall .extra-balance-label, body.tall .extra-balance-amount { font-size: calc(11px + var(--tall, 0) * 3px); }
+body.tall .resets-at-text { font-size: calc(10px + var(--tall, 0) * 4px); }
+body.tall .col-header { font-size: calc(9px + var(--tall, 0) * 1.5px); }
+body.tall .plan-note { font-size: calc(10px + var(--tall, 0) * 3px); }
+body.tall .subheading { font-size: calc(9px + var(--tall, 0) * 3px); }
+body.tall .usage-section { height: calc(32px + var(--tall, 0) * 18px); margin-bottom: calc(2px + var(--tall, 0) * 6px); }
+body.tall .progress-bar { height: calc(7px + var(--tall, 0) * 5px); }
+body.tall .usage-elapsed-group svg.mini-timer {
+    width: calc(24px + var(--tall, 0) * 12px);
+    height: calc(24px + var(--tall, 0) * 12px);
+}
+
+/* Wider columns for the bigger type — but never while the narrow ladder is
+   active (it owns the grid below 540px) */
+@media (min-width: 541px) {
+    body.tall .usage-section,
+    body.tall .usage-headers {
+        grid-template-columns: calc(115px + var(--tall, 0) * 28px) minmax(0, 1fr) calc(36px + var(--tall, 0) * 10px) calc(72px + var(--tall, 0) * 12px) calc(68px + var(--tall, 0) * 10px);
+    }
+}
