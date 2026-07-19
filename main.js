@@ -622,40 +622,60 @@ function clearOAuthTokens(provider) {
   store.delete(`oauth_${provider}`);
 }
 
-// Wait for the OAuth redirect on a local HTTP server. port 0 = ephemeral.
+// Wait for the OAuth redirect. Two servers on the SAME port — one on
+// 127.0.0.1, one on ::1 — so both localhost stacks reach us WITHOUT binding a
+// wildcard address (wildcard binds trigger the Windows Firewall prompt;
+// loopback-only binds do not).
 function startOAuthCallbackServer(port, pathName, state) {
   const http = require('http');
   return new Promise((resolveListen, rejectListen) => {
     let settled = false;
-    const server = http.createServer((req, res) => {
+    const servers = [];
+    const emitter = new (require('events').EventEmitter)();
+    const closeAll = () => { for (const s of servers) { try { s.close(); } catch (_) {} } };
+
+    const handler = (req, res) => {
       let u;
       try { u = new URL(req.url, 'http://127.0.0.1'); } catch { res.writeHead(400); res.end(); return; }
       if (u.pathname !== pathName) { res.writeHead(404); res.end('Not found'); return; }
       const code = u.searchParams.get('code');
       const gotState = u.searchParams.get('state');
       const error = u.searchParams.get('error');
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<html><body style="font-family:sans-serif;background:#1e1e2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh"><div style="text-align:center"><h2>Burnwatch connected ✓</h2><p>You can close this tab and return to the widget.</p></div></body></html>');
-      setTimeout(() => { try { server.close(); } catch (_) {} }, 500);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<html><meta charset="utf-8"><body style="font-family:sans-serif;background:#1e1e2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh"><div style="text-align:center"><h2>Burnwatch connected ✓</h2><p>You can close this tab and return to the widget.</p></div></body></html>');
+      setTimeout(closeAll, 500);
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (error) server.emit('oauth-result', { error: new Error(`Login refused: ${error}`) });
-      else if (!code || gotState !== state) server.emit('oauth-result', { error: new Error('Invalid OAuth callback') });
-      else server.emit('oauth-result', { code });
-    });
+      if (error) emitter.emit('oauth-result', { error: new Error(`Login refused: ${error}`) });
+      else if (!code || gotState !== state) emitter.emit('oauth-result', { error: new Error('Invalid OAuth callback') });
+      else emitter.emit('oauth-result', { code });
+    };
+
     const timer = setTimeout(() => {
-      if (!settled) { settled = true; try { server.close(); } catch (_) {} server.emit('oauth-result', { error: new Error('Login timed out (5 minutes)') }); }
+      if (!settled) { settled = true; closeAll(); emitter.emit('oauth-result', { error: new Error('Login timed out (5 minutes)') }); }
     }, 5 * 60 * 1000);
-    server.on('error', (err) => { clearTimeout(timer); rejectListen(new Error(`Callback port busy: ${err.message}`)); });
-    // Bind without a host so both localhost stacks (::1 and 127.0.0.1) reach
-    // us — browsers resolve "localhost" to IPv6 first on many systems.
-    server.listen(port, () => {
-      debugLog('[OAuth] Callback server listening on', server.address().port);
+
+    const v4 = http.createServer(handler);
+    servers.push(v4);
+    v4.on('error', (err) => { clearTimeout(timer); rejectListen(new Error(`Callback port busy: ${err.message}`)); });
+    v4.listen(port, '127.0.0.1', () => {
+      const boundPort = v4.address().port;
+      // Best-effort IPv6 loopback twin on the same port; failure is fine
+      // (the browser falls back to 127.0.0.1)
+      try {
+        const v6 = http.createServer(handler);
+        servers.push(v6);
+        v6.on('error', (err) => debugLog('[OAuth] ::1 twin bind skipped:', err.message));
+        v6.listen(boundPort, '::1');
+      } catch (err) {
+        debugLog('[OAuth] ::1 twin bind failed:', err.message);
+      }
+      debugLog('[OAuth] Callback server listening on', boundPort, '(loopback only)');
       const codePromise = new Promise((resolve, reject) => {
-        server.once('oauth-result', (r) => r.error ? reject(r.error) : resolve(r.code));
+        emitter.once('oauth-result', (r) => r.error ? reject(r.error) : resolve(r.code));
       });
-      resolveListen({ port: server.address().port, codePromise });
+      resolveListen({ port: boundPort, codePromise });
     });
   });
 }
@@ -818,6 +838,12 @@ function cachedProviderFetch(key, fetchFn) {
     const previous = entry?.data || null;
     _providerCache[key] = { at: Date.now(), data: data || previous };
     return _providerCache[key].data;
+  }).catch((err) => {
+    // A provider blowing up must never take the whole fetch down with it
+    debugLog(`[Provider:${key}] fetch threw:`, err.message);
+    const previous = entry?.data || null;
+    _providerCache[key] = { at: Date.now(), data: previous };
+    return previous;
   });
 }
 
@@ -1112,7 +1138,11 @@ function checkBurnAnomalies() {
     { key: 'session', label: 'Anthropic — Session', pick: (e) => e.session },
     { key: 'weekly', label: 'Anthropic — Weekly (all models)', pick: (e) => e.weekly },
     { key: 'codex', label: 'OpenAI — Codex weekly', pick: (e) => e.codex },
-    { key: 'gemini', label: 'Google — Gemini daily', pick: (e) => e.gemini }
+    { key: 'gemini', label: 'Google — Gemini daily', pick: (e) => e.gemini },
+    // Dual-mode second accounts burn independently — watch them too
+    { key: 'codexCli', label: 'OpenAI — Codex weekly (CLI account)', pick: (e) => e.codexCli },
+    { key: 'geminiCli', label: 'Google — Gemini daily (CLI account)', pick: (e) => e.geminiCli },
+    { key: 'claudeCli', label: 'Anthropic — Weekly (CLI account)', pick: (e) => e.claudeCli }
   ];
   const slugs = new Set();
   for (const entry of history) {
@@ -1215,6 +1245,14 @@ function storeUsageHistory(data) {
   const geminiPct = (data.gemini?.limits || []).reduce(
     (worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
 
+  // Dual-mode second accounts (CLI logins on different accounts) get their
+  // own history series so both pools are genuinely tracked
+  const codexCliPct = data.codex?.cli?.limits?.[0]?.percent;
+  const geminiCliPct = (data.gemini?.cli?.limits || []).reduce(
+    (worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
+  const claudeCliPct = (data.claude_code && data.claude_code_same_account === false)
+    ? data.claude_code.seven_day?.utilization : null;
+
   history.push({
     timestamp,
     session: data.five_hour?.utilization || 0,
@@ -1227,7 +1265,10 @@ function storeUsageHistory(data) {
     extraUsage: data.extra_usage?.utilization || 0,
     ...(Object.keys(scoped).length ? { scoped } : {}),
     ...(codexPct != null ? { codex: codexPct } : {}),
-    ...(geminiPct != null ? { gemini: geminiPct } : {})
+    ...(geminiPct != null ? { gemini: geminiPct } : {}),
+    ...(codexCliPct != null ? { codexCli: codexCliPct } : {}),
+    ...(geminiCliPct != null ? { geminiCli: geminiCliPct } : {}),
+    ...(claudeCliPct != null ? { claudeCli: claudeCliPct } : {})
   });
 
   // Rotation: apply both time-based and count-based limits
