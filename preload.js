@@ -4,7 +4,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 const ALLOWED_EXTERNAL_DOMAINS = [
   'claude.ai',
   'github.com',
-  'paypal.me'
+  'paypal.me',
+  'buymeacoffee.com'
 ];
 
 function isAllowedExternalUrl(url) {
