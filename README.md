@@ -66,6 +66,10 @@ If the `claude` CLI (Claude Code) is installed on the same machine, the widget a
 
 > Note this is specifically the **CLI's** login: the Claude Code desktop app keeps its own separate session, which the widget can't read.
 
+### 🔥 Desktop / CLI Subgroups (burn them away)
+
+When a provider is tracking **two accounts** — your primary sign-in plus a different account in that company's CLI — the section splits under **Desktop** and **CLI** subheadings so it's obvious which rows belong to which login. Each subheading is clickable: a line of pixel fire sweeps across it right-to-left, **charring the letters** and rolling that subgroup's rows up out of view. Click the charred heading again and the fire sweeps back, un-burning the letters and revealing the rows. Hide either group, or both — the choice persists across restarts (headings stay charred). Merged accounts show no subheadings; there's only one set of numbers to show.
+
 ### 📈 Burn-rate Forecast
 
 Using the last few hours of collected history, the widget projects when your Weekly and Fable limits will hit 100% at the current pace. The forecast appears in the tray tooltips and as a hover tooltip on the Weekly and Fable rows. Forecasts only show when there's a meaningful upward trend and the projected time is within the next 7 days.

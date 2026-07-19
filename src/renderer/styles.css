@@ -2115,3 +2115,150 @@ body.theme-light .compact-pct {
 .progress-fill.pulse {
     animation: pulse-danger 1.2s ease-in-out infinite;
 }
+
+/* ---- Desktop / CLI subgroups with burnable subheadings ---- */
+
+.subheading-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 16px 0;
+}
+
+.subheading {
+    position: relative;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 1px 16px 1px 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #6b6b80;
+    display: inline-flex;
+    line-height: 1.5;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+}
+
+.subheading:hover { opacity: 1; }
+
+body.theme-light .subheading { color: #8a8aa0; }
+
+/* Letters char in place as the fire line passes over them */
+.subheading.burning .sub-letter {
+    animation: charLetter 0.3s both;
+    animation-delay: var(--burn-d);
+}
+
+.subheading.unburning .sub-letter {
+    animation: healLetter 0.3s both;
+    animation-delay: var(--heal-d);
+}
+
+.subheading.burnt .sub-letter {
+    color: #55483c;
+    opacity: 0.5;
+    transform: translateY(1px) rotate(var(--rot));
+}
+
+@keyframes charLetter {
+    0% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
+    35% {
+        color: #ffb257;
+        opacity: 1;
+        text-shadow: 0 0 6px rgba(255, 120, 20, 0.9), 0 0 2px rgba(255, 220, 120, 0.9);
+    }
+    100% {
+        color: #55483c;
+        opacity: 0.5;
+        transform: translateY(1px) rotate(var(--rot));
+        text-shadow: none;
+    }
+}
+
+@keyframes healLetter {
+    0% { color: #55483c; opacity: 0.5; transform: translateY(1px) rotate(var(--rot)); }
+    45% { color: #ffb257; opacity: 1; text-shadow: 0 0 6px rgba(255, 150, 40, 0.8); }
+    100% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
+}
+
+/* The travelling pixel flame — a 2px cell fanned out into a flame shape
+   with box-shadows, two flicker frames, swept across the subheading */
+.fire-line {
+    position: absolute;
+    top: -4px;
+    left: calc(100% - 6px);
+    width: 2px;
+    height: 2px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.subheading.burning .fire-line {
+    opacity: 1;
+    animation: fireSweepL 0.9s linear both, fireFlicker 0.14s steps(1) infinite;
+}
+
+.subheading.unburning .fire-line {
+    opacity: 1;
+    animation: fireSweepR 0.9s linear both, fireFlicker 0.14s steps(1) infinite;
+}
+
+@keyframes fireSweepL {
+    from { left: calc(100% - 6px); }
+    to { left: -4px; }
+}
+
+@keyframes fireSweepR {
+    from { left: -4px; }
+    to { left: calc(100% - 6px); }
+}
+
+@keyframes fireFlicker {
+    0%, 100% {
+        box-shadow:
+            0px 0px 0 0 #ff922b,
+            0px 2px 0 0 #ffd43b,
+            -2px 4px 0 0 #ff922b, 0px 4px 0 0 #ffd43b, 2px 4px 0 0 #ff922b,
+            -2px 6px 0 0 #ff922b, 0px 6px 0 0 #fff3bf, 2px 6px 0 0 #ffd43b,
+            -4px 8px 0 0 #e8590c, -2px 8px 0 0 #ffd43b, 0px 8px 0 0 #fff3bf, 2px 8px 0 0 #ffd43b, 4px 8px 0 0 #e8590c,
+            -4px 10px 0 0 #e8590c, -2px 10px 0 0 #ff922b, 0px 10px 0 0 #ffd43b, 2px 10px 0 0 #ff922b, 4px 10px 0 0 #e8590c,
+            -2px 12px 0 0 #e8590c, 0px 12px 0 0 #ff922b, 2px 12px 0 0 #e8590c;
+    }
+    50% {
+        box-shadow:
+            2px 0px 0 0 #ffd43b,
+            0px 2px 0 0 #ff922b, 2px 2px 0 0 #ffd43b,
+            -2px 4px 0 0 #ffd43b, 0px 4px 0 0 #fff3bf, 2px 4px 0 0 #ff922b,
+            -2px 6px 0 0 #ff922b, 0px 6px 0 0 #ffd43b, 2px 6px 0 0 #fff3bf, 4px 6px 0 0 #ff922b,
+            -4px 8px 0 0 #e8590c, -2px 8px 0 0 #ff922b, 0px 8px 0 0 #fff3bf, 2px 8px 0 0 #ffd43b, 4px 8px 0 0 #e8590c,
+            -4px 10px 0 0 #e8590c, -2px 10px 0 0 #ffd43b, 0px 10px 0 0 #ff922b, 2px 10px 0 0 #ff922b, 4px 10px 0 0 #e8590c,
+            -2px 12px 0 0 #e8590c, 0px 12px 0 0 #e8590c, 2px 12px 0 0 #e8590c;
+    }
+}
+
+/* Roll-up/down of the subgroup body — fr-unit grid transition, no JS measuring.
+   Hiding waits 0.3s so the fire clearly leads; revealing starts immediately
+   while the letters heal. */
+.subgroup-roll {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.55s ease;
+}
+
+.subgroup.hidden-group .subgroup-roll {
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.55s ease 0.3s;
+}
+
+.subgroup-inner { min-height: 0; }
+
+/* Clip only while animating or hidden — sparkles and glows fly free otherwise */
+.subgroup.hidden-group .subgroup-inner,
+.subgroup.rolling .subgroup-inner { overflow: hidden; }
+
+.subgroup.no-anim .subgroup-roll { transition: none !important; }
+.subgroup.no-anim .sub-letter { animation: none !important; }

@@ -65,6 +65,9 @@ const elements = {
     expandSection: document.getElementById('expandSection'),
     extraRows: document.getElementById('extraRows'),
     scopedRows: document.getElementById('scopedRows'),
+    anthropicCliRows: document.getElementById('anthropicCliRows'),
+    openaiCliRows: document.getElementById('openaiCliRows'),
+    googleCliRows: document.getElementById('googleCliRows'),
     titleBar: document.getElementById('titleBar'),
     headerAnthropic: document.getElementById('headerAnthropic'),
     bodyAnthropic: document.getElementById('bodyAnthropic'),
@@ -210,6 +213,7 @@ async function handleOrgChange() {
 // Initialize
 async function init() {
     setupEventListeners();
+    initSubheadings();
     credentials = await window.electronAPI.getCredentials();
 
     // Apply saved theme and load thresholds immediately
@@ -807,7 +811,8 @@ function buildExtraRows(data) {
     
     // Only rebuild if we have data, otherwise keep existing rows
     const existingRows = elements.extraRows.children.length + elements.scopedRows.children.length
-        + elements.openaiRows.children.length + elements.openaiExtraRows.children.length + elements.googleRows.children.length;
+        + elements.openaiRows.children.length + elements.openaiExtraRows.children.length + elements.googleRows.children.length
+        + elements.anthropicCliRows.children.length + elements.openaiCliRows.children.length + elements.googleCliRows.children.length;
     if (!hasAnyExtendedData && existingRows > 0) {
         return; // Keep existing rows
     }
@@ -817,6 +822,9 @@ function buildExtraRows(data) {
     elements.openaiRows.innerHTML = '';
     elements.openaiExtraRows.innerHTML = '';
     elements.googleRows.innerHTML = '';
+    elements.anthropicCliRows.innerHTML = '';
+    elements.openaiCliRows.innerHTML = '';
+    elements.googleCliRows.innerHTML = '';
     let count = 0;
 
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
@@ -983,8 +991,20 @@ function buildExtraRows(data) {
                 row.title = `At the current pace, 100% by ${formatResetsAt(forecastAt, true, settings.timeFormat || '12h', 'date-day-time')}`;
             }
             elements.scopedRows.appendChild(row);
+        } else if (key.startsWith('cc_')) {
+            // Second-account rows live under their own burnable "CLI"
+            // subheading; the subheading names the group, so drop the
+            // now-redundant "CLI " label prefix
+            label.textContent = config.label.replace(/^CLI /, '');
+            elements.anthropicCliRows.appendChild(row);
+        } else if (key.startsWith('codex_cli_')) {
+            label.textContent = config.label.replace(/^CLI /, '');
+            elements.openaiCliRows.appendChild(row);
         } else if (key.startsWith('codex_')) {
             elements.openaiRows.appendChild(row);
+        } else if (key.startsWith('gemini_cli_')) {
+            label.textContent = config.label.replace(/^CLI /, '');
+            elements.googleCliRows.appendChild(row);
         } else if (key.startsWith('gemini_')) {
             elements.googleRows.appendChild(row);
         } else {
@@ -1102,7 +1122,99 @@ function buildExtraRows(data) {
         elements.expandSection.style.display = 'none';
     }
 
+    applySubgroups();
+
     return count;
+}
+
+// ---- Desktop / CLI subgroups with burnable subheadings ----
+// In dual mode (CLI logged into a different account than the primary sign-in)
+// each provider splits into "Desktop" and "CLI" subgroups. Clicking a
+// subheading sends a line of fire across it right-to-left, charring the
+// letters and rolling the rows up; clicking again reverses the burn.
+const SUBGROUP_SWEEP_MS = 900;
+
+const SUBGROUP_PROVIDERS = [
+    { key: 'anthropic', cliRows: 'anthropicCliRows', desk: 'sgAnthropicDesktop', cli: 'sgAnthropicCli' },
+    { key: 'openai', cliRows: 'openaiCliRows', desk: 'sgOpenaiDesktop', cli: 'sgOpenaiCli' },
+    { key: 'google', cliRows: 'googleCliRows', desk: 'sgGoogleDesktop', cli: 'sgGoogleCli' }
+];
+
+function initSubheadings() {
+    document.querySelectorAll('.subheading').forEach((btn) => {
+        const letters = [...(btn.dataset.label || '')];
+        btn.textContent = '';
+        // Letters char in the order the flame reaches them (right to left);
+        // healing runs the opposite way
+        const span = Math.max(SUBGROUP_SWEEP_MS - 300, 100);
+        letters.forEach((ch, i) => {
+            const s = document.createElement('span');
+            s.className = 'sub-letter';
+            s.textContent = ch;
+            s.style.setProperty('--burn-d', `${Math.round(((letters.length - 1 - i) / letters.length) * span)}ms`);
+            s.style.setProperty('--heal-d', `${Math.round((i / letters.length) * span)}ms`);
+            s.style.setProperty('--rot', `${((i * 37) % 7) - 3}deg`);
+            btn.appendChild(s);
+        });
+        const flame = document.createElement('span');
+        flame.className = 'fire-line';
+        btn.appendChild(flame);
+        btn.addEventListener('click', () => onSubheadingClick(btn));
+    });
+}
+
+async function onSubheadingClick(btn) {
+    if (btn.dataset.animating) return;
+    const group = btn.closest('.subgroup');
+    if (!group) return;
+    const nowHidden = !group.classList.contains('hidden-group');
+    btn.dataset.animating = '1';
+    btn.classList.remove('burnt', 'burning', 'unburning');
+    void btn.offsetWidth; // restart letter animations from a clean slate
+    btn.classList.add(nowHidden ? 'burning' : 'unburning');
+    group.classList.add('rolling');
+    group.classList.toggle('hidden-group', nowHidden);
+    setTimeout(() => {
+        btn.classList.remove('burning', 'unburning');
+        btn.classList.toggle('burnt', nowHidden);
+        delete btn.dataset.animating;
+        group.classList.remove('rolling');
+        if (!isCompactMode) resizeWidget();
+    }, SUBGROUP_SWEEP_MS + 300);
+    const settings = window._cachedSettings || {};
+    const subgroupHidden = { ...(settings.subgroupHidden || {}), [btn.dataset.key]: nowHidden };
+    await _saveSettingsPatch({ subgroupHidden });
+}
+
+function applySubgroups() {
+    const hiddenMap = (window._cachedSettings || {}).subgroupHidden || {};
+    for (const p of SUBGROUP_PROVIDERS) {
+        const dual = elements[p.cliRows] && elements[p.cliRows].children.length > 0;
+        const desk = document.getElementById(p.desk);
+        const cli = document.getElementById(p.cli);
+        if (!desk || !cli) continue;
+        cli.style.display = dual ? '' : 'none';
+        const deskHead = desk.querySelector('.subheading-row');
+        if (deskHead) deskHead.style.display = dual ? '' : 'none';
+        // Without a CLI twin there are no subheadings to click, so nothing
+        // may stay burnt away — force both groups visible (the stored state
+        // is kept for when dual mode returns)
+        setSubgroupState(desk, dual && !!hiddenMap[p.key + '_desktop']);
+        setSubgroupState(cli, dual && !!hiddenMap[p.key + '_cli']);
+    }
+}
+
+function setSubgroupState(group, hidden) {
+    const btn = group.querySelector('.subheading');
+    if (btn && btn.dataset.animating) return; // never fight a live burn
+    if (group.classList.contains('hidden-group') === hidden) return;
+    group.classList.add('no-anim');
+    group.classList.toggle('hidden-group', hidden);
+    if (btn) {
+        btn.classList.remove('burning', 'unburning');
+        btn.classList.toggle('burnt', hidden);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => group.classList.remove('no-anim')));
 }
 
 function refreshExtraTimers() {
@@ -1111,7 +1223,8 @@ function refreshExtraTimers() {
     // but no circle (the extra_usage row), leaving every later row's timer
     // stuck at --:--.
     // Covers the pinned scoped rows, the expandable panel, and provider sections.
-    for (const container of [elements.scopedRows, elements.extraRows, elements.openaiRows, elements.googleRows]) {
+    for (const container of [elements.scopedRows, elements.extraRows, elements.openaiRows, elements.googleRows,
+        elements.anthropicCliRows, elements.openaiCliRows, elements.googleCliRows]) {
         container.querySelectorAll('.usage-section').forEach((row) => {
             const textEl = row.querySelector('.timer-text');
             const circleEl = row.querySelector('.timer-progress');

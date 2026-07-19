@@ -2436,7 +2436,8 @@ ipcMain.handle('get-settings', () => {
     showGemini: store.get('settings.showGemini', true),
     trayOpenai: store.get('settings.trayOpenai', false),
     trayGoogle: store.get('settings.trayGoogle', false),
-    sectionCollapsed: store.get('settings.sectionCollapsed', {})
+    sectionCollapsed: store.get('settings.sectionCollapsed', {}),
+    subgroupHidden: store.get('settings.subgroupHidden', {})
   };
 });
 
@@ -2476,6 +2477,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.trayOpenai !== undefined) store.set('settings.trayOpenai', settings.trayOpenai === true);
   if (settings.trayGoogle !== undefined) store.set('settings.trayGoogle', settings.trayGoogle === true);
   if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
+  if (settings.subgroupHidden !== undefined) store.set('settings.subgroupHidden', settings.subgroupHidden || {});
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 

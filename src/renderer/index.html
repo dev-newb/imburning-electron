@@ -142,6 +142,11 @@
                             <span class="col-header col-header-center">Resets At</span>
                         </div>
 
+                        <!-- Desktop subgroup (subheading appears only when a CLI twin exists) -->
+                        <div class="subgroup" id="sgAnthropicDesktop">
+                            <div class="subheading-row" style="display: none;"><button class="subheading" data-key="anthropic_desktop" data-label="Desktop"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+
                 <!-- Session Usage -->
                 <div class="usage-section">
                     <span class="usage-label">Current Session</span>
@@ -197,6 +202,16 @@
                         <polyline points="6 9 12 15 18 9" />
                     </svg>
                 </div>
+                            </div></div><!-- /subgroup-roll -->
+                        </div><!-- /sgAnthropicDesktop -->
+
+                        <!-- CLI subgroup (second-account rows; dual mode only) -->
+                        <div class="subgroup" id="sgAnthropicCli" style="display: none;">
+                            <div class="subheading-row"><button class="subheading" data-key="anthropic_cli" data-label="CLI"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+                                <div id="anthropicCliRows"></div>
+                            </div></div>
+                        </div>
 
                         <div class="section-footer">
                             <div class="plan-note" id="planNote" style="display: none;"></div>
@@ -227,14 +242,25 @@
                             <span class="col-header col-header-center">Resets In</span>
                             <span class="col-header col-header-center">Resets At</span>
                         </div>
-                        <div id="openaiRows"></div>
-                        <div class="expand-section" id="openaiExtras">
-                            <div id="openaiExtraRows"></div>
+                        <div class="subgroup" id="sgOpenaiDesktop">
+                            <div class="subheading-row" style="display: none;"><button class="subheading" data-key="openai_desktop" data-label="Desktop"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+                                <div id="openaiRows"></div>
+                                <div class="expand-section" id="openaiExtras">
+                                    <div id="openaiExtraRows"></div>
+                                </div>
+                                <div class="expand-toggle" id="openaiExpandToggle" style="display: none;">
+                                    <svg class="expand-arrow expanded" id="openaiExpandArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                </div>
+                            </div></div>
                         </div>
-                        <div class="expand-toggle" id="openaiExpandToggle" style="display: none;">
-                            <svg class="expand-arrow expanded" id="openaiExpandArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <polyline points="6 9 12 15 18 9" />
-                            </svg>
+                        <div class="subgroup" id="sgOpenaiCli" style="display: none;">
+                            <div class="subheading-row"><button class="subheading" data-key="openai_cli" data-label="CLI"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+                                <div id="openaiCliRows"></div>
+                            </div></div>
                         </div>
                         <div class="section-footer">
                             <div class="plan-note" id="planNoteOpenai" style="display: none;"></div>
@@ -265,7 +291,18 @@
                             <span class="col-header col-header-center">Resets In</span>
                             <span class="col-header col-header-center">Resets At</span>
                         </div>
-                        <div id="googleRows"></div>
+                        <div class="subgroup" id="sgGoogleDesktop">
+                            <div class="subheading-row" style="display: none;"><button class="subheading" data-key="google_desktop" data-label="Desktop"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+                                <div id="googleRows"></div>
+                            </div></div>
+                        </div>
+                        <div class="subgroup" id="sgGoogleCli" style="display: none;">
+                            <div class="subheading-row"><button class="subheading" data-key="google_cli" data-label="CLI"></button></div>
+                            <div class="subgroup-roll"><div class="subgroup-inner">
+                                <div id="googleCliRows"></div>
+                            </div></div>
+                        </div>
                         <div class="section-footer">
                             <div class="plan-note" id="planNoteGoogle" style="display: none;"></div>
                             <span class="section-chip" id="chipGoogle" style="display: none;"></span>
