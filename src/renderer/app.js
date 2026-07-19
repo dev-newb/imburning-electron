@@ -257,7 +257,7 @@ async function init() {
     projectionsVisible = settings.projectionsOn !== false;
     applyPsychicState();
 
-    if (credentials.sessionKey && credentials.organizationId) {
+    if ((credentials.sessionKey && credentials.organizationId) || credentials.cliFallbackAvailable) {
         // Populate org selector if user has multiple orgs
         if (credentials.organizations && credentials.organizations.length > 0) {
             populateOrgSelector(credentials.organizations, credentials.organizationId);
@@ -452,9 +452,15 @@ function setupEventListeners() {
 
     elements.logoutBtn.addEventListener('click', async () => {
         await window.electronAPI.deleteCredentials();
-        credentials = { sessionKey: null, organizationId: null };
+        credentials = await window.electronAPI.getCredentials();
         elements.settingsOverlay.style.display = 'none';
-        showLoginRequired();
+        if (credentials.cliFallbackAvailable) {
+            // The claude CLI login keeps the Anthropic section alive
+            showMainContent();
+            await fetchUsageData({ forceExtended: true });
+        } else {
+            showLoginRequired();
+        }
     });
 
     elements.githubBtn.addEventListener('click', () => {
@@ -731,7 +737,7 @@ async function fetchUsageData(options = {}) {
         return;
     }
 
-    if (!credentials.sessionKey || !credentials.organizationId) {
+    if (!(credentials.sessionKey && credentials.organizationId) && !credentials.cliFallbackAvailable) {
         debugLog('Missing credentials, showing login');
         showLoginRequired();
         return;
@@ -1258,7 +1264,9 @@ function updateUI(data) {
         : null);
     setChip(elements.chipAnthropic, (data.claude_code && data.claude_code_same_account === false)
         ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your claude CLI is logged into a different account - its usage is tracked separately below.' }
-        : null);
+        : (data.anthropic_source === 'cli'
+            ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Reading your claude CLI login. Log in with claude.ai (settings) for full data including Extra Usage and credits.' }
+            : null));
     if (elements.connectRowOpenai) elements.connectRowOpenai.style.display = cxStatus ? 'none' : '';
     if (elements.connectRowGoogle) elements.connectRowGoogle.style.display = gmStatus ? 'none' : '';
 

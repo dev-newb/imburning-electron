@@ -1131,6 +1131,14 @@ body.theme-light .provider-section {
     border-color: rgba(139, 92, 246, 0.55);
 }
 
+/* Anthropic's CLI chip is informational (no OAuth connect there yet) */
+.section-chip.anthropic-cli,
+.section-chip.anthropic-cli:hover {
+    cursor: default;
+    color: #9090a0;
+    border-color: rgba(128, 128, 128, 0.3);
+}
+
 .settings-connect-btn {
     background: rgba(139, 92, 246, 0.12);
     color: #a78bfa;

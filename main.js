@@ -642,7 +642,10 @@ function startOAuthCallbackServer(port, pathName, state) {
       if (!settled) { settled = true; try { server.close(); } catch (_) {} server.emit('oauth-result', { error: new Error('Login timed out (5 minutes)') }); }
     }, 5 * 60 * 1000);
     server.on('error', (err) => { clearTimeout(timer); rejectListen(new Error(`Callback port busy: ${err.message}`)); });
-    server.listen(port, '127.0.0.1', () => {
+    // Bind without a host so both localhost stacks (::1 and 127.0.0.1) reach
+    // us — browsers resolve "localhost" to IPv6 first on many systems.
+    server.listen(port, () => {
+      debugLog('[OAuth] Callback server listening on', server.address().port);
       const codePromise = new Promise((resolve, reject) => {
         server.once('oauth-result', (r) => r.error ? reject(r.error) : resolve(r.code));
       });
@@ -2162,7 +2165,10 @@ ipcMain.handle('get-credentials', () => {
   }
   return {
     sessionKey,
-    organizationId: store.get('organizationId')
+    organizationId: store.get('organizationId'),
+    // A fresh claude CLI login can power the Anthropic section with no
+    // claude.ai web login ("via CLI login" fallback)
+    cliFallbackAvailable: !!readClaudeCodeToken()
   };
 });
 
@@ -2699,7 +2705,40 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   const organizationId = store.get('organizationId');
 
   if (!sessionKey || !organizationId) {
-    throw new Error('Missing credentials');
+    // Anthropic CLI fallback: no claude.ai login, but the claude CLI's local
+    // credentials can power the section — same pattern as OpenAI/Google
+    // ("via CLI login"). Extra Usage / credits need the web login and are
+    // simply absent in this mode.
+    const codexPromiseF = store.get('settings.showCodex', true)
+      ? cachedProviderFetch('codex', fetchCodexUsage) : Promise.resolve(null);
+    const geminiPromiseF = store.get('settings.showGemini', true)
+      ? cachedProviderFetch('gemini', fetchGeminiUsage) : Promise.resolve(null);
+    const cc = readClaudeCodeToken()
+      ? await cachedProviderFetch('claude_code', fetchClaudeCodeUsage) : null;
+    if (!cc || !(cc.five_hour?.resets_at || cc.seven_day?.resets_at)) {
+      throw new Error('Missing credentials');
+    }
+    const data = {
+      five_hour: cc.five_hour,
+      seven_day: cc.seven_day,
+      limits: cc.limits || [],
+      anthropic_source: 'cli',
+      claude_code_same_account: true // the CLI IS the primary source here
+    };
+    const codexF = await codexPromiseF;
+    if (codexF) data.codex = codexF;
+    const geminiF = await geminiPromiseF;
+    if (geminiF) data.gemini = geminiF;
+
+    storeUsageHistory(data); // no organizationId → legacy 'usageHistory' key
+    data.forecasts = computeForecasts();
+    data.sessionPlans = computeSessionPlans();
+    data.frozenProviders = computeFrozenProviders(data);
+    checkBurnAnomalies();
+    checkDailyDigest(data);
+    store.set('latestUsageData', data);
+    updateTrayIcon(data);
+    return data;
   }
 
   // Kick off the Claude Code (CLI) and Codex account fetches concurrently
