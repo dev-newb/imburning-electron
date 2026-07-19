@@ -2960,3 +2960,8 @@ body.theme-light {
     0% { transform: translate(0, 0) scale(1); opacity: 1; }
     100% { transform: translate(var(--dx), var(--ry)) scale(0.3); opacity: 0; }
 }
+
+/* Export-history buttons in Settings */
+.export-btns { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.export-btns .settings-connect-btn { padding: 3px 10px; }
+.export-btns .settings-row-hint { font-size: 9px; }

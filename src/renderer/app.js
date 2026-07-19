@@ -484,6 +484,17 @@ function setupEventListeners() {
         window.electronAPI.openExternal('https://buymeacoffee.com/devnewb');
     });
 
+    const exportHistory = async (format) => {
+        const status = document.getElementById('exportStatus');
+        if (status) status.textContent = 'Saving…';
+        try {
+            const r = await window.electronAPI.exportHistory(format);
+            if (status) status.textContent = r.ok ? `Saved ${r.count} rows` : (r.canceled ? '' : (r.error || 'Failed'));
+        } catch (e) { if (status) status.textContent = 'Failed'; }
+    };
+    document.getElementById('exportCsvBtn').addEventListener('click', () => exportHistory('csv'));
+    document.getElementById('exportJsonBtn').addEventListener('click', () => exportHistory('json'));
+
     document.getElementById('creditLink').addEventListener('click', () => {
         window.electronAPI.openExternal('https://github.com/SlavomirDurej');
     });

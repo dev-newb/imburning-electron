@@ -476,7 +476,14 @@
                                 <span class="settings-row-label">Daily digest</span>
                                 <label class="toggle-switch"><input type="checkbox" id="dailyDigestToggle"><span class="toggle-slider"></span></label>
                             </div>
-                            <div class="settings-col"></div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Export history</span>
+                                <span class="export-btns">
+                                    <button class="settings-connect-btn" id="exportCsvBtn" title="Save your recorded usage history as a CSV file">CSV</button>
+                                    <button class="settings-connect-btn" id="exportJsonBtn" title="Save your recorded usage history as a JSON file">JSON</button>
+                                    <span class="settings-row-hint" id="exportStatus"></span>
+                                </span>
+                            </div>
                         </div>
 
                         <!-- Per-company settings: one column per provider, login controls lowest -->

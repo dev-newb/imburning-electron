@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage, dialog } = require('electron');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
@@ -1112,7 +1112,13 @@ function computeForecasts() {
 
   const forecasts = {
     weekly: forecastSeries(series((entry) => entry.weekly)),
-    scoped: {}
+    scoped: {},
+    // Cross-provider: same least-squares projection, from the per-provider
+    // history series storeUsageHistory already records
+    codex: forecastSeries(series((entry) => entry.codex)),
+    gemini: forecastSeries(series((entry) => entry.gemini)),
+    codexCli: forecastSeries(series((entry) => entry.codexCli)),
+    geminiCli: forecastSeries(series((entry) => entry.geminiCli))
   };
   const slugs = new Set();
   for (const entry of recent) {
@@ -2312,6 +2318,8 @@ function syncProviderTray(name, enabled, badge) {
     let tooltip = `${badge.label}: ${Math.round(badge.percent)}%`;
     const resetTime = formatResetTime(badge.resetsAt, timeFormat, true);
     if (resetTime) tooltip += `\nResets: ${resetTime}`;
+    const forecastTime = formatResetTime(badge.forecastAt, timeFormat, true);
+    if (forecastTime && badge.percent < 99) tooltip += `\nAt current pace, 100% by ${forecastTime}`;
     tray.setToolTip(tooltip);
   } catch (error) {
     console.error(`Failed to update ${name} tray icon:`, error);
@@ -2320,6 +2328,7 @@ function syncProviderTray(name, enabled, badge) {
 
 function syncExternalProviderTrays(usageData) {
   const colors = getTrayColorSettings();
+  const fc = usageData?.forecasts || {};
   const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
 
   const trayOpenai = store.get('settings.trayOpenai', false);
@@ -2328,6 +2337,7 @@ function syncExternalProviderTrays(usageData) {
     percent: codexLimit.percent,
     label: 'OpenAI — ' + codexLimit.label,
     resetsAt: codexLimit.resetsAt,
+    forecastAt: fc.codex,
     bg: colors.codex.bg,
     text: colors.codex.text
   });
@@ -2338,6 +2348,7 @@ function syncExternalProviderTrays(usageData) {
     percent: codexCliLimit.percent,
     label: 'OpenAI — ' + codexCliLimit.label + ' (CLI account)',
     resetsAt: codexCliLimit.resetsAt,
+    forecastAt: fc.codexCli,
     bg: colors.codex.bg,
     text: colors.codex.text,
     cli: true
@@ -2349,6 +2360,7 @@ function syncExternalProviderTrays(usageData) {
     percent: worstGemini.percent,
     label: 'Google — ' + worstGemini.label,
     resetsAt: worstGemini.resetsAt,
+    forecastAt: fc.gemini,
     bg: colors.gemini.bg,
     text: colors.gemini.text
   });
@@ -2357,6 +2369,7 @@ function syncExternalProviderTrays(usageData) {
     percent: worstGeminiCli.percent,
     label: 'Google — ' + worstGeminiCli.label + ' (CLI account)',
     resetsAt: worstGeminiCli.resetsAt,
+    forecastAt: fc.geminiCli,
     bg: colors.gemini.bg,
     text: colors.gemini.text,
     cli: true
@@ -2740,6 +2753,47 @@ ipcMain.handle('get-usage-history', () => {
   return history
     .filter((entry) => entry.timestamp > cutoff)
     .sort((a, b) => a.timestamp - b.timestamp);
+});
+
+// Export the usage history to a CSV or JSON file the user chooses. This is a
+// user-initiated local file save (dialog), never a network upload.
+ipcMain.handle('export-history', async (event, format) => {
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const history = (store.get(historyKey, []) || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  if (!history.length) return { ok: false, error: 'No usage history recorded yet.' };
+
+  const stamp = new Date(history[history.length - 1].timestamp);
+  const dateTag = `${stamp.getFullYear()}-${String(stamp.getMonth() + 1).padStart(2, '0')}-${String(stamp.getDate()).padStart(2, '0')}`;
+  const ext = format === 'json' ? 'json' : 'csv';
+  const res = await dialog.showSaveDialog(mainWindow || undefined, {
+    title: 'Export Burnwatch usage history',
+    defaultPath: `burnwatch-usage-${dateTag}.${ext}`,
+    filters: [ext === 'json' ? { name: 'JSON', extensions: ['json'] } : { name: 'CSV', extensions: ['csv'] }]
+  });
+  if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+
+  try {
+    if (ext === 'json') {
+      fs.writeFileSync(res.filePath, JSON.stringify(history, null, 2));
+    } else {
+      // Union of all keys across entries (scoped is a nested map — flatten it)
+      const flat = history.map((e) => {
+        const { scoped, ...rest } = e;
+        const row = { ...rest };
+        for (const k of Object.keys(scoped || {})) row['scoped_' + k] = scoped[k];
+        row.timestamp_iso = new Date(e.timestamp).toISOString();
+        return row;
+      });
+      const cols = Array.from(flat.reduce((set, r) => { Object.keys(r).forEach((k) => set.add(k)); return set; }, new Set()));
+      const esc = (v) => v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+      const csv = [cols.join(','), ...flat.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+      fs.writeFileSync(res.filePath, csv);
+    }
+    return { ok: true, path: res.filePath, count: history.length };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // Show a native OS desktop notification (Windows toast, macOS NC, Linux libnotify)
