@@ -526,7 +526,7 @@ body.theme-light .graph-btn.active {
 
 .usage-section {
     display: grid;
-    grid-template-columns: 115px minmax(0, 160px) 36px 72px 68px;
+    grid-template-columns: 128px minmax(0, 160px) 36px 72px 68px;
     align-items: center;
     gap: 10px;
     margin-bottom: 2px;
@@ -536,7 +536,7 @@ body.theme-light .graph-btn.active {
 
 .usage-headers {
     display: grid;
-    grid-template-columns: 115px minmax(0, 160px) 36px 72px 68px;
+    grid-template-columns: 128px minmax(0, 160px) 36px 72px 68px;
     align-items: center;
     gap: 10px;
     padding: 0 16px 0 12px;
@@ -2391,67 +2391,57 @@ body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
    headings, then row labels (last text), then Resets-In becomes a ring,
    then Resets-At (redundant with Resets-In) disappears entirely. */
 
-@media (max-width: 540px) {
-    .usage-section, .usage-headers { grid-template-columns: minmax(0, 1fr) 44px 36px 72px 68px; }
-    .progress-bar { display: none; }
-    .usage-bar-group { justify-content: flex-end; }
-    .compact-collapse-btn { display: none !important; }
-    /* Header text no longer fits its shrunken columns */
-    .usage-headers { display: none !important; }
-}
+/* Band classes are computed by applySqueezeClasses from the EFFECTIVE width
+   (window width, or window/3 in landscape's three-column layout) */
+body.sz1 .usage-section, body.sz1 .usage-headers { grid-template-columns: minmax(0, 1fr) 44px 36px 72px 68px; }
+body.sz1 .progress-bar { display: none; }
+body.sz1 .usage-bar-group { justify-content: flex-end; }
+body.sz1 .usage-headers { display: none !important; }
 
 /* Mid band: labels keep their names but windows abbreviate — (daily)->(1D),
    with the meaning in a tooltip (set by applyLabelMode, abbreviated only) */
-@media (max-width: 540px) and (min-width: 451px) {
-    .usage-label, .expand-section .usage-label { font-size: 0; }
-    .usage-label > * { display: none; }
-    .usage-label::after {
-        content: attr(data-abbr);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        color: inherit;
-    }
+body.lbl-abbr .usage-label, body.lbl-abbr .expand-section .usage-label { font-size: 0; }
+body.lbl-abbr .usage-label > * { display: none; }
+body.lbl-abbr .usage-label::after {
+    content: attr(data-abbr);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: inherit;
 }
 
-@media (max-width: 450px) {
-    /* Row labels compress to short colour-matched codes (full name in tooltip) */
-    .usage-label, .expand-section .usage-label { font-size: 0; }
-    .usage-label > * { display: none; }
-    .usage-label::after {
-        content: attr(data-code);
-        font-size: 9px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        color: var(--row-col, #8b8fa3);
-    }
-    .credits-approx { display: none; }
-    .extra-balance-label, .extra-balance-amount { display: none; }
-    .usage-section { grid-template-columns: 36px 44px 36px 72px 68px; justify-content: start; gap: clamp(4px, 2.4vw, 10px); }
-    .usage-bar-group { justify-content: flex-end; }
+/* Row labels compress to short colour-matched codes (full name in tooltip) */
+body.lbl-code .usage-label, body.lbl-code .expand-section .usage-label { font-size: 0; }
+body.lbl-code .usage-label > * { display: none; }
+body.lbl-code .usage-label::after {
+    content: attr(data-code);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--row-col, #8b8fa3);
+}
+body.lbl-code .credits-approx { display: none; }
+body.lbl-code .extra-balance-label, body.lbl-code .extra-balance-amount { display: none; }
+body.lbl-code .usage-section { grid-template-columns: 36px 44px 36px 72px 68px; justify-content: start; gap: clamp(4px, 2.4vw, 10px); }
+body.lbl-code .usage-bar-group { justify-content: flex-end; }
+
+body.sz3 .usage-section { grid-template-columns: 36px 44px 36px 36px 68px; justify-content: start; gap: clamp(3px, 2vw, 8px); }
+/* Resets-In text becomes a remaining-time ring (same family as Elapsed) */
+body.sz3 .timer-text:not(.extra-balance-label) {
+    font-size: 0 !important;
+    display: flex;
+    justify-content: center;
+}
+body.sz3 .timer-text:not(.extra-balance-label)::before {
+    content: '';
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
 }
 
-@media (max-width: 400px) {
-    .usage-section { grid-template-columns: 36px 44px 36px 36px 68px; justify-content: start; gap: clamp(3px, 2vw, 8px); }
-    /* Resets-In text becomes a remaining-time ring (same family as Elapsed) */
-    .timer-text:not(.extra-balance-label) {
-        font-size: 0 !important;
-        display: flex;
-        justify-content: center;
-    }
-    .timer-text:not(.extra-balance-label)::before {
-        content: '';
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
-    }
-}
-
-@media (max-width: 350px) {
-    .usage-section { grid-template-columns: 36px 44px 36px 36px; justify-content: start; gap: clamp(3px, 1.8vw, 7px); }
-    .resets-at-text { display: none; }
-}
+body.sz4 .usage-section { grid-template-columns: 36px 44px 36px 36px; justify-content: start; gap: clamp(3px, 1.8vw, 7px); }
+body.sz4 .resets-at-text { display: none; }
 
 /* Settings adapts too: provider columns stack, panel scrolls when cramped */
 .settings-content { overflow-y: auto; }
@@ -2525,7 +2515,7 @@ body.tall .progress-bar { min-width: 56px; }
 @media (min-width: 541px) {
     body.tall .usage-section,
     body.tall .usage-headers {
-        grid-template-columns: calc(115px + var(--tall, 0) * 28px) minmax(0, 1fr) calc(36px + var(--tall, 0) * 10px) calc(72px + var(--tall, 0) * 12px) calc(68px + var(--tall, 0) * 10px);
+        grid-template-columns: calc(128px + var(--tall, 0) * 28px) minmax(0, 1fr) calc(36px + var(--tall, 0) * 10px) calc(72px + var(--tall, 0) * 12px) calc(68px + var(--tall, 0) * 10px);
     }
 }
 
@@ -2606,4 +2596,54 @@ body.no-pizazz .section-header.frozen .section-name::after {
 .clown-btn img {
     width: 30px;
     height: 30px;
+}
+
+
+/* ---- Landscape: three company columns side by side ---- */
+body.landscape:not(.compact-mode) .content {
+    max-width: none;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px 14px;
+    align-items: start;
+    overflow-y: auto;
+    padding: 0 10px;
+}
+
+body.landscape .graph-section { grid-column: 1 / -1; }
+body.landscape .compact-collapse-btn { display: none !important; }
+body.landscape .provider-section { margin-bottom: 4px; }
+
+/* Each column keeps its own header row, in short form... */
+body.landscape .usage-headers { display: grid !important; }
+body.landscape .col-header { font-size: 0; }
+body.landscape .col-header::after {
+    content: attr(data-short);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+/* ...unless the window is also very short — then they all go */
+body.landscape.vh-short .usage-headers { display: none !important; }
+
+body.lbl-code .usage-headers { grid-template-columns: 36px 44px 36px 72px 68px; justify-content: start; gap: clamp(4px, 2.4vw, 10px); }
+body.sz3 .usage-headers { grid-template-columns: 36px 44px 36px 36px 68px; justify-content: start; gap: clamp(3px, 2vw, 8px); }
+body.sz4 .usage-headers { grid-template-columns: 36px 44px 36px 36px; justify-content: start; gap: clamp(3px, 1.8vw, 7px); }
+
+/* ---- The CLI subheading IS the second-account pill now ---- */
+.subheading.cli-pill {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 9px;
+    padding: 2px 9px;
+    color: #d97706;
+    font-size: 8px;
+    letter-spacing: 1.2px;
+}
+
+body.theme-light .subheading.cli-pill {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
 }

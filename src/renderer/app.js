@@ -1207,8 +1207,8 @@ function windowTip(label) {
 // Swap row-label verbosity by width band: full names, abbreviated windows
 // ("(daily)" -> "(1D)"), or colour-coded chips. Tooltips carry the meaning
 // only while abbreviated.
-function applyLabelMode() {
-    const w = window.innerWidth;
+function applyLabelMode(effWidth) {
+    const w = effWidth || window.innerWidth;
     const mode = w <= 450 ? 'code' : w <= 540 ? 'abbr' : 'full';
     document.querySelectorAll('.usage-label').forEach((el) => {
         const tip = el.dataset.tip || '';
@@ -1218,7 +1218,6 @@ function applyLabelMode() {
         else el.title = '';
     });
 }
-window.addEventListener('resize', applyLabelMode);
 
 function rowCode(key, label) {
     const clean = String(label || '').replace(/^CLI /, '');
@@ -1329,17 +1328,32 @@ function runPixelSweep(btn, hide) {
 let _windowUserSized = false;
 
 function applySqueezeClasses() {
+    const w = window.innerWidth;
     const h = window.innerHeight;
     const on = _windowUserSized;
-    document.body.classList.toggle('vh-1', on && h < 520);
-    document.body.classList.toggle('vh-2', on && h < 430);
-    document.body.classList.toggle('vh-3', on && h < 340);
+
+    // Landscape: wider than tall with room for three columns — the provider
+    // sections sit side by side and every width band keys on COLUMN width
+    const landscape = on && w > h && w >= 760;
+    document.body.classList.toggle('landscape', landscape);
+    document.body.classList.toggle('vh-short', landscape && h < 420);
+    const eff = landscape ? Math.floor(w / 3) - 10 : w;
+    document.body.classList.toggle('sz1', eff <= 540);
+    document.body.classList.toggle('lbl-abbr', eff <= 540 && eff > 450);
+    document.body.classList.toggle('lbl-code', eff <= 450);
+    document.body.classList.toggle('sz3', eff <= 400);
+    document.body.classList.toggle('sz4', eff <= 350);
+
+    document.body.classList.toggle('vh-1', on && !landscape && h < 520);
+    document.body.classList.toggle('vh-2', on && !landscape && h < 430);
+    document.body.classList.toggle('vh-3', on && !landscape && h < 340);
     // Tall mode: scale 0→1 between 820px and 1600px of height — sections
-    // spread, text grows, and the wordmarks eat the extra vertical space
-    // (CSS caps the wordmarks by window width so they never clip the edge)
-    const tall = on ? Math.min(Math.max((h - 820) / 780, 0), 1) : 0;
+    // spread, text grows, and the wordmarks eat the extra vertical space.
+    // Not in landscape, where the three columns own the layout.
+    const tall = on && !landscape ? Math.min(Math.max((h - 820) / 780, 0), 1) : 0;
     document.body.classList.toggle('tall', tall > 0);
     document.body.style.setProperty('--tall', tall.toFixed(3));
+    applyLabelMode(eff);
 }
 
 if (window.electronAPI.onWindowUserSized) {
@@ -1386,7 +1400,7 @@ function initSubheadings() {
         letters.forEach((ch, i) => {
             const s = document.createElement('span');
             s.className = 'sub-letter';
-            s.textContent = ch;
+            s.textContent = ch === ' ' ? '\u00A0' : ch;
             s.style.setProperty('--burn-d', `${Math.round(((letters.length - 1 - i) / letters.length) * span)}ms`);
             s.style.setProperty('--heal-d', `${Math.round((i / letters.length) * span)}ms`);
             s.style.setProperty('--rot', `${((i * 37) % 7) - 3}deg`);
@@ -1533,12 +1547,12 @@ function normalizeUsageData(data) {
         const ccRows = [];
         if (cc.five_hour?.utilization != null) {
             ccRows.push(['cc_five_hour',
-                { label: 'CLI Session (5h)', color: 'cc' },
+                { label: 'CLI Claude Session (5h)', color: 'cc' },
                 { utilization: cc.five_hour.utilization, resets_at: cc.five_hour.resets_at }]);
         }
         if (cc.seven_day?.utilization != null) {
             ccRows.push(['cc_seven_day',
-                { label: 'CLI All Models (7d)', color: 'weekly' },
+                { label: 'CLI Claude Models (7d)', color: 'weekly' },
                 { utilization: cc.seven_day.utilization, resets_at: cc.seven_day.resets_at }]);
         }
         for (const limit of (cc.limits || [])) {
@@ -1632,21 +1646,26 @@ function updateUI(data) {
     };
     const cxStatus = data.codex;
     const gmStatus = data.gemini;
-    setChip(elements.chipOpenai, cxStatus
-        ? (cxStatus.cli
-            ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your codex CLI (' + (cxStatus.cli.email || 'other account') + ') differs from ' + (cxStatus.email || 'the connected account') + ' - tracked separately below.' }
-            : (!cxStatus.connected ? { cls: 'cli', text: 'via CLI login', title: 'Reading your codex CLI login. Sign in with ChatGPT for a widget-owned connection.' } : null))
+    setChip(elements.chipOpenai, cxStatus && !cxStatus.cli && !cxStatus.connected
+        ? { cls: 'cli', text: 'via CLI login', title: 'Reading your codex CLI login. Sign in with ChatGPT for a widget-owned connection.' }
         : null);
-    setChip(elements.chipGoogle, gmStatus
-        ? (gmStatus.cli
-            ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your gemini CLI (' + (gmStatus.cli.email || 'other account') + ') differs from ' + (gmStatus.email || 'the connected account') + ' - tracked separately below.' }
-            : (!gmStatus.connected ? { cls: 'cli', text: 'via CLI login', title: 'Reading your gemini CLI login. Sign in with Google for a widget-owned connection.' } : null))
+    setChip(elements.chipGoogle, gmStatus && !gmStatus.cli && !gmStatus.connected
+        ? { cls: 'cli', text: 'via CLI login', title: 'Reading your gemini CLI login. Sign in with Google for a widget-owned connection.' }
         : null);
-    setChip(elements.chipAnthropic, (data.claude_code && data.claude_code_same_account === false)
-        ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your claude CLI is logged into a different account - its usage is tracked separately below.' }
-        : (data.anthropic_source === 'cli'
-            ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Reading your claude CLI login. Log in with claude.ai (settings) for full data including Extra Usage and credits.' }
-            : null));
+    setChip(elements.chipAnthropic, (!data.claude_code || data.claude_code_same_account !== false) && data.anthropic_source === 'cli'
+        ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Reading your claude CLI login. Log in with claude.ai (settings) for full data including Extra Usage and credits.' }
+        : null);
+    // The amber pill IS the CLI subheading now — give it the account detail
+    const pillTitle = (sel, t) => { const b = document.querySelector(sel); if (b) b.title = t; };
+    pillTitle('#sgOpenaiCli .subheading', cxStatus && cxStatus.cli
+        ? 'Your codex CLI (' + (cxStatus.cli.email || 'other account') + ') differs from ' + (cxStatus.email || 'the connected account') + '. Click to hide these rows.'
+        : '');
+    pillTitle('#sgGoogleCli .subheading', gmStatus && gmStatus.cli
+        ? 'Your gemini CLI (' + (gmStatus.cli.email || 'other account') + ') differs from ' + (gmStatus.email || 'the connected account') + '. Click to hide these rows.'
+        : '');
+    pillTitle('#sgAnthropicCli .subheading', (data.claude_code && data.claude_code_same_account === false)
+        ? 'Your claude CLI is logged into a different account - tracked separately here. Click to hide these rows.'
+        : '');
     if (elements.connectRowOpenai) elements.connectRowOpenai.style.display = cxStatus ? 'none' : '';
     if (elements.connectRowGoogle) elements.connectRowGoogle.style.display = gmStatus ? 'none' : '';
 
@@ -1888,8 +1907,8 @@ function updateCompactBars(data) {
     const clamp = (v) => Math.min(Math.max(v || 0, 0), 100);
     const pools = [];
 
-    pools.push({ co: 'anthropic', code: '5H', name: 'Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
-    pools.push({ co: 'anthropic', code: '7D', name: 'All Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
+    pools.push({ co: 'anthropic', code: '5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
+    pools.push({ co: 'anthropic', code: '7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
         if (!value || value.utilization == null) continue;

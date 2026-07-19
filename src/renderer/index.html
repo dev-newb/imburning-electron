@@ -142,10 +142,10 @@
                     <div class="section-body" id="bodyAnthropic">
                         <div class="usage-headers section-col-headers">
                             <span></span>
-                            <span class="col-header col-header-center">Session Used</span>
-                            <span class="col-header col-header-center">Elapsed</span>
-                            <span class="col-header col-header-center">Resets In</span>
-                            <span class="col-header col-header-center">Resets At</span>
+                            <span class="col-header col-header-center" data-short="Used">Session Used</span>
+                            <span class="col-header col-header-center" data-short="Elap">Elapsed</span>
+                            <span class="col-header col-header-center" data-short="In">Resets In</span>
+                            <span class="col-header col-header-center" data-short="At">Resets At</span>
                         </div>
 
                         <!-- Desktop subgroup (subheading appears only when a CLI twin exists) -->
@@ -155,7 +155,7 @@
 
                 <!-- Session Usage -->
                 <div class="usage-section">
-                    <span class="usage-label" data-code="5H" data-abbr="Session (5H)" data-tip="5-hour session limit" style="--row-col: #e0916f;">Session (5h)</span>
+                    <span class="usage-label" data-code="5H" data-abbr="Claude Session (5H)" data-tip="5-hour session limit" style="--row-col: #e0916f;">Claude Session (5h)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill" id="sessionProgress" style="width: 0%"></div>
@@ -175,7 +175,7 @@
 
                 <!-- Weekly Usage -->
                 <div class="usage-section">
-                    <span class="usage-label" data-code="7D" data-abbr="All Models (7D)" data-tip="7-day limit — resets weekly" style="--row-col: #d97757;">All Models (7d)</span>
+                    <span class="usage-label" data-code="7D" data-abbr="Claude Models (7D)" data-tip="7-day limit across all Claude models — resets weekly" style="--row-col: #d97757;">Claude Models (7d)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill weekly" id="weeklyProgress" style="width: 0%"></div>
@@ -213,7 +213,7 @@
 
                         <!-- CLI subgroup (second-account rows; dual mode only) -->
                         <div class="subgroup" id="sgAnthropicCli" style="display: none;">
-                            <div class="subheading-row"><button class="subheading" data-key="anthropic_cli" data-label="CLI"></button></div>
+                            <div class="subheading-row"><button class="subheading cli-pill" data-key="anthropic_cli" data-label="CLI: 2ND ACCOUNT"></button></div>
                             <div class="subgroup-roll"><div class="subgroup-inner">
                                 <div id="anthropicCliRows"></div>
                             </div></div>
@@ -243,10 +243,10 @@
                         </div>
                         <div class="usage-headers section-col-headers">
                             <span></span>
-                            <span class="col-header col-header-center">Session Used</span>
-                            <span class="col-header col-header-center">Elapsed</span>
-                            <span class="col-header col-header-center">Resets In</span>
-                            <span class="col-header col-header-center">Resets At</span>
+                            <span class="col-header col-header-center" data-short="Used">Session Used</span>
+                            <span class="col-header col-header-center" data-short="Elap">Elapsed</span>
+                            <span class="col-header col-header-center" data-short="In">Resets In</span>
+                            <span class="col-header col-header-center" data-short="At">Resets At</span>
                         </div>
                         <div class="subgroup" id="sgOpenaiDesktop">
                             <div class="subheading-row" style="display: none;"><button class="subheading" data-key="openai_desktop" data-label="Desktop"></button></div>
@@ -263,7 +263,7 @@
                             </div></div>
                         </div>
                         <div class="subgroup" id="sgOpenaiCli" style="display: none;">
-                            <div class="subheading-row"><button class="subheading" data-key="openai_cli" data-label="CLI"></button></div>
+                            <div class="subheading-row"><button class="subheading cli-pill" data-key="openai_cli" data-label="CLI: 2ND ACCOUNT"></button></div>
                             <div class="subgroup-roll"><div class="subgroup-inner">
                                 <div id="openaiCliRows"></div>
                             </div></div>
@@ -292,10 +292,10 @@
                         </div>
                         <div class="usage-headers section-col-headers">
                             <span></span>
-                            <span class="col-header col-header-center">Session Used</span>
-                            <span class="col-header col-header-center">Elapsed</span>
-                            <span class="col-header col-header-center">Resets In</span>
-                            <span class="col-header col-header-center">Resets At</span>
+                            <span class="col-header col-header-center" data-short="Used">Session Used</span>
+                            <span class="col-header col-header-center" data-short="Elap">Elapsed</span>
+                            <span class="col-header col-header-center" data-short="In">Resets In</span>
+                            <span class="col-header col-header-center" data-short="At">Resets At</span>
                         </div>
                         <div class="subgroup" id="sgGoogleDesktop">
                             <div class="subheading-row" style="display: none;"><button class="subheading" data-key="google_desktop" data-label="Desktop"></button></div>
@@ -304,7 +304,7 @@
                             </div></div>
                         </div>
                         <div class="subgroup" id="sgGoogleCli" style="display: none;">
-                            <div class="subheading-row"><button class="subheading" data-key="google_cli" data-label="CLI"></button></div>
+                            <div class="subheading-row"><button class="subheading cli-pill" data-key="google_cli" data-label="CLI: 2ND ACCOUNT"></button></div>
                             <div class="subgroup-roll"><div class="subgroup-inner">
                                 <div id="googleCliRows"></div>
                             </div></div>
@@ -343,10 +343,6 @@
                     <div class="settings-header">
                         <span class="settings-title">Settings</span>
                         <button class="done-settings-btn" id="closeSettingsBtn" title="Done">Done</button>
-                    </div>
-
-                    <div class="settings-disclaimer">
-                        Unofficial tool — not affiliated with Anthropic.
                     </div>
 
                     <div class="settings-rows">
