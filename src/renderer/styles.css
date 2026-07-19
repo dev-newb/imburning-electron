@@ -2732,7 +2732,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
 .hidden-rows-chip:hover { color: #b0b0c8; border-color: rgba(128, 128, 150, 0.7); }
 
 
-/* ---- Bottom toolbar ---- */
+/* ---- Toolbar strip (directly under the title bar, never hidden) ---- */
 .bottom-bar {
     -webkit-app-region: no-drag;
     display: flex;
@@ -2743,7 +2743,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
     height: 34px;
     flex-shrink: 0;
     background: rgba(0, 0, 0, 0.18);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .bottom-bar .sprite-btn img {
@@ -2755,7 +2755,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
 
 body.theme-light .bottom-bar {
     background: rgba(0, 0, 0, 0.05);
-    border-top-color: rgba(0, 0, 0, 0.08);
+    border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 /* One margin line for every shortname: rows, subheadings and pills all
@@ -2825,6 +2825,89 @@ body.landscape #sgGoogleCli .timer-text:not(.extra-balance-label) {
 body.landscape #sgAnthropicCli .timer-text:not(.extra-balance-label)::before,
 body.landscape #sgOpenaiCli .timer-text:not(.extra-balance-label)::before,
 body.landscape #sgGoogleCli .timer-text:not(.extra-balance-label)::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
+}
+
+
+/* ---- Landscape dual tables: shared labels, CLI cluster left of Desktop ---- */
+.dual-table { display: none; }
+
+body.landscape .section-body.has-dual .dual-table { display: block; }
+body.landscape .section-body.has-dual > .usage-headers,
+body.landscape .section-body.has-dual > .subgroup { display: none !important; }
+
+.dual-row, .dual-head {
+    display: grid;
+    grid-template-columns: 46px 110px 14px 110px;
+    align-items: center;
+    padding: 0 16px 0 12px;
+    height: 27px;
+}
+
+.dual-head { height: 20px; }
+
+.dual-table.hide-cli .dual-row,
+.dual-table.hide-cli .dual-head {
+    grid-template-columns: 46px 110px;
+}
+
+.dual-table.hide-cli .dual-pair.cli,
+.dual-table.hide-cli .dual-gap,
+.dual-table.hide-cli .dual-head .cli-head { display: none; }
+
+.dual-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.dual-pair {
+    display: grid;
+    grid-template-columns: 40px 34px 34px;
+    align-items: center;
+    justify-items: center;
+}
+
+.dual-pair .dual-pct { font-size: 11px; font-weight: 700; color: #d0d0e0; }
+body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
+
+.dual-head span {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: #505060;
+}
+
+.dual-head .dual-group-head {
+    display: grid;
+    grid-template-columns: 40px 34px 34px;
+    justify-items: center;
+}
+
+.dual-pill {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 9px;
+    padding: 1px 7px;
+    color: #d97706;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.dual-pill:hover { background: rgba(245, 158, 11, 0.22); }
+
+/* Remaining-time pies inside the pair trios */
+.pie-cell { font-size: 0 !important; display: flex; justify-content: center; }
+.pie-cell::before {
     content: '';
     width: 18px;
     height: 18px;

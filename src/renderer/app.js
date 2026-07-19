@@ -1540,6 +1540,173 @@ function applySubgroups() {
     }
 }
 
+// ---- Landscape dual tables ----
+// One shared label column; CLI trio (pct/ring/pie) immediately LEFT of the
+// Desktop trio, each cluster under its own duplicated column labels.
+function dualPairsFor(company, data) {
+    const mk = (pct, resetsAt, total) => ({ pct, resetsAt, total });
+    if (company === 'google') {
+        const d = data.gemini;
+        if (!d || !d.cli || !d.cli.limits || !d.cli.limits.length) return null;
+        const byKey = {};
+        for (const l of (d.limits || [])) byKey[l.key] = { label: l.label, desk: mk(l.percent, l.resetsAt, 1440) };
+        for (const l of d.cli.limits) {
+            byKey[l.key] = byKey[l.key] || { label: l.label };
+            byKey[l.key].cli = mk(l.percent, l.resetsAt, 1440);
+        }
+        return Object.entries(byKey).map(([k, v], i) => ({
+            code: rowCode('gemini_' + k, v.label), color: GEMINI_BLUES[i % GEMINI_BLUES.length],
+            name: v.label, desk: v.desk, cli: v.cli
+        }));
+    }
+    if (company === 'openai') {
+        const d = data.codex;
+        if (!d || !d.cli || !d.cli.limits || !d.cli.limits.length) return null;
+        const total = (k) => k.includes('seven_day') ? 10080 : 300;
+        const byKey = {};
+        for (const l of (d.limits || [])) byKey[l.key] = { label: l.label, desk: mk(l.percent, l.resetsAt, total(l.key)) };
+        for (const l of d.cli.limits) {
+            byKey[l.key] = byKey[l.key] || { label: l.label };
+            byKey[l.key].cli = mk(l.percent, l.resetsAt, total(l.key));
+        }
+        return Object.entries(byKey).map(([k, v]) => ({
+            code: rowCode('codex_' + k, v.label), color: CODE_COLORS.codex,
+            name: v.label, desk: v.desk, cli: v.cli
+        }));
+    }
+    if (company === 'anthropic') {
+        const cc = data.claude_code_same_account === false ? data.claude_code : null;
+        if (!cc) return null;
+        const pairs = [];
+        if (data.five_hour || cc.five_hour) pairs.push({
+            code: 'CLA 5H', color: '#e0916f', name: 'Claude Session (5h)',
+            desk: data.five_hour && mk(data.five_hour.utilization, data.five_hour.resets_at, 300),
+            cli: cc.five_hour && cc.five_hour.utilization != null && mk(cc.five_hour.utilization, cc.five_hour.resets_at, 300)
+        });
+        if (data.seven_day || cc.seven_day) pairs.push({
+            code: 'CLA 7D', color: CODE_COLORS.weekly, name: 'Claude Models (7d)',
+            desk: data.seven_day && mk(data.seven_day.utilization, data.seven_day.resets_at, 10080),
+            cli: cc.seven_day && cc.seven_day.utilization != null && mk(cc.seven_day.utilization, cc.seven_day.resets_at, 10080)
+        });
+        const deskScoped = (data.limits || []).filter((l) => l.kind === 'weekly_scoped' && l.percent != null);
+        for (const l of deskScoped) {
+            const nm = l.scope?.model?.display_name || 'Scoped';
+            const twin = (cc.limits || []).find((x) => x.kind === 'weekly_scoped' && (x.scope?.model?.display_name || '') === nm);
+            pairs.push({
+                code: nm.slice(0, 3).toUpperCase(), color: CODE_COLORS.fable, name: nm + ' (7d)',
+                desk: mk(l.percent, l.resets_at, 10080),
+                cli: twin && mk(twin.percent, twin.resets_at, 10080)
+            });
+        }
+        return pairs.length ? pairs : null;
+    }
+    return null;
+}
+
+function buildDualPair(info, cliSide) {
+    const pair = document.createElement('div');
+    pair.className = 'dual-pair' + (cliSide ? ' cli' : '');
+    if (!info) return pair;
+    const pct = document.createElement('span');
+    pct.className = 'dual-pct';
+    pct.textContent = Math.round(Math.min(Math.max(info.pct || 0, 0), 100)) + '%';
+    pair.appendChild(pct);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'mini-timer');
+    svg.setAttribute('width', '22');
+    svg.setAttribute('height', '22');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    bg.setAttribute('class', 'timer-bg');
+    bg.setAttribute('cx', '12'); bg.setAttribute('cy', '12'); bg.setAttribute('r', '10');
+    svg.appendChild(bg);
+    const prog = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    prog.setAttribute('class', 'timer-progress');
+    prog.setAttribute('cx', '12'); prog.setAttribute('cy', '12'); prog.setAttribute('r', '10');
+    prog.style.strokeDasharray = '63';
+    prog.style.strokeDashoffset = '63';
+    svg.appendChild(prog);
+    pair.appendChild(svg);
+    const pie = document.createElement('span');
+    pie.className = 'timer-text pie-cell';
+    pie.dataset.resets = info.resetsAt || '';
+    pie.dataset.total = info.total;
+    pair.appendChild(pie);
+    return pair;
+}
+
+function renderDualTables(data) {
+    const hiddenMap = (window._cachedSettings || {}).subgroupHidden || {};
+    for (const [company, tableId, bodySel] of [
+        ['anthropic', 'dualTableAnthropic', '#sectionAnthropic .section-body'],
+        ['openai', 'dualTableOpenai', '#sectionOpenai .section-body'],
+        ['google', 'dualTableGoogle', '#sectionGoogle .section-body']
+    ]) {
+        const table = document.getElementById(tableId);
+        const body = document.querySelector(bodySel);
+        if (!table || !body) continue;
+        const pairs = dualPairsFor(company, data);
+        body.classList.toggle('has-dual', !!pairs);
+        table.innerHTML = '';
+        if (!pairs) continue;
+        table.classList.toggle('hide-cli', !!hiddenMap[company + '_cli']);
+
+        // group heading row: [ ] [CLI pill] [ ] [DESKTOP]
+        const groupHead = document.createElement('div');
+        groupHead.className = 'dual-head';
+        groupHead.appendChild(document.createElement('span'));
+        const deskHead = document.createElement('span');
+        deskHead.textContent = 'Desktop';
+        groupHead.appendChild(deskHead);
+        groupHead.appendChild(Object.assign(document.createElement('span'), { className: 'dual-gap' }));
+        const pill = document.createElement('button');
+        pill.className = 'dual-pill cli-head';
+        pill.textContent = 'CLI: 2ND ACCT';
+        pill.title = 'Second account (CLI login) — click to hide/show its columns';
+        pill.addEventListener('click', async () => {
+            const hidden = !table.classList.contains('hide-cli');
+            table.classList.toggle('hide-cli', hidden);
+            const subgroupHidden = { ...((window._cachedSettings || {}).subgroupHidden || {}), [company + '_cli']: hidden };
+            await _saveSettingsPatch({ subgroupHidden });
+            applySubgroups();
+        });
+        groupHead.appendChild(pill);
+        table.appendChild(groupHead);
+
+        // duplicated column labels for each cluster
+        const colHead = document.createElement('div');
+        colHead.className = 'dual-head';
+        colHead.appendChild(document.createElement('span'));
+        for (const cls of ['desk', 'cli-head']) {
+            const grp = document.createElement('span');
+            grp.className = 'dual-group-head ' + (cls === 'cli-head' ? 'cli-head' : '');
+            for (const t of ['Used', 'Elap', 'In']) {
+                const s = document.createElement('span');
+                s.textContent = t;
+                grp.appendChild(s);
+            }
+            if (cls === 'cli-head') colHead.appendChild(Object.assign(document.createElement('span'), { className: 'dual-gap' }));
+            colHead.appendChild(grp);
+        }
+        table.appendChild(colHead);
+
+        for (const p of pairs) {
+            const row = document.createElement('div');
+            row.className = 'dual-row';
+            row.title = p.name;
+            const label = document.createElement('span');
+            label.className = 'dual-label';
+            label.textContent = p.code;
+            label.style.color = p.color;
+            row.appendChild(label);
+            row.appendChild(buildDualPair(p.desk, false));
+            row.appendChild(Object.assign(document.createElement('span'), { className: 'dual-gap' }));
+            row.appendChild(buildDualPair(p.cli, true));
+            table.appendChild(row);
+        }
+    }
+}
+
 function setSubgroupState(group, hidden) {
     const btn = group.querySelector('.subheading');
     if (btn && btn.dataset.animating) return; // never fight a live burn
@@ -1559,6 +1726,12 @@ function refreshExtraTimers() {
     // but no circle (the extra_usage row), leaving every later row's timer
     // stuck at --:--.
     // Covers the pinned scoped rows, the expandable panel, and provider sections.
+    document.querySelectorAll('.dual-pair').forEach((pair) => {
+        const textEl = pair.querySelector('.timer-text');
+        const circleEl = pair.querySelector('.timer-progress');
+        if (!textEl || !circleEl) return;
+        if (textEl.dataset.resets) updateTimer(circleEl, textEl, textEl.dataset.resets, parseInt(textEl.dataset.total));
+    });
     for (const container of [elements.scopedRows, elements.extraRows, elements.openaiRows, elements.googleRows,
         elements.anthropicCliRows, elements.openaiCliRows, elements.googleCliRows]) {
         container.querySelectorAll('.usage-section').forEach((row) => {
@@ -1711,6 +1884,7 @@ function updateUI(data) {
 
     showMainContent();
     buildExtraRows(data);
+    renderDualTables(data);
     refreshTimers();
     refreshExtraTimers(); // pinned scoped rows tick even when collapsed
 
