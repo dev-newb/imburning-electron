@@ -845,21 +845,27 @@ ipcMain.handle('oauth-disconnect', async (event, provider) => {
 // The widget refreshes every 30s, but external provider endpoints rate-limit
 // aggressive polling (429s) — cache each provider's result for 5 minutes.
 const PROVIDER_CACHE_MS = 5 * 60 * 1000;
+// Serve the last-good result through transient failures, but only for a bounded
+// window — past this a genuinely-removed provider's rows should disappear
+// instead of lingering forever (until app restart) on a refreshed timestamp.
+const PROVIDER_STALE_MAX_MS = 30 * 60 * 1000;
 const _providerCache = {};
 function cachedProviderFetch(key, fetchFn) {
   const entry = _providerCache[key];
   if (entry && Date.now() - entry.at < PROVIDER_CACHE_MS) return Promise.resolve(entry.data);
+  const goodAt = entry?.goodAt || 0;
+  const serveStale = (previous) => (previous && Date.now() - goodAt < PROVIDER_STALE_MAX_MS) ? previous : null;
   return fetchFn().then((data) => {
-    // Keep serving the previous good result through transient failures
-    const previous = entry?.data || null;
-    _providerCache[key] = { at: Date.now(), data: data || previous };
-    return _providerCache[key].data;
+    if (data) { _providerCache[key] = { at: Date.now(), goodAt: Date.now(), data }; return data; }
+    const served = serveStale(entry?.data || null);
+    _providerCache[key] = { at: Date.now(), goodAt, data: served };
+    return served;
   }).catch((err) => {
     // A provider blowing up must never take the whole fetch down with it
     debugLog(`[Provider:${key}] fetch threw:`, err.message);
-    const previous = entry?.data || null;
-    _providerCache[key] = { at: Date.now(), data: previous };
-    return previous;
+    const served = serveStale(entry?.data || null);
+    _providerCache[key] = { at: Date.now(), goodAt, data: served };
+    return served;
   });
 }
 
@@ -1148,6 +1154,13 @@ function checkBurnAnomalies() {
   if (history.length < 5) return;
   const now = history[history.length - 1].timestamp;
 
+  // Consecutive samples are one refresh interval apart, so the max "same
+  // session" pair gap must track that interval (with a 3-min floor) — a fixed
+  // 3-min gap rejected every pair at the 5-min default and left the adaptive
+  // median+MAD baseline permanently empty (only the crude 8% floor ever fired).
+  const refreshMs = (parseInt(store.get('settings.refreshInterval', '300'), 10) || 300) * 1000;
+  const pairMaxGapMs = Math.max(BURN_PAIR_MAX_GAP_MS, Math.round(refreshMs * 2.5));
+
   // Every series names its company; Anthropic's scoped pools (Fable) are
   // called out separately from the all-models weekly pool
   const seriesList = [
@@ -1190,7 +1203,7 @@ function checkBurnAnomalies() {
     for (let i = 1; i < samples.length; i++) {
       const dt = samples[i].t - samples[i - 1].t;
       if (samples[i].t >= now - BURN_WINDOW_MS) break;
-      if (dt <= 0 || dt > BURN_PAIR_MAX_GAP_MS) continue;
+      if (dt <= 0 || dt > pairMaxGapMs) continue;
       const dv = samples[i].v - samples[i - 1].v;
       if (dv < 0) continue; // window reset
       rates.push(dv / (dt / 60000));
@@ -1318,7 +1331,14 @@ function migrateUsageHistoryKey() {
 function pruneStaleHistoryKeys() {
   const cutoff = Date.now() - (HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const allKeys = Object.keys(store.store);
+  const dayCutoff = localDateString(new Date(cutoff));
   for (const key of allKeys) {
+    // Per-day burn-alert counters accumulate forever otherwise — drop any
+    // older than the retention window (key form: burnAlerts_YYYY-MM-DD)
+    if (key.startsWith('burnAlerts_')) {
+      if (key.slice('burnAlerts_'.length) < dayCutoff) store.delete(key);
+      continue;
+    }
     if (!key.startsWith('usageHistory_') && key !== 'usageHistory') continue;
     const history = store.get(key, []);
     const fresh = history.filter((entry) => entry.timestamp > cutoff);
@@ -2047,7 +2067,9 @@ function buildTrayContextMenu() {
         label: 'Log Out',
         click: async () => {
           store.delete('sessionKey');
+          store.delete('sessionKey_encrypted'); // safeStorage path leaves this behind otherwise
           store.delete('organizationId');
+          store.delete('organizations');
           // Clear all Claude.ai cookies and session storage
           const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
           for (const cookie of cookies) {
@@ -2075,7 +2097,7 @@ function buildTrayContextMenu() {
 function createTray() {
   // Respect the tray stats setting even when createTray is called from generic refresh paths.
   if (!store.get('settings.showTrayStats', false)) {
-    destroyTrayIcons();
+    destroyStatsTrays(); // stats trays only — leave provider trays to their own settings
     return;
   }
 
@@ -2083,7 +2105,7 @@ function createTray() {
   const hasSessionTray = sessionTray && !sessionTray.isDestroyed();
   const hasWeeklyTray = weeklyTray && !weeklyTray.isDestroyed();
   if (hasSessionTray && hasWeeklyTray) return;
-  if (hasSessionTray || hasWeeklyTray) destroyTrayIcons();
+  if (hasSessionTray || hasWeeklyTray) destroyStatsTrays(); // don't nuke provider trays synced just before
 
   try {
     const staticIconPath = trayStaticIconPath();
@@ -2193,6 +2215,26 @@ function destroyTrayIcons() {
     } catch (error) {
       console.error('Failed to destroy tray icon:', error);
     }
+  }
+}
+
+// Tear down ONLY the Anthropic stats trays (session/weekly/fable), leaving the
+// independent OpenAI/Google provider trays alone — they follow their own
+// trayOpenai/trayGoogle settings and must not be collateral damage.
+function destroyStatsTrays() {
+  const trays = [sessionTray, weeklyTray, fableTray];
+  sessionTray = null;
+  weeklyTray = null;
+  fableTray = null;
+  for (const tray of trays) {
+    if (!tray || tray.isDestroyed()) continue;
+    try {
+      tray.removeAllListeners();
+      tray.setContextMenu(null);
+      tray.setToolTip('');
+      if (process.platform === 'linux') tray.setImage(nativeImage.createEmpty());
+    } catch (_) {}
+    try { tray.destroy(); } catch (_) {}
   }
 }
 
@@ -2451,6 +2493,11 @@ ipcMain.handle('get-credentials', () => {
       } catch (err) {
         console.error('[Keychain] Failed to decrypt session key:', err.message);
       }
+    } else {
+      // Migration: safeStorage is available now but a legacy plain key exists
+      // (e.g. from a build before encryption) — adopt it rather than showing
+      // the login screen.
+      sessionKey = store.get('sessionKey') || null;
     }
   } else {
     // Fallback: plain storage (legacy or safeStorage unavailable)
@@ -2459,13 +2506,14 @@ ipcMain.handle('get-credentials', () => {
   return {
     sessionKey,
     organizationId: store.get('organizationId'),
+    organizations: store.get('organizations', []),
     // A fresh claude CLI login can power the Anthropic section with no
     // claude.ai web login ("via CLI login" fallback)
     cliFallbackAvailable: !!readClaudeCodeToken()
   };
 });
 
-ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId }) => {
+ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId, organizations }) => {
   // Store session key in OS keychain if available
   if (safeStorage.isEncryptionAvailable()) {
     const encrypted = safeStorage.encryptString(sessionKey);
@@ -2478,6 +2526,11 @@ ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId })
   if (organizationId) {
     store.set('organizationId', organizationId);
   }
+  // Persist the org list so the Teams/Personal selector survives a restart
+  // (previously dropped here, so the dropdown only ever appeared right after login)
+  if (Array.isArray(organizations)) {
+    store.set('organizations', organizations);
+  }
   // Also set cookie in Electron session for window-based fetching
   await setSessionCookie(sessionKey);
   return true;
@@ -2487,6 +2540,7 @@ ipcMain.handle('delete-credentials', async () => {
   store.delete('sessionKey');
   store.delete('sessionKey_encrypted');
   store.delete('organizationId');
+  store.delete('organizations');
   // Remove all Claude.ai cookies
   const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
   for (const cookie of cookies) {
@@ -2604,12 +2658,15 @@ ipcMain.on('resize-window', (event, height, force) => {
     // window): keep the user's width, adopt the content height
     const [cw] = mainWindow.getContentSize();
     mainWindow.setContentSize(cw, height);
-    _lastSetHeight = height;
+    // Record the ACTUAL height after the OS clamps to the minimum, not the
+    // requested one — otherwise windowIsUserSized() sees a phantom gap and
+    // freezes future auto-fits (e.g. compact mode stuck at the 180px floor)
+    _lastSetHeight = mainWindow.getContentSize()[1];
     return;
   }
   if (!windowIsUserSized()) {
     mainWindow.setContentSize(_expectedWidth, height);
-    _lastSetHeight = height;
+    _lastSetHeight = mainWindow.getContentSize()[1];
   }
 });
 
@@ -2700,6 +2757,11 @@ ipcMain.on('set-compact-mode', (event, compact) => {
     const bounds = mainWindow.getBounds();
     const width = compact ? 290 : WIDGET_WIDTH;
     _expectedWidth = width;
+    // Lower the height floor for compact so its short window is actually
+    // reachable (otherwise the 180px portrait minimum clamps it and leaves
+    // empty space); restore the normal floor on exit. The renderer's
+    // updateCompactBars then fits the exact pool count.
+    mainWindow.setMinimumSize(200, compact ? 80 : 180);
     // Compact view grows by one slim row per scoped weekly limit (e.g. Fable)
     const scopedCount = compact
       ? getScopedWeeklyLimits(store.get('latestUsageData') || {}).length
@@ -2814,8 +2876,10 @@ ipcMain.handle('save-settings', (event, settings) => {
   }
 
   if (!settings.showTrayStats) {
-    // Remove tray icons immediately when the setting is turned off from the UI.
-    destroyTrayIcons();
+    // Turn off ONLY the Anthropic stats trays; OpenAI/Google badges follow
+    // their own trayOpenai/trayGoogle settings — re-sync so they stay put.
+    destroyStatsTrays();
+    syncExternalProviderTrays(store.get('latestUsageData') || {});
   } else {
     // Refresh tray icons immediately with new threshold settings
     const latestUsageData = store.get('latestUsageData');

@@ -832,6 +832,11 @@ const EXTRA_ROW_CONFIG = {
     extra_usage: { label: 'Extra Usage', color: 'extra' },
 };
 
+// Keys that have data THIS refresh (regardless of hidden state) — the "N
+// hidden" chip only counts hidden rows that actually exist, so it never shows
+// a count for a pool the API stopped reporting.
+const _availableRowKeys = new Set();
+
 function buildExtraRows(data) {
     // Don't clear existing rows if we don't have new data to replace them with
     // This preserves the last known state when expanding the panel
@@ -850,6 +855,7 @@ function buildExtraRows(data) {
         return; // Keep existing rows
     }
 
+    _availableRowKeys.clear();
     elements.extraRows.innerHTML = '';
     elements.scopedRows.innerHTML = '';
     elements.openaiRows.innerHTML = '';
@@ -867,6 +873,7 @@ function buildExtraRows(data) {
         const hasUtilization = value && value.utilization !== undefined;
         const hasBalance = key === 'extra_usage' && value && value.balance_cents != null;
         if (!hasUtilization && !hasBalance) continue;
+        _availableRowKeys.add(key); // present in the data, hidden or not
         if (hiddenRows[key]) continue;
 
         const utilization = value.utilization || 0;
@@ -964,7 +971,11 @@ function buildExtraRows(data) {
             }
             row.appendChild(resetsText);
         } else {
-            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60 : key.includes('daily') ? 24 * 60 : 5 * 60;
+            // Gemini row keys are gemini_m_<model> / gemini_cli_m_<model> —
+            // the "daily" window lives in the label, not the key, so match the
+            // provider prefix too (otherwise the ring/pie use a 5h window)
+            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60
+                : (key.includes('daily') || key.startsWith('gemini_')) ? 24 * 60 : 5 * 60;
 
             const barGroup = document.createElement('div');
             barGroup.className = 'usage-bar-group';
@@ -1069,6 +1080,7 @@ function buildExtraRows(data) {
     // Codex credits — styled exactly like Anthropic's Extra Usage row
     // (ON/OFF tag, muted bar, right-aligned "Account Credits: N")
     const codexCredits = data.codex?.credits;
+    if (codexCredits && elements.openaiRows.children.length) _availableRowKeys.add('codex_row_credits');
     if (codexCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_credits) {
         const row = document.createElement('div');
         row.className = 'usage-section stretch-bar';
@@ -1126,6 +1138,7 @@ function buildExtraRows(data) {
     // OpenAI weekly-limit reset feature — banked resets shown as magic dots
     // (no ON/OFF: resets aren't a toggle, they simply exist)
     const resetCredits = data.codex?.resetCredits;
+    if (resetCredits && elements.openaiRows.children.length) _availableRowKeys.add('codex_row_resets');
     if (resetCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_resets) {
         const row = document.createElement('div');
         row.className = 'usage-section stretch-bar';
@@ -1237,8 +1250,14 @@ function windowTip(label) {
 // ("(daily)" -> "(1D)"), or colour-coded chips. Tooltips carry the meaning
 // only while abbreviated.
 function applyLabelMode(effWidth) {
-    const w = effWidth || window.innerWidth;
-    const mode = w <= 450 ? 'code' : w <= 540 ? 'abbr' : 'full';
+    // When called without an explicit width (e.g. from a data refresh) read the
+    // band classes applySqueezeClasses already set — they account for landscape
+    // column width, which window.innerWidth does not.
+    let mode;
+    if (effWidth != null) mode = effWidth <= 450 ? 'code' : effWidth <= 540 ? 'abbr' : 'full';
+    else if (document.body.classList.contains('lbl-code')) mode = 'code';
+    else if (document.body.classList.contains('lbl-abbr')) mode = 'abbr';
+    else mode = 'full';
     document.querySelectorAll('.usage-label').forEach((el) => {
         const tip = el.dataset.tip || '';
         const full = (el.dataset.abbr || el.textContent || '').replace(/\(1D\)/, '(daily)');
@@ -1318,7 +1337,9 @@ function updateHiddenChips() {
         const footer = document.querySelector(footerSel);
         if (!footer) continue;
         let chip = footer.querySelector('.hidden-rows-chip');
-        const count = hidden.filter((k) => rowProvider(k) === provider).length;
+        // Only count hidden rows that actually exist this refresh, so the chip
+        // never lingers for a pool the API stopped reporting.
+        const count = hidden.filter((k) => rowProvider(k) === provider && _availableRowKeys.has(k)).length;
         if (!count) { if (chip) chip.remove(); continue; }
         if (!chip) {
             chip = document.createElement('button');
@@ -2261,6 +2282,7 @@ function updateCompactBars(data) {
         pools.push({ co: 'openai', code: rowCode('codex_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
     }
     for (const lim of (data.codex?.cli?.limits || [])) {
+        if (hiddenRows['codex_cli_' + lim.key]) continue;
         pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
     }
     (data.gemini?.limits || []).forEach((lim, i) => {
@@ -2268,11 +2290,19 @@ function updateCompactBars(data) {
         pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
     });
     (data.gemini?.cli?.limits || []).forEach((lim, i) => {
+        if (hiddenRows['gemini_cli_' + lim.key]) return;
         pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
     });
 
+    // Honor the same hide actions the full view uses: collapsed companies and
+    // burned Desktop/CLI subgroups drop out of compact too.
+    const _sub = (window._cachedSettings || {}).subgroupHidden || {};
+    const _sec = (window._cachedSettings || {}).sectionCollapsed || {};
+    const visiblePools = pools.filter((p) =>
+        !_sec[p.co] && !(p.cli ? _sub[p.co + '_cli'] : _sub[p.co + '_desktop']));
+
     container.innerHTML = '';
-    for (const p of pools) {
+    for (const p of visiblePools) {
         const row = document.createElement('div');
         row.className = 'compact-row';
         row.style.setProperty('--co', COMPANY_COLORS[p.co]);
@@ -2306,7 +2336,7 @@ function updateCompactBars(data) {
     // the rows container stretches to fill the window (so bars can expand
     // when the user makes it bigger), which makes measuring it circular.
     if (isCompactMode) {
-        window.electronAPI.resizeWindow(_chromeHeight() + pools.length * 26 + 18);
+        window.electronAPI.resizeWindow(_chromeHeight() + visiblePools.length * 26 + 18);
     }
 }
 // Persist compact mode setting without touching the rest of settings — debounced
@@ -2970,7 +3000,7 @@ function renderChart(history) {
     if (projections.length) {
         datasets.push(...projections);
         // Reset marker, if the weekly reset falls inside the projected span
-        if (weeklyResetMs && weeklyResetMs > lastEntry.timestamp && weeklyResetMs <= chartXMax * 1.02) {
+        if (weeklyResetMs && weeklyResetMs > lastEntry.timestamp && weeklyResetMs <= chartXMax + 6 * 60 * 60 * 1000) {
             chartXMax = Math.max(chartXMax, weeklyResetMs);
             datasets.push({
                 label: 'Weekly reset',
@@ -3259,8 +3289,11 @@ async function saveSettings() {
         openaiExtrasOpen: isOpenaiExtrasOpen,
         projectionsOn: projectionsVisible
     };
-    await window.electronAPI.saveSettings(settings);
-    window._cachedSettings = settings;
+    // Merge over the existing cache so keys this form doesn't manage
+    // (hiddenRows, subgroupHidden, pizazz, …) survive closing Settings
+    const merged = { ...(window._cachedSettings || {}), ...settings };
+    await window.electronAPI.saveSettings(merged);
+    window._cachedSettings = merged;
     applyTheme(settings.theme);
     applyFontColor(settings);
     if (window.electronAPI.platform === 'darwin') {
