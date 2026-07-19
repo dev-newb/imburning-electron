@@ -66,6 +66,7 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 🌅 **Daily Digest** — yesterday's burn, per company, each morning
 📈 **History Graph** — 7-day chart with projection lines, toggled by the psychic (eyes closed = forecasting)
 💾 **Tray badges** — per-company colours (Anthropic blue, Fable red, OpenAI green, Google yellow), customizable, with X-on-red at 99% and terminal-cursor badges for second accounts
+🔄 **Silent auto-update** — new releases download in the background and apply on next launch; you install Burnwatch exactly once
 
 ---
 
@@ -82,6 +83,8 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 ---
 
 ## Installation
+
+> 🔄 **Install once, update never again.** Burnwatch keeps itself current: it checks for new releases on launch (and daily), downloads them **silently in the background**, and applies them the next time the app starts. No more hunting down an installer for every release — the widget you install today is every future version too. (Portable and Linux builds show an update banner with a one-click link instead.)
 
 ### Download Pre-built Release
 
