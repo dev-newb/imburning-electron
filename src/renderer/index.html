@@ -45,9 +45,6 @@
                     </button>
                     <button class="control-btn minimize-btn" id="minimizeBtn" title="Minimise to System Tray">−</button>
                     <button class="control-btn close-btn" id="closeBtn" title="Exit Application">×</button>
-                    <button class="control-btn sprite-btn clown-btn" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
-                        <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
-                    </button>
                 </div>
             </div>
 
@@ -122,6 +119,10 @@
             <!-- Main Content -->
             <div class="content" id="mainContent" style="display: none;">
 
+                <button class="clown-btn-content" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
+                    <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
+                </button>
+
                 <!-- Compact toggle chevron — fixed position, does not move with expand -->
                 <button class="compact-collapse-btn" id="compactCollapseBtn" title="Compact mode" style="display: none;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
@@ -155,7 +156,7 @@
 
                 <!-- Session Usage -->
                 <div class="usage-section">
-                    <span class="usage-label" data-code="5H" data-abbr="Claude Session (5H)" data-tip="5-hour session limit" style="--row-col: #e0916f;">Claude Session (5h)</span>
+                    <span class="usage-label" data-code="CLA 5H" data-abbr="Claude Session (5H)" data-tip="5-hour session limit" style="--row-col: #e0916f;">Claude Session (5h)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill" id="sessionProgress" style="width: 0%"></div>
@@ -175,7 +176,7 @@
 
                 <!-- Weekly Usage -->
                 <div class="usage-section">
-                    <span class="usage-label" data-code="7D" data-abbr="Claude Models (7D)" data-tip="7-day limit across all Claude models — resets weekly" style="--row-col: #d97757;">Claude Models (7d)</span>
+                    <span class="usage-label" data-code="CLA 7D" data-abbr="Claude Models (7D)" data-tip="7-day limit across all Claude models — resets weekly" style="--row-col: #d97757;">Claude Models (7d)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill weekly" id="weeklyProgress" style="width: 0%"></div>

@@ -1158,7 +1158,7 @@ function checkBurnAnomalies() {
     // Dual-mode second accounts burn independently — watch them too
     { key: 'codexCli', label: 'OpenAI — Codex weekly (CLI account)', pick: (e) => e.codexCli },
     { key: 'geminiCli', label: 'Google — Gemini daily (CLI account)', pick: (e) => e.geminiCli },
-    { key: 'claudeCli', label: 'Anthropic — Weekly (CLI account)', pick: (e) => e.claudeCli }
+    { key: 'claudeCli', label: 'Anthropic — Claude Models 7d (CLI account)', pick: (e) => e.claudeCli }
   ];
   const slugs = new Set();
   for (const entry of history) {
@@ -1369,7 +1369,7 @@ function createMainWindow() {
     maximizable: true,
     // Floor sits where the responsive ladder bottoms out — below this the
     // remaining elements would overlap
-    minWidth: 220,
+    minWidth: 200,
     minHeight: 180,
     skipTaskbar: false,
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
@@ -2404,7 +2404,7 @@ function updateTrayIcon(usageData) {
     }
     if (weeklyTray && !weeklyTray.isDestroyed()) {
       weeklyTray.setImage(weeklyIcon);
-      let weeklyTooltip = `Weekly: ${Math.round(weeklyPercent)}%`;
+      let weeklyTooltip = `Claude Models (7d): ${Math.round(weeklyPercent)}%`;
       const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat, true);
       if (weeklyResetTime) {
         weeklyTooltip += `\nResets: ${weeklyResetTime}`;
@@ -2426,7 +2426,7 @@ function updateTrayIcon(usageData) {
     }
     if (sessionTray && !sessionTray.isDestroyed()) {
       sessionTray.setImage(sessionIcon);
-      let sessionTooltip = `Session: ${Math.round(sessionPercent)}%`;
+      let sessionTooltip = `Claude Session (5h): ${Math.round(sessionPercent)}%`;
       const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat, false);
       if (sessionResetTime) {
         sessionTooltip += `\nResets: ${sessionResetTime}`;
@@ -2591,8 +2591,17 @@ function windowIsUserSized() {
   return _lastSetHeight != null && Math.abs(ch - _lastSetHeight) > 24;
 }
 
-ipcMain.on('resize-window', (event, height) => {
-  if (mainWindow && !windowIsUserSized()) {
+ipcMain.on('resize-window', (event, height, force) => {
+  if (!mainWindow) return;
+  if (force) {
+    // Explicit fit request (e.g. after a subgroup rolls up in a hand-sized
+    // window): keep the user's width, adopt the content height
+    const [cw] = mainWindow.getContentSize();
+    mainWindow.setContentSize(cw, height);
+    _lastSetHeight = height;
+    return;
+  }
+  if (!windowIsUserSized()) {
     mainWindow.setContentSize(_expectedWidth, height);
     _lastSetHeight = height;
   }

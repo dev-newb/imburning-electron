@@ -1221,8 +1221,8 @@ function applyLabelMode(effWidth) {
 
 function rowCode(key, label) {
     const clean = String(label || '').replace(/^CLI /, '');
-    if (key === 'cc_five_hour') return '5H';
-    if (key === 'cc_seven_day') return '7D';
+    if (key === 'cc_five_hour') return 'CLA 5H';
+    if (key === 'cc_seven_day') return 'CLA 7D';
     if (/^(cc_)?seven_day_scoped_/.test(key)) return clean.slice(0, 3).toUpperCase();
     if (key === 'extra_usage') return 'EXT';
     if (key.startsWith('codex_')) {
@@ -1341,8 +1341,8 @@ function applySqueezeClasses() {
     document.body.classList.toggle('sz1', eff <= 540);
     document.body.classList.toggle('lbl-abbr', eff <= 540 && eff > 450);
     document.body.classList.toggle('lbl-code', eff <= 450);
-    document.body.classList.toggle('sz3', eff <= 400);
-    document.body.classList.toggle('sz4', eff <= 350);
+    document.body.classList.toggle('sz3', eff <= 330);
+    document.body.classList.toggle('sz4', eff <= 288);
 
     document.body.classList.toggle('vh-1', on && !landscape && h < 520);
     document.body.classList.toggle('vh-2', on && !landscape && h < 430);
@@ -1371,7 +1371,19 @@ function _followResize(durationMs) {
     const end = performance.now() + durationMs;
     let tick = 0;
     (function step() {
-        if (performance.now() >= end) { resizeWidget(); return; }
+        if (performance.now() >= end) {
+            const b = document.body.classList;
+            if (!isCompactMode && !b.contains('tall') && !b.contains('landscape')
+                && elements.settingsOverlay.style.display === 'none') {
+                const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
+                const ch = elements.mainContent.scrollHeight;
+                const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
+                if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true);
+            } else {
+                resizeWidget();
+            }
+            return;
+        }
         if ((tick++ % 3) === 0 && elements.settingsOverlay.style.display === 'none') {
             const th = elements.titleBar ? elements.titleBar.offsetHeight : 0;
             const ch = elements.mainContent.scrollHeight;
@@ -1907,8 +1919,8 @@ function updateCompactBars(data) {
     const clamp = (v) => Math.min(Math.max(v || 0, 0), 100);
     const pools = [];
 
-    pools.push({ co: 'anthropic', code: '5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
-    pools.push({ co: 'anthropic', code: '7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
+    pools.push({ co: 'anthropic', code: 'CLA 5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
+    pools.push({ co: 'anthropic', code: 'CLA 7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
         if (!value || value.utilization == null) continue;
