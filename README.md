@@ -6,7 +6,7 @@
 
 **Burnwatch** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
-![Burnwatch — main view: Anthropic, OpenAI, and Google sections, Google frozen on ice](assets/screenshot-main.png)
+![Burnwatch — portrait main view: Anthropic, OpenAI, and Google sections, every pool tracked, Fable at 100%](assets/screenshot-main.png)
 
 ---
 
@@ -22,7 +22,7 @@ Burnwatch tracks **both accounts per company, simultaneously**:
 - 🖥️ In **wide mode** the two accounts sit **side by side** — one shared model column, a Desktop cluster and a CLI cluster, each under its own labels
 - 🔥 Not interested? **Burn the pill away** — pixel fire chars it (Soot & Sparks finish, smoke included) and the rows roll up until you burn it back
 
-![Burnwatch — wide mode: three companies side by side, Google tracking desktop AND CLI accounts](assets/screenshot-landscape.png)
+![Burnwatch — wide mode: three companies as columns, Google tracking desktop AND CLI accounts side by side, prediction graph spanning below](assets/screenshot-landscape.png)
 
 ---
 
@@ -49,6 +49,7 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 - 🗜️ **Compact mode** (the boot-stomping-a-can button) — one slim bar per pool across all companies, grouped by company colour, fits any corner
 - 🪟 **Windows Snap** works natively — drag to an edge or Win+Arrow
 - ↕️ The window **grows and contracts with its content**: toggle the graph, burn a group away, hide a tracker — the frame follows
+- 🙈 **Your board, your rules** — collapse any company entirely from its header, hide any single model or pool from a hover, burn away whole account groups; everything restores with a click
 
 <p align="center">
   <img src="assets/screenshot-narrow.png" width="240" alt="Burnwatch squeezed narrow — colour chips and pie timers">
@@ -64,7 +65,7 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 🔔 **Usage & Burn-spike Alerts** — company-attributed desktop notifications; median+MAD anomaly detection on every tracked series (second accounts included)
 📱 **Phone Alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
 🌅 **Daily Digest** — yesterday's burn, per company, each morning
-📈 **History Graph** — 7-day chart with projection lines, toggled by the psychic (eyes closed = forecasting)
+📈 **The Prediction Graph** — a 7-day history chart with **dotted burn-rate projections** showing when each pool will hit 100%. Toggled by the resident **pixel psychic**: eyes-open idle means history only; click him into his eyes-closed trance and the projections appear. Roomiest in wide mode, where it stretches beneath all three columns
 💾 **Tray badges** — per-company colours (Anthropic blue, Fable red, OpenAI green, Google yellow), customizable, with X-on-red at 99% and terminal-cursor badges for second accounts
 🔄 **Silent auto-update** — new releases download in the background and apply on next launch; you install Burnwatch exactly once
 
