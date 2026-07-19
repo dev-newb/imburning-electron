@@ -167,7 +167,9 @@ const elements = {
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
+    showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
+    showGeminiCliToggle: document.getElementById('showGeminiCliToggle'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -456,6 +458,8 @@ function setupEventListeners() {
             resizeWidget();
         }
         startAutoUpdate();
+        // Account toggles filter post-fetch, so a refetch applies them now
+        await fetchUsageData();
     });
 
     elements.logoutBtn.addEventListener('click', async () => {
@@ -2609,7 +2613,9 @@ async function loadSettings() {
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
+    if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
+    if (elements.showGeminiCliToggle) elements.showGeminiCliToggle.checked = settings.showGeminiCli !== false;
     if (elements.openaiLoginStatus) {
         const cxNow = latestUsageData && latestUsageData.codex;
         const cxConn = !!(cxNow && cxNow.connected);
@@ -2700,7 +2706,9 @@ async function saveSettings() {
         },
         dailyDigest: elements.dailyDigestToggle.checked,
         showCodex: elements.showCodexToggle.checked,
+        showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
+        showGeminiCli: elements.showGeminiCliToggle ? elements.showGeminiCliToggle.checked : true,
         openaiExtrasOpen: isOpenaiExtrasOpen,
         projectionsOn: projectionsVisible
     };

@@ -2585,6 +2585,31 @@ ipcMain.on('resize-window', (event, height) => {
   }
 });
 
+// Per-account tracking toggles, applied AFTER the (cached) provider fetch so
+// flipping them takes effect immediately. "Desktop account" (showCodex /
+// showGemini) covers the account signed into the widget; turning it off
+// demotes the CLI login to the tracked source (grey "via CLI login" chip),
+// exactly like the fetchers' own no-OAuth fallback. "CLI account"
+// (showCodexCli / showGeminiCli) strips the second-account rows/badges.
+// In via-CLI-login mode (connected=false) both toggles are no-ops for the
+// primary — there is no desktop account being tracked to hide.
+function applyAccountToggles(data) {
+  const filt = (obj, showDesktop, showCli) => {
+    if (!obj) return obj;
+    let out = obj;
+    if (!showCli && out.cli) out = { ...out, cli: null };
+    if (!showDesktop && out.connected) {
+      out = out.cli ? { ...out.cli, connected: false, cli: null } : null;
+    }
+    return out;
+  };
+  const codex = filt(data.codex, store.get('settings.showCodex', true), store.get('settings.showCodexCli', true));
+  if (codex) data.codex = codex; else delete data.codex;
+  const gemini = filt(data.gemini, store.get('settings.showGemini', true), store.get('settings.showGeminiCli', true));
+  if (gemini) data.gemini = gemini; else delete data.gemini;
+  return data;
+}
+
 ipcMain.handle('get-window-position', () => {
   if (mainWindow) {
     return mainWindow.getBounds();
@@ -2683,7 +2708,9 @@ ipcMain.handle('get-settings', () => {
     webhook: store.get('settings.webhook', { enabled: false, url: '' }),
     dailyDigest: store.get('settings.dailyDigest', true),
     showCodex: store.get('settings.showCodex', true),
+    showCodexCli: store.get('settings.showCodexCli', true),
     showGemini: store.get('settings.showGemini', true),
+    showGeminiCli: store.get('settings.showGeminiCli', true),
     trayOpenai: store.get('settings.trayOpenai', false),
     trayGoogle: store.get('settings.trayGoogle', false),
     sectionCollapsed: store.get('settings.sectionCollapsed', {}),
@@ -2723,7 +2750,9 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.webhook) store.set('settings.webhook', settings.webhook);
   store.set('settings.dailyDigest', settings.dailyDigest !== false);
   store.set('settings.showCodex', settings.showCodex !== false);
+  store.set('settings.showCodexCli', settings.showCodexCli !== false);
   store.set('settings.showGemini', settings.showGemini !== false);
+  store.set('settings.showGeminiCli', settings.showGeminiCli !== false);
   if (settings.trayOpenai !== undefined) store.set('settings.trayOpenai', settings.trayOpenai === true);
   if (settings.trayGoogle !== undefined) store.set('settings.trayGoogle', settings.trayGoogle === true);
   if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
@@ -3008,9 +3037,9 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     // credentials can power the section — same pattern as OpenAI/Google
     // ("via CLI login"). Extra Usage / credits need the web login and are
     // simply absent in this mode.
-    const codexPromiseF = store.get('settings.showCodex', true)
+    const codexPromiseF = (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
       ? cachedProviderFetch('codex', fetchCodexUsage) : Promise.resolve(null);
-    const geminiPromiseF = store.get('settings.showGemini', true)
+    const geminiPromiseF = (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
       ? cachedProviderFetch('gemini', fetchGeminiUsage) : Promise.resolve(null);
     const cc = readClaudeCodeToken()
       ? await cachedProviderFetch('claude_code', fetchClaudeCodeUsage) : null;
@@ -3028,6 +3057,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     if (codexF) data.codex = codexF;
     const geminiF = await geminiPromiseF;
     if (geminiF) data.gemini = geminiF;
+    applyAccountToggles(data);
 
     storeUsageHistory(data); // no organizationId → legacy 'usageHistory' key
     data.forecasts = computeForecasts();
@@ -3045,10 +3075,10 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   const claudeCodePromise = store.get('settings.showClaudeCode', true)
     ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage)
     : Promise.resolve(null);
-  const codexPromise = store.get('settings.showCodex', true)
+  const codexPromise = (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
     ? cachedProviderFetch('codex', fetchCodexUsage)
     : Promise.resolve(null);
-  const geminiPromise = store.get('settings.showGemini', true)
+  const geminiPromise = (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
     ? cachedProviderFetch('gemini', fetchGeminiUsage)
     : Promise.resolve(null);
 
@@ -3178,6 +3208,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (codex) data.codex = codex;
   const gemini = await geminiPromise;
   if (gemini) data.gemini = gemini;
+  applyAccountToggles(data);
 
   storeUsageHistory(data);
 
