@@ -857,34 +857,44 @@ function buildExtraRows(data) {
         row.appendChild(label);
 
         if (key === 'extra_usage') {
-            // Extra usage: bar col shows $used/$limit, elapsed col empty, timer col shows account credits
+            // Extra usage IS a meter when enabled (spend toward a monthly
+            // cap) — the bar stays for that case. When OFF there is no cap
+            // to fill against, so show a quiet note instead (same treatment
+            // as OpenAI credits).
             const barGroup = document.createElement('div');
             barGroup.className = 'usage-bar-group';
-            const progressBar = document.createElement('div');
-            progressBar.className = 'progress-bar';
-            const progressFill = document.createElement('div');
-            progressFill.className = `progress-fill ${colorClass}`;
-            progressFill.style.width = `${Math.min(utilization, 100)}%`;
-            
-            // Apply warning/danger thresholds to extra usage bar
-            if (utilization >= dangerThreshold) {
-                progressFill.classList.add('danger');
-            } else if (utilization >= warnThreshold) {
-                progressFill.classList.add('warning');
-            }
-            
-            progressBar.appendChild(progressFill);
-            barGroup.appendChild(progressBar);
-
-            const percentage = document.createElement('span');
-            if (value.used_cents != null && value.limit_cents != null) {
-                percentage.className = 'usage-percentage extra-spending';
-                percentage.textContent = `${formatCurrency(value.used_cents, value.currency)}/${formatCurrency(value.limit_cents, value.currency)}`;
+            if (value.is_enabled === false) {
+                const note = document.createElement('span');
+                note.className = 'credits-approx dim';
+                note.textContent = 'not enabled';
+                barGroup.appendChild(note);
             } else {
-                percentage.className = 'usage-percentage';
-                percentage.textContent = `${Math.round(utilization)}%`;
+                const progressBar = document.createElement('div');
+                progressBar.className = 'progress-bar';
+                const progressFill = document.createElement('div');
+                progressFill.className = `progress-fill ${colorClass}`;
+                progressFill.style.width = `${Math.min(utilization, 100)}%`;
+
+                // Apply warning/danger thresholds to extra usage bar
+                if (utilization >= dangerThreshold) {
+                    progressFill.classList.add('danger');
+                } else if (utilization >= warnThreshold) {
+                    progressFill.classList.add('warning');
+                }
+
+                progressBar.appendChild(progressFill);
+                barGroup.appendChild(progressBar);
+
+                const percentage = document.createElement('span');
+                if (value.used_cents != null && value.limit_cents != null) {
+                    percentage.className = 'usage-percentage extra-spending';
+                    percentage.textContent = `${formatCurrency(value.used_cents, value.currency)}/${formatCurrency(value.limit_cents, value.currency)}`;
+                } else {
+                    percentage.className = 'usage-percentage';
+                    percentage.textContent = `${Math.round(utilization)}%`;
+                }
+                barGroup.appendChild(percentage);
             }
-            barGroup.appendChild(percentage);
             row.appendChild(barGroup);
 
             const elapsedGroup = document.createElement('div');

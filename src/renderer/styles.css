@@ -51,8 +51,8 @@ body {
 .title-bar {
     -webkit-app-region: drag;
     background: rgba(0, 0, 0, 0.3);
-    padding: 8px 12px;
-    padding-left: 6px;
+    padding: 3px 12px;
+    padding-left: 4px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -72,10 +72,12 @@ body {
 }
 
 .app-logo {
-    width: 19px;
-    height: 19px;
+    /* The burning robot fills the title bar, tiny perimeter margin only */
+    width: 30px;
+    height: 30px;
     border-radius: 6px;
-    opacity: 0.8;
+    opacity: 0.95;
+    image-rendering: pixelated;
 }
 
 .controls {
