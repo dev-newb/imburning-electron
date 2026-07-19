@@ -1122,6 +1122,29 @@ body.theme-light .provider-section {
     color: #9090a0;
     background: rgba(128, 128, 128, 0.1);
     border: 1px solid rgba(128, 128, 128, 0.3);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.section-chip.cli:hover {
+    color: #a78bfa;
+    border-color: rgba(139, 92, 246, 0.55);
+}
+
+.settings-connect-btn {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.settings-connect-btn:hover {
+    background: rgba(139, 92, 246, 0.22);
 }
 
 /* Connect row for providers with no account yet */

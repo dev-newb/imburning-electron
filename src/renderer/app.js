@@ -97,6 +97,8 @@ const elements = {
     connectRowGoogle: document.getElementById('connectRowGoogle'),
     connectGoogleBtn: document.getElementById('connectGoogleBtn'),
     connectErrorGoogle: document.getElementById('connectErrorGoogle'),
+    settingsConnectOpenaiBtn: document.getElementById('settingsConnectOpenaiBtn'),
+    settingsConnectGoogleBtn: document.getElementById('settingsConnectGoogleBtn'),
     disconnectOpenaiBtn: document.getElementById('disconnectOpenaiBtn'),
     disconnectGoogleBtn: document.getElementById('disconnectGoogleBtn'),
     openaiLoginStatus: document.getElementById('openaiLoginStatus'),
@@ -459,26 +461,48 @@ function setupEventListeners() {
         window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
     });
 
-    // Official OAuth connect buttons (OpenAI / Google)
+    // Official OAuth connect paths (OpenAI / Google): section connect rows,
+    // the clickable 'via CLI login' chips, and the Settings Connect buttons
+    const runConnect = async (provider, busyFn, doneFn, errFn) => {
+        if (busyFn) busyFn();
+        const result = await window.electronAPI.oauthConnect(provider);
+        if (doneFn) doneFn();
+        if (result.ok) {
+            await fetchUsageData({ forceExtended: true });
+            if (elements.settingsOverlay.style.display !== 'none') await loadSettings();
+        } else if (errFn) {
+            errFn(result.error || 'Connection failed');
+        }
+    };
     const wireConnect = (btn, errEl, provider) => {
         if (!btn) return;
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
+        btn.addEventListener('click', () => {
             const original = btn.textContent;
-            btn.textContent = 'Waiting for browser sign-in...';
-            if (errEl) errEl.textContent = '';
-            const result = await window.electronAPI.oauthConnect(provider);
-            btn.disabled = false;
-            btn.textContent = original;
-            if (result.ok) {
-                await fetchUsageData({ forceExtended: true });
-            } else if (errEl) {
-                errEl.textContent = result.error || 'Connection failed';
-            }
+            runConnect(provider,
+                () => { btn.disabled = true; btn.textContent = 'Waiting for browser sign-in...'; if (errEl) errEl.textContent = ''; },
+                () => { btn.disabled = false; btn.textContent = original; },
+                (msg) => { if (errEl) errEl.textContent = msg; });
         });
     };
     wireConnect(elements.connectOpenaiBtn, elements.connectErrorOpenai, 'openai');
     wireConnect(elements.connectGoogleBtn, elements.connectErrorGoogle, 'google');
+    wireConnect(elements.settingsConnectOpenaiBtn, null, 'openai');
+    wireConnect(elements.settingsConnectGoogleBtn, null, 'google');
+
+    // 'via CLI login' chips double as connect buttons
+    const wireChipConnect = (chip, provider) => {
+        if (!chip) return;
+        chip.addEventListener('click', () => {
+            if (!chip.classList.contains('cli')) return; // dual chip is informational
+            const original = chip.textContent;
+            runConnect(provider,
+                () => { chip.textContent = 'waiting for sign-in...'; },
+                () => { if (chip.textContent === 'waiting for sign-in...') chip.textContent = original; },
+                null);
+        });
+    };
+    wireChipConnect(elements.chipOpenai, 'openai');
+    wireChipConnect(elements.chipGoogle, 'google');
 
     const wireDisconnect = (btn, provider) => {
         if (!btn) return;
@@ -2328,13 +2352,19 @@ async function loadSettings() {
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
     if (elements.openaiLoginStatus) {
         const cxNow = latestUsageData && latestUsageData.codex;
-        elements.openaiLoginStatus.textContent = (cxNow && cxNow.connected) ? (cxNow.email || 'Connected') : 'Not connected';
-        elements.disconnectOpenaiBtn.style.display = (cxNow && cxNow.connected) ? '' : 'none';
+        const cxConn = !!(cxNow && cxNow.connected);
+        elements.openaiLoginStatus.textContent = cxConn ? (cxNow.email || 'Connected')
+            : (cxNow ? 'Not connected (using CLI login)' : 'Not connected');
+        elements.disconnectOpenaiBtn.style.display = cxConn ? '' : 'none';
+        elements.settingsConnectOpenaiBtn.style.display = cxConn ? 'none' : '';
     }
     if (elements.googleLoginStatus) {
         const gmNow = latestUsageData && latestUsageData.gemini;
-        elements.googleLoginStatus.textContent = (gmNow && gmNow.connected) ? (gmNow.email || 'Connected') : 'Not connected';
-        elements.disconnectGoogleBtn.style.display = (gmNow && gmNow.connected) ? '' : 'none';
+        const gmConn = !!(gmNow && gmNow.connected);
+        elements.googleLoginStatus.textContent = gmConn ? (gmNow.email || 'Connected')
+            : (gmNow ? 'Not connected (using CLI login)' : 'Not connected');
+        elements.disconnectGoogleBtn.style.display = gmConn ? '' : 'none';
+        elements.settingsConnectGoogleBtn.style.display = gmConn ? 'none' : '';
     }
 
     // Populate org selector if user has organizations
