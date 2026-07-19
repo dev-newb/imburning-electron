@@ -1369,7 +1369,7 @@ function createMainWindow() {
     maximizable: true,
     // Floor sits where the responsive ladder bottoms out — below this the
     // remaining elements would overlap
-    minWidth: 300,
+    minWidth: 220,
     minHeight: 180,
     skipTaskbar: false,
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),

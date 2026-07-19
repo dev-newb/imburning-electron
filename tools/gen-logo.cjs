@@ -234,20 +234,20 @@ const PSYCHIC_ON = [
   '....DDDDDDDDDDDDDDDD....'
 ];
 
-// ---- the hydraulic press (compact-mode toggle) ----
-// Up: piston raised, pristine can waiting. Down: piston slammed, can crushed.
+// ---- the foot (compact-mode toggle) ----
+// Up: boot hovering over a pristine can. Down: boot stomped, can crushed.
 const PRESS_UP = [
-  'DDDDDDDDDDDDDDDDDDDDDDDD',
-  'DSSSSSSSSSSSSSSSSSSSSSSD',
-  'DDDDDDDDDDDDDDDDDDDDDDDD',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '........DDDSSDDD........',
-  '.......DHSSSSSSHD.......',
-  '.......DDDDDDDDDD.......',
   '',
-  '',
+  '.........DDDDDD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '........DDkKKkDD........',
+  '......DDkkKKKKkDD.......',
+  '....DDkKKKKKKKKkDD......',
+  '...DkKKKKKKKKKKKkD......',
+  '...DMMMMMMMMMMMMMD......',
+  '...DDDDDDDDDDDDDDD......',
   '',
   '',
   '',
@@ -264,94 +264,115 @@ const PRESS_UP = [
 ];
 
 const PRESS_DOWN = [
-  'DDDDDDDDDDDDDDDDDDDDDDDD',
-  'DSSSSSSSSSSSSSSSSSSSSSSD',
-  'DDDDDDDDDDDDDDDDDDDDDDDD',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '..........DSSD..........',
-  '........DDDSSDDD........',
-  '.......DHSSSSSSHD.......',
-  '.......DDDDDDDDDD.......',
-  '......Y..........Y......',
-  '....Y..DDDDDDDDDD..Y....',
-  '.......DENEENEEED.......',
-  '......DDEENEENEEDD......',
-  '.....DDDDDDDDDDDDDD.....',
+  '',
+  '',
+  '',
+  '',
+  '.........DDDDDD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '.........DkKKkD.........',
+  '........DDkKKkDD........',
+  '......DDkkKKKKkDD.......',
+  '....DDkKKKKKKKKkDD......',
+  '...DkKKKKKKKKKKKkD......',
+  '...DMMMMMMMMMMMMMD......',
+  '...DDDDDDDDDDDDDDD......',
+  '..Y................Y....',
+  '.Y..DDDDDDDDDDDD....Y...',
+  '....DENEENEENEED........',
+  '...DDEENEENEENEEDD......',
+  '..DDDDDDDDDDDDDDDDDD....',
   'DDDDDDDDDDDDDDDDDDDDDDDD',
   'DSSSSSSSSSSSSSSSSSSSSSSD'
 ];
 
-// ---- the pizazz clown ----
-// Happy: rainbow hair, red nose, big grin. Jailed: behind bars, sad, crying.
+// ---- the pizazz clown (32px, detailed) ----
+// Happy: rainbow hair, painted face, big grin. Jailed: sobbing behind bars,
+// tears streaming down both cheeks.
 const CLOWN_HAPPY = [
   '',
-  '....RR....CC....FF......',
-  '...RRRR..CCCC..FFFF.....',
-  '..RRORRDDDDDDDDFFYFF....',
-  '..RORRDUUUUUUUUDFYFF....',
-  '...RRDUUUUUUUUUUDFF.....',
-  '....DUUUUUUUUUUUUD......',
-  '....DUUDDUUUUDDUUD......',
-  '....DUUDDUUUUDDUUD......',
-  '....DUUUUUUUUUUUUD......',
-  '....DUUUUUNNUUUUUD......',
-  '....DUUUUNNNNUUUUD......',
-  '....DUUUUUNNUUUUUD......',
-  '....DUDUUUUUUUUDUD......',
-  '....DUUDUUUUUUDUUD......',
-  '....DUUUDDDDDDUUUD......',
-  '.....DUUUUUUUUUUD.......',
-  '......DUUUUUUUUD........',
-  '.......DDDDDDDD.........',
+  '......RR.....CC.....FF..........',
+  '.....RRRR...CCCC...FFFF.........',
+  '....RRRRR..CCCCCC..FFFFF........',
+  '....RORRRDDDDDDDDDDFFYFF........',
+  '....RRRDDUUUUUUUUUUDDFFF........',
+  '.....RDUUUUUUUUUUUUUUDF.........',
+  '....DUUUUUUUUUUUUUUUUUUD........',
+  '....DUUUDDDUUUUUUDDDUUUD........',
+  '....DUUDDDDDUUUUDDDDDUUD........',
+  '....DUUDUDDDUUUUDUDDDUUD........',
+  '....DUUDDDDDUUUUDDDDDUUD........',
+  '....DUUUDDDUUUUUUDDDUUUD........',
+  '....DUUUUUUUNNNNUUUUUUUD........',
+  '....DUUUUUUNNNNNNUUUUUUD........',
+  '....DUUUUUUNNNNNNUUUUUUD........',
+  '....DUUUUUUUNNNNUUUUUUUD........',
+  '....DUUDUUUUUUUUUUUUDUUD........',
+  '....DUUNDUUUUUUUUUUDNUUD........',
+  '....DUUNNDDUUUUUUDDNNUUD........',
+  '....DUUUNNNDDDDDDNNNUUUD........',
+  '....DUUUUNNNNNNNNNNUUUUD........',
+  '.....DUUUUUUUUUUUUUUUUD.........',
+  '......DUUUUUUUUUUUUUUD..........',
+  '.......DDUUUUUUUUUUDD...........',
+  '.........DDDDDDDDDD.............',
+  '........RRR......FFF............',
+  '.......RRRRR....FFFFF...........',
+  '........RRR......FFF............',
   ''
 ];
 
 const CLOWN_JAIL = [
   '',
-  '....RR....CC....FF......',
-  '...RRRR..CCCC..FFFF.....',
-  '..RRORRDDDDDDDDFFYFF....',
-  '..RORRDUUUUUUUUDFYFF....',
-  '...RRDUUUUUUUUUUDFF.....',
-  '....DUUUUUUUUUUUUD......',
-  '....DUUDDUUUUDDUUD......',
-  '....DUUDDUUUUDDUUD......',
-  '....DUCUUUUUUUUUUD......',
-  '....DUCUUUNNUUUUUD......',
-  '....DUUUUNNNNUUUUD......',
-  '....DUUUUUNNUUUUUD......',
-  '....DUUUUUUUUUUUUD......',
-  '....DUUUDDDDDDUUUD......',
-  '....DUUDUUUUUUDUUD......',
-  '.....DUDUUUUUUDUD.......',
-  '......DUUUUUUUUD........',
-  '.......DDDDDDDD.........',
+  '......RR.....CC.....FF..........',
+  '.....RRRR...CCCC...FFFF.........',
+  '....RRRRR..CCCCCC..FFFFF........',
+  '....RORRRDDDDDDDDDDFFYFF........',
+  '....RRRDDUUUUUUUUUUDDFFF........',
+  '.....RDUUUUUUUUUUUUUUDF.........',
+  '....DUUUUUUUUUUUUUUUUUUD........',
+  '....DUUDDDDUUUUUUDDDDUUD........',
+  '....DUUUDDDDUUUUDDDDUUUD........',
+  '....DUUDDDDDUUUUDDDDDUUD........',
+  '....DUUDUDDDUUUUDDDUDUUD........',
+  '....DUUCCDUUUUUUUUDCCUUD........',
+  '....DUUCCUUUNNNNUUUCCUUD........',
+  '....DUUCCUUNNNNNNUUCCUUD........',
+  '....DUUCCUUNNNNNNUUCCUUD........',
+  '....DUUCCUUUNNNNUUUCCUUD........',
+  '....DUCCCUUUUUUUUUUCCCUD........',
+  '....DUUCCUUUUUUUUUUCCUUD........',
+  '....DUUCUUUDDDDDDUUUCUUD........',
+  '....DUUUUDDNNNNNNDDUUUUD........',
+  '....DUUUDNNNNNNNNNNDUUUD........',
+  '.....DUUUDDDDDDDDDDUUUD.........',
+  '......DUUUUUUUUUUUUUUD..........',
+  '.......DDUUUUUUUUUUDD...........',
+  '.........DDDDDDDDDD.............',
+  '........CC........CC............',
+  '.......CCC.......CCC............',
+  '........C.........C.............',
   ''
 ];
 
-// stamp jail bars in front of the sad clown
-for (let r = 0; r < CLOWN_JAIL.length; r++) {
-  const row = (CLOWN_JAIL[r] || '').padEnd(24, '.').split('');
-  for (const c of [2, 7, 12, 17, 22]) row[c] = 'G';
-  if (r === 0 || r === CLOWN_JAIL.length - 1) for (let c = 1; c < 23; c++) row[c] = 'G';
+// stamp thick jail bars in front of the sobbing clown
+for (let r = 0; r < 30; r++) {
+  const row = (CLOWN_JAIL[r] || '').padEnd(32, '.').split('');
+  for (const c of [1, 2, 8, 9, 15, 16, 22, 23, 29, 30]) row[c] = 'G';
+  if (r === 0 || r === 29) for (let c = 0; c < 32; c++) row[c] = 'G';
   CLOWN_JAIL[r] = row.join('');
 }
 
-// Rows may be ragged for readability — pad everything to a 24x24 grid
-function pad24(art) {
-  const rows = art.map((row) => (row || '').padEnd(24, '.').slice(0, 24));
-  while (rows.length < 24) rows.push('.'.repeat(24));
-  return rows.slice(0, 24);
+// Rows may be ragged for readability — pad everything to an NxN grid
+function padGrid(art, size) {
+  const rows = art.map((row) => (row || '').padEnd(size, '.').slice(0, size));
+  while (rows.length < size) rows.push('.'.repeat(size));
+  return rows.slice(0, size);
 }
+const pad24 = (art) => padGrid(art, 24);
 
 function artToRGBA(art, scale) {
   const h = art.length, w = art[0].length;
@@ -381,6 +402,6 @@ fs.writeFileSync(path.join(assets, 'psychic-idle.png'), encodePNG(24, 24, artToR
 fs.writeFileSync(path.join(assets, 'psychic-on.png'), encodePNG(24, 24, artToRGBA(PSYCHIC_ON, 1)));
 fs.writeFileSync(path.join(assets, 'press-up.png'), encodePNG(24, 24, artToRGBA(pad24(PRESS_UP), 1)));
 fs.writeFileSync(path.join(assets, 'press-down.png'), encodePNG(24, 24, artToRGBA(pad24(PRESS_DOWN), 1)));
-fs.writeFileSync(path.join(assets, 'clown-happy.png'), encodePNG(24, 24, artToRGBA(pad24(CLOWN_HAPPY), 1)));
-fs.writeFileSync(path.join(assets, 'clown-jail.png'), encodePNG(24, 24, artToRGBA(pad24(CLOWN_JAIL), 1)));
+fs.writeFileSync(path.join(assets, 'clown-happy.png'), encodePNG(32, 32, artToRGBA(padGrid(CLOWN_HAPPY, 32), 1)));
+fs.writeFileSync(path.join(assets, 'clown-jail.png'), encodePNG(32, 32, artToRGBA(padGrid(CLOWN_JAIL, 32), 1)));
 console.log('logo, tray-icon, icon.ico, hero, psychic, press + clown sprites written');

@@ -1415,9 +1415,10 @@ body.theme-light .section-header.frozen .section-name {
 .reset-dots {
     flex: 1;
     display: flex;
-    justify-content: center;
+    justify-content: space-evenly;
     align-items: center;
-    gap: clamp(4px, calc((100vw - 280px) / 12), 26px);
+    max-width: 240px;
+    margin: 0 auto;
     padding: 0 7px;
 }
 
@@ -2426,11 +2427,12 @@ body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
     }
     .credits-approx { display: none; }
     .extra-balance-label, .extra-balance-amount { display: none; }
-    .usage-section { grid-template-columns: 36px minmax(30px, 1fr) 36px 72px 68px; }
+    .usage-section { grid-template-columns: 36px 44px 36px 72px 68px; justify-content: start; gap: clamp(4px, 2.4vw, 10px); }
+    .usage-bar-group { justify-content: flex-end; }
 }
 
 @media (max-width: 400px) {
-    .usage-section { grid-template-columns: 36px minmax(30px, 1fr) 36px 36px 68px; }
+    .usage-section { grid-template-columns: 36px 44px 36px 36px 68px; justify-content: start; gap: clamp(3px, 2vw, 8px); }
     /* Resets-In text becomes a remaining-time ring (same family as Elapsed) */
     .timer-text:not(.extra-balance-label) {
         font-size: 0 !important;
@@ -2439,15 +2441,15 @@ body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
     }
     .timer-text:not(.extra-balance-label)::before {
         content: '';
-        width: 16px;
-        height: 16px;
+        width: 22px;
+        height: 22px;
         border-radius: 50%;
         background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
     }
 }
 
 @media (max-width: 350px) {
-    .usage-section { grid-template-columns: 36px minmax(30px, 1fr) 36px 36px; }
+    .usage-section { grid-template-columns: 36px 44px 36px 36px; justify-content: start; gap: clamp(3px, 1.8vw, 7px); }
     .resets-at-text { display: none; }
 }
 
@@ -2572,7 +2574,36 @@ body.no-pizazz *::before,
 body.no-pizazz *::after {
     animation: none !important;
     transition: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* The iced-over logos thaw to plain text while the clown is jailed */
+body.no-pizazz .section-header.frozen .section-name {
+    background: none !important;
+    clip-path: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+body.no-pizazz .section-header.frozen .section-name::before,
+body.no-pizazz .section-header.frozen .section-name::after {
+    display: none !important;
 }
 
 /* The press button in the title bar replaces the old compact chevrons */
 .compact-collapse-btn, .compact-expand-btn { display: none !important; }
+
+
+/* The clown is twice the size of a normal control — he deserves it */
+.clown-btn {
+    width: 34px;
+    height: 34px;
+}
+
+.clown-btn img {
+    width: 30px;
+    height: 30px;
+}
