@@ -1,108 +1,75 @@
 # Quick Start Guide
 
-Get up and running with Claude Usage Widget in under 2 minutes.
+Get up and running with **Burnwatch** in a couple of minutes. Burnwatch is a small desktop
+widget that tracks your AI usage across **Anthropic, OpenAI, and Google** — including multiple
+accounts per provider (for example a desktop/primary account alongside its CLI login).
 
-## Step 1: Download
+## Step 1: Get Burnwatch
 
-Go to [Releases](https://github.com/SlavomirDurej/claude-usage-widget/releases) and download the latest version for your platform:
+### Windows (prebuilt)
 
-- **Windows:** `Claude-Usage-Widget-{version}-win-Setup.exe`
-- **macOS:** `Claude-Usage-Widget-{version}-macOS-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel)
-- **Linux:** `Claude-Usage-Widget-{version}-linux-x86_64.AppImage`
+Go to [Releases](https://github.com/dev-newb/burnwatch/releases) and download the latest:
 
-## Step 2: Install
+- **Installer:** `Claude-Usage-Widget-{version}-win-Setup.exe` (recommended — includes silent auto-update)
+- **Portable:** `Claude-Usage-Widget-{version}-win-portable.exe` (no install; update manually)
 
-### Windows
-1. Run the downloaded `.exe` installer
-2. Follow the installation wizard
-3. Launch from Start Menu
+Run the file. That's it — the installer sets up Burnwatch and a Start Menu shortcut, and it
+updates itself in the background from then on.
 
-**Or use the portable version** (no installation):
-Download `Claude-Usage-Widget-{version}-win-portable.exe` and run it directly.
+### macOS / Linux (build from source)
 
-### macOS
-1. Open the `.dmg` file
-2. Drag the app to your Applications folder
-3. Launch from Applications
+Prebuilt macOS and Linux binaries are not published yet (planned). For now, build from source:
 
-**Note:** The app is signed and notarized. If you see a warning, run:
 ```bash
-xattr -cr /Applications/Claude\ Usage\ Widget.app
+git clone https://github.com/dev-newb/burnwatch.git
+cd burnwatch
+npm install
+npm start          # run it
+# or produce an app bundle:
+npm run build:mac    # macOS .dmg (arm64 + x64)
+npm run build:linux  # Linux AppImage (x64 + arm64)
 ```
 
-### Linux
-1. Make the AppImage executable:
-   ```bash
-   chmod +x Claude-Usage-Widget-*.AppImage
-   ```
-2. Run it:
-   ```bash
-   ./Claude-Usage-Widget-*.AppImage
-   ```
+Requires **Node.js 18+**. See [INSTALL.md](INSTALL.md) for platform details, the macOS
+Gatekeeper note, and Linux desktop integration.
 
-**Ubuntu 22.04+:** If it doesn't run, install libfuse2 first:
-```bash
-sudo apt install libfuse2
-```
+## Step 2: Connect your accounts
 
-## Step 3: Login
+On first run a small window appears and prompts you to sign in to **claude.ai** for the
+Anthropic section. This is only the first provider — Burnwatch is not Claude-only.
 
-1. **Launch the widget** - A small window appears
-2. **Click "Login to Claude"** - Your browser opens
-3. **Sign in** - Use your normal Claude.ai credentials
-4. **Done!** - The widget automatically captures your session and displays usage
+Open **Settings (⚙️)** to connect the rest:
+
+- **Anthropic** — sign in with your claude.ai session.
+- **OpenAI** — "Sign in with ChatGPT" (OAuth), or let Burnwatch read your local `codex` CLI login.
+- **Google** — "Sign in with Google" (OAuth), or let Burnwatch read your local `gemini` CLI login.
+
+You can connect **multiple accounts** for a provider — for example a company's primary
+desktop-app account and its separate CLI account.
 
 ## What You'll See
 
-After logging in, the widget shows:
-
-- **Session Usage** - Your current 5-hour window progress (resets when you reach the limit or after 5 hours)
-- **Weekly Usage** - Your 7-day rolling limit
-- **Countdown Timers** - When each limit resets
-- **System Tray Icons** (Windows) - Two small icons showing real-time usage percentages
+Once connected, Burnwatch shows your usage per connected account: current-window and
+longer-window limits with progress bars and countdown timers to each reset, plus a usage chart.
 
 ## Daily Use
 
-**Opening the widget:**
-- Click the tray icon (Windows/Linux)
-- Click the Dock icon (macOS)
+- **Open / hide the widget** — click the tray icon (Windows/Linux) or the Dock icon (macOS).
+- **Refresh** — data refreshes automatically; use the refresh button (🔄) for an immediate update.
+- **Minimize** — the minimize control tucks the widget back to the tray/Dock.
+- **Settings (⚙️)** — thresholds, time/date format, theme, refresh interval, tray badge colors,
+  and which accounts are shown.
 
-**Refreshing data:**
-- Auto-refreshes every 5 minutes
-- Click the refresh button (🔄) for manual update
+## System Tray
 
-**Minimizing:**
-- Click the minimize button (−)
-- Widget hides to tray/dock
-
-**Settings:**
-- Click the gear icon (⚙️) to customize:
-  - Warning thresholds (when bars turn orange/red)
-  - Time/date format (12h vs 24h)
-  - Theme (light/dark)
-  - Auto-refresh interval
-  - Organization (if you have Teams + Personal accounts)
-
-## System Tray Icons (Windows)
-
-Two small icons in your system tray show usage at a glance:
-
-- **Left (blue):** Weekly usage percentage
-- **Right (purple):** Session usage percentage
-- **Red X:** Appears when usage reaches 99-100%
-
-Hover over icons to see exact percentages.
-
-## Logging Out
-
-Right-click the tray icon → "Log Out" to clear your session.
+Burnwatch shows **per-company colored badges** in the tray so you can read usage at a glance —
+for example Anthropic blue, Fable red, OpenAI green, Google yellow (all customizable in Settings).
+A second (CLI) account for the same company gets a terminal-cursor style badge, and a badge turns
+to an **X on red** when that account hits 99%. Hover a badge for the exact percentage.
 
 ## Need Help?
 
-- **Installation issues:** See [INSTALL.md](INSTALL.md) for detailed platform-specific guides
-- **Feature questions:** Check the [README](README.md)
-- **Problems:** Open a [Support Discussion](https://github.com/SlavomirDurej/claude-usage-widget/discussions/categories/support)
-
----
-
-**That's it!** You're now tracking your Claude usage. 🎉
+- **Install details:** [INSTALL.md](INSTALL.md)
+- **Contributing / development:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Questions & bugs:** open a [Discussion](https://github.com/dev-newb/burnwatch/discussions)
+  or an [Issue](https://github.com/dev-newb/burnwatch/issues)

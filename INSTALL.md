@@ -1,234 +1,201 @@
 # Installation Instructions
 
-## For End Users
+Burnwatch is an Electron desktop widget that tracks AI usage across **Anthropic, OpenAI, and
+Google**, with multi-account support. Prebuilt binaries are currently published for **Windows
+only**; macOS and Linux users build from source (prebuilt macOS/Linux binaries are planned).
 
-### Windows
-
-**Option 1: Installer (Recommended)**
-1. Download the latest `Claude-Usage-Widget-{version}-win-Setup.exe` from [Releases](https://github.com/SlavomirDurej/claude-usage-widget/releases)
-2. Run the installer
-3. Launch "Claude Usage Widget" from the Start Menu
-4. Login when prompted
-
-**Option 2: Portable (No Installation)**
-1. Download the latest `Claude-Usage-Widget-{version}-win-portable.exe` from [Releases](https://github.com/SlavomirDurej/claude-usage-widget/releases)
-2. Run the portable exe directly
-3. No installation needed - runs from wherever you place it
-
-**What Gets Installed (Installer Only):**
-- Executable: `%LOCALAPPDATA%\Programs\claude-usage-widget\`
-- Settings: `%APPDATA%\claude-usage-widget\` (encrypted)
-- Start Menu shortcut
-- Desktop shortcut (optional)
+> Note on names: the app is **Burnwatch**, but its internal package and build product name remain
+> `Claude-Usage-Widget`. That is deliberate — it keeps the existing settings directory and the
+> auto-update channel intact. So installer filenames and install paths still read
+> `Claude-Usage-Widget`.
 
 ---
 
-### macOS
+## Windows
 
-**Installation Steps:**
-1. Download the latest DMG for your Mac:
-   - Apple Silicon (M1/M2/M3): `Claude-Usage-Widget-{version}-macOS-arm64.dmg`
-   - Intel Mac: `Claude-Usage-Widget-{version}-macOS-x64.dmg`
-   - Available from [Releases](https://github.com/SlavomirDurej/claude-usage-widget/releases)
-2. Open the DMG file
-3. Drag "Claude Usage Widget" to your Applications folder
-4. Launch from Applications
+**Option 1: Installer (recommended)**
+1. Download `Claude-Usage-Widget-{version}-win-Setup.exe` from
+   [Releases](https://github.com/dev-newb/burnwatch/releases).
+2. Run the installer and follow the wizard (you can choose the install directory).
+3. Launch **Burnwatch** from the Start Menu.
 
-**macOS Security Notice:**
+The installer build **auto-updates silently**: it checks on launch and once a day, downloads new
+versions in the background, and applies them on the next launch. Install once and forget it.
 
-The app is now signed and notarized with Apple Developer ID, so it should open without warnings on macOS 10.15+.
+**Option 2: Portable (no installation)**
+1. Download `Claude-Usage-Widget-{version}-win-portable.exe` from
+   [Releases](https://github.com/dev-newb/burnwatch/releases).
+2. Run it directly from wherever you place it.
 
-If you encounter "damaged or can't be opened" warnings (rare), run this in Terminal:
+Portable builds do **not** auto-update — re-download to upgrade.
+
+**What gets installed (installer only):**
+- Application: `C:\Program Files\Claude-Usage-Widget\`
+- Settings/config: `%APPDATA%\claude-usage-widget\`
+- Start Menu shortcut (and Desktop shortcut)
+
+---
+
+## macOS (build from source)
+
+No prebuilt DMG is published yet. Build it yourself:
+
 ```bash
-xattr -cr /Applications/Claude\ Usage\ Widget.app
+git clone https://github.com/dev-newb/burnwatch.git
+cd burnwatch
+npm install
+npm run build:mac   # produces a .dmg for arm64 and x64 in dist/
 ```
-Then launch the app again.
 
-**What Gets Installed:**
-- Application: `/Applications/Claude Usage Widget.app`
-- Settings: `~/Library/Application Support/claude-usage-widget/` (encrypted)
+Then open the built DMG and drag the app to Applications, or just run it in place with `npm start`.
+
+**macOS security notice — the app is not signed or notarized.** There is no Apple Developer ID
+behind these builds, so Gatekeeper may report the app as "damaged" or refuse to open it. Clear the
+quarantine attribute and launch again:
+
+```bash
+xattr -cr "/Applications/Claude Usage Widget.app"
+```
+
+**Settings/config:** `~/Library/Application Support/claude-usage-widget/`
 
 ---
 
-### Linux
+## Linux (build from source)
 
-**Installation Steps:**
-1. Download the latest AppImage for your architecture:
-   - Intel/AMD (64-bit): `Claude-Usage-Widget-{version}-linux-x86_64.AppImage`
-   - ARM (64-bit): `Claude-Usage-Widget-{version}-linux-arm64.AppImage`
-   - Available from [Releases](https://github.com/SlavomirDurej/claude-usage-widget/releases)
-2. Make it executable:
-   ```bash
-   chmod +x Claude-Usage-Widget-*.AppImage
-   ```
-3. Run it:
-   ```bash
-   ./Claude-Usage-Widget-*.AppImage
-   ```
+No prebuilt AppImage is published yet. Build it yourself:
 
-**Ubuntu 22.04+ Dependency:**
+```bash
+git clone https://github.com/dev-newb/burnwatch.git
+cd burnwatch
+npm install
+npm run build:linux   # produces an AppImage for x64 and arm64 in dist/
+```
 
-If the AppImage doesn't run, install libfuse2:
+Make the built AppImage executable and run it:
+
+```bash
+chmod +x dist/Claude-Usage-Widget-*-linux-*.AppImage
+./dist/Claude-Usage-Widget-*-linux-*.AppImage
+```
+
+**Ubuntu 22.04+:** if the AppImage won't start, install libfuse2:
+
 ```bash
 sudo apt install libfuse2
 ```
 
-**Optional: Desktop Launcher & Autostart**
+**Settings/config:** `~/.config/claude-usage-widget/`
 
-For desktop integration (application menu icon, auto-start on login), see the detailed guide in the [Linux Setup Section](#linux-desktop-launcher--autostart-optional) below.
+### Desktop Launcher & Autostart (optional)
 
-**What Gets Created:**
-- Settings: `~/.config/claude-usage-widget/` (encrypted)
-- Desktop launcher (if configured): `~/.local/share/applications/claude-usage-widget.desktop`
-- Autostart entry (if configured): `~/.config/autostart/claude-usage-widget.desktop`
+Integrate the built AppImage into your desktop (application-menu entry + auto-start on login).
 
----
-
-## First Time Setup (All Platforms)
-
-1. **Launch the widget** - A frameless window appears
-2. **Click "Login to Claude"** - Browser window opens
-3. **Login to Claude.ai** - Use your normal credentials
-4. **Widget activates** - Usage data appears automatically
-5. **Minimize to tray** - Click the minus icon (Windows/Linux) or minimize button (macOS)
-
----
-
-## System Requirements
-
-**All Platforms:**
-- RAM: 200 MB
-- Disk: 100 MB
-- Internet: Required for Claude.ai API
-
-**Platform-Specific:**
-- **Windows:** Windows 10 or later (64-bit)
-- **macOS:** macOS 10.15 Catalina or later
-- **Linux:** Any modern distribution with AppImage support
-
----
-
-## Linux: Desktop Launcher & Autostart (Optional)
-
-*Contributed by [@sergkuzn](https://github.com/sergkuzn)*
-
-This section shows how to integrate the AppImage into your Linux desktop environment with an application menu icon and auto-start on login.
-
-### Step 1: Place the AppImage
-
-Move the AppImage to a permanent location:
+**1. Place the AppImage somewhere permanent:**
 ```bash
 mkdir -p ~/.local/bin
-mv Claude-Usage-Widget-*.AppImage ~/.local/bin/claude-usage-widget.AppImage
+cp dist/Claude-Usage-Widget-*-linux-*.AppImage ~/.local/bin/burnwatch.AppImage
+chmod +x ~/.local/bin/burnwatch.AppImage
 ```
 
-### Step 2: Create Desktop Launcher
-
-Create `~/.local/share/applications/claude-usage-widget.desktop`:
+**2. Create `~/.local/share/applications/burnwatch.desktop`:**
 ```ini
 [Desktop Entry]
-Name=Claude Usage Widget
-Comment=Monitor Claude.ai usage
-Exec=/home/YOUR_USERNAME/.local/bin/claude-usage-widget.AppImage
-Icon=/home/YOUR_USERNAME/.local/share/icons/claude-usage-widget.png
+Name=Burnwatch
+Comment=Monitor AI usage (Anthropic, OpenAI, Google)
+Exec=/home/YOUR_USERNAME/.local/bin/burnwatch.AppImage
+Icon=/home/YOUR_USERNAME/.local/share/icons/burnwatch.png
 Terminal=false
 Type=Application
 Categories=Utility;
 ```
+Replace `YOUR_USERNAME` with your actual username.
 
-**Important:** Replace `YOUR_USERNAME` with your actual username.
+> **Sandbox note:** on some distributions the Electron/Chromium sandbox fails to start the
+> AppImage (a `chrome-sandbox` / SUID error). If so, append `--no-sandbox` to the `Exec=` line:
+> `Exec=/home/YOUR_USERNAME/.local/bin/burnwatch.AppImage --no-sandbox`
 
-### Step 3: Add an Icon (Optional)
-
-Download an icon and place it at:
+**3. Add an icon (optional):**
 ```bash
 mkdir -p ~/.local/share/icons
-# Place your icon file as:
-# ~/.local/share/icons/claude-usage-widget.png
+# copy an icon to ~/.local/share/icons/burnwatch.png
 ```
 
-The icon will appear in your application menu.
-
-### Step 4: Enable Autostart (Optional)
-
-Create `~/.config/autostart/claude-usage-widget.desktop`:
+**4. Enable autostart (optional):**
 ```bash
 mkdir -p ~/.config/autostart
-cp ~/.local/share/applications/claude-usage-widget.desktop ~/.config/autostart/
+cp ~/.local/share/applications/burnwatch.desktop ~/.config/autostart/
 ```
 
-The widget will now launch automatically when you log in.
-
-**Desktop Environment Notes:**
-- **GNOME:** Icon may not appear in app grid immediately - log out/in to refresh
-- **KDE Plasma:** Should appear instantly in application launcher
-- **XFCE:** Icon appears in Whisker Menu after refresh
+**Desktop environment notes:**
+- **GNOME:** the entry may not appear immediately — log out/in to refresh.
+- **KDE Plasma:** appears instantly in the launcher.
+- **XFCE:** appears in the Whisker Menu after a refresh.
 
 ---
 
-## Build from Source (All Platforms)
+## Build from Source (all platforms)
 
-**Prerequisites:**
-- Node.js 18+ ([Download](https://nodejs.org))
-- npm (comes with Node.js)
+**Prerequisites:** Node.js 18+ ([download](https://nodejs.org)) and npm (bundled with Node).
 
-**Build Steps:**
 ```bash
-git clone https://github.com/SlavomirDurej/claude-usage-widget.git
-cd claude-usage-widget
+git clone https://github.com/dev-newb/burnwatch.git
+cd burnwatch
 npm install
-npm start
+npm start            # run locally
 ```
 
-**Platform-Specific Builds:**
+**Platform build scripts:**
 ```bash
-npm run build:win    # Windows installer + portable
-npm run build:mac    # macOS DMG (requires macOS)
-npm run build:linux  # Linux AppImage
+npm run build:win     # Windows installer + portable
+npm run build:mac     # macOS .dmg (requires macOS)
+npm run build:linux   # Linux AppImage
+npm run build         # electron-builder default for the current host
 ```
+
+Build output lands in `dist/`.
 
 ---
 
 ## Uninstallation
 
-### Windows (Installer)
-- Use "Add or Remove Programs" in Windows Settings
-- Or run the uninstaller from the Start Menu folder
+**Windows (installer):** use "Add or Remove Programs", or the uninstaller in the Start Menu folder.
+Optionally delete `%APPDATA%\claude-usage-widget\`.
 
-### Windows (Portable)
-- Simply delete the executable
+**Windows (portable):** delete the `.exe`. Optionally delete `%APPDATA%\claude-usage-widget\`.
 
-### macOS
-- Drag "Claude Usage Widget" from Applications to Trash
-- Optionally delete settings: `~/Library/Application Support/claude-usage-widget/`
+**macOS:** move the app from Applications to the Trash. Optionally delete
+`~/Library/Application Support/claude-usage-widget/`.
 
-### Linux
-- Delete the AppImage file
-- Optionally delete settings: `~/.config/claude-usage-widget/`
-- Remove desktop launcher: `rm ~/.local/share/applications/claude-usage-widget.desktop`
-- Remove autostart entry: `rm ~/.config/autostart/claude-usage-widget.desktop`
+**Linux:** delete the AppImage. Optionally delete `~/.config/claude-usage-widget/` and remove the
+desktop/autostart entries:
+```bash
+rm ~/.local/share/applications/burnwatch.desktop
+rm ~/.config/autostart/burnwatch.desktop
+```
 
 ---
 
 ## Troubleshooting
 
-**"Login Required" keeps appearing**  
-Session may have expired. Click "Login to Claude" to re-authenticate.
+**Sign-in prompt keeps returning** — a provider session may have expired. Re-connect that account
+from **Settings (⚙️)**.
 
-**Widget not updating**  
-Check internet connection, click refresh manually, or try re-logging in from the tray menu.
+**Widget not updating** — check your internet connection, use the manual refresh button, or
+re-connect the affected account.
 
-**Build errors**  
-Clean reinstall resolves most issues:
+**macOS: "damaged" / won't open** — clear quarantine:
+`xattr -cr "/Applications/Claude Usage Widget.app"` (the app is unsigned; see above).
+
+**Linux: AppImage won't run** — install libfuse2: `sudo apt install libfuse2`. If it's a sandbox
+error, launch with `--no-sandbox`.
+
+**Build errors** — a clean reinstall resolves most issues:
 ```bash
 rm -rf node_modules package-lock.json
 npm install
 ```
 
-**macOS: App won't open after update**  
-Run: `xattr -cr /Applications/Claude\ Usage\ Widget.app`
-
-**Linux: AppImage won't run**  
-Install libfuse2: `sudo apt install libfuse2`
-
-If issues persist, open a [Support Discussion](https://github.com/SlavomirDurej/claude-usage-widget/discussions/categories/support) with your OS, Node.js version, and full error output.
+Still stuck? Open a [Discussion](https://github.com/dev-newb/burnwatch/discussions) or
+[Issue](https://github.com/dev-newb/burnwatch/issues) with your OS, Node.js version, and the full
+error output.

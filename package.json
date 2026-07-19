@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-widget",
   "version": "2.0.0",
-  "description": "Desktop widget for Claude.ai usage monitoring",
+  "description": "Burnwatch — desktop widget tracking AI usage across Anthropic, OpenAI and Google",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -19,7 +19,7 @@
   ],
   "author": "devnewb",
   "license": "MIT",
-  "copyright": "Copyright ┬⌐ 2025 Slavomir Durej",
+  "copyright": "Copyright © 2026 Burnwatch (dev-newb). Based on Claude Usage Widget © Slavomir Durej (MIT).",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
@@ -84,9 +84,6 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": {
-        "teamId": "X84UXCNLPX"
-      },
       "extendInfo": {
         "NSHumanReadableCopyright": "Copyright ┬⌐ 2025 Slavomir Durej"
       }
@@ -108,5 +105,10 @@
       "category": "Utility",
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
     }
+  },
+  "homepage": "https://github.com/dev-newb/burnwatch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dev-newb/burnwatch.git"
   }
 }

@@ -1,48 +1,60 @@
 # Release Process
 
-## Pre-Release Testing (Staging)
+For maintainers. Burnwatch releases are **built locally and published with the GitHub CLI** — there
+is no GitHub Actions tag-based release pipeline, no CHANGELOG file to maintain, and no code-signing
+step. Only **Windows** binaries are published; macOS/Linux are build-from-source for now.
 
-1. **Create a release candidate tag:**
+## Prerequisites
+
+- A working Windows build environment (Node.js 18+, `npm install` done).
+- The [GitHub CLI](https://cli.github.com/) (`gh`) authenticated with push/release rights on
+  `dev-newb/burnwatch`.
+
+## Steps
+
+1. **Bump the version** in `package.json` (the `version` field). This value drives both the built
+   artifact filenames and the electron-updater `latest.yml`.
+
+2. **Commit and push** to the default branch:
    ```bash
-   git tag v1.7.1-rc.1
-   git push origin v1.7.1-rc.1
+   git add package.json
+   git commit -m "release: vX.Y.Z"
+   git push origin feature/fable-usage
    ```
 
-2. **GitHub Actions will build all platforms** automatically
-
-3. **Mark the GitHub Release as "Pre-release":**
-   - Go to the release on GitHub
-   - Check "This is a pre-release" checkbox
-   - This prevents user notifications
-
-4. **Test the builds:**
-   - Download and test Windows, macOS, Linux builds
-   - Verify code signing on macOS
-   - Check for runtime errors
-
-5. **If issues found:**
-   - Fix locally
-   - Delete the pre-release tag: `git tag -d v1.7.1-rc.1 && git push origin :refs/tags/v1.7.1-rc.1`
-   - Delete the GitHub Release
-   - Increment RC number: `v1.7.1-rc.2`
-   - Repeat from step 1
-
-## Final Release
-
-1. **Only after all RC builds pass testing:**
+3. **Build the Windows artifacts:**
    ```bash
-   git tag v1.7.1
-   git push origin v1.7.1
+   npm run build:win
+   ```
+   This produces, in `dist/`:
+   - `Claude-Usage-Widget-{version}-win-Setup.exe`
+   - `Claude-Usage-Widget-{version}-win-Setup.exe.blockmap`
+   - `Claude-Usage-Widget-{version}-win-portable.exe`
+   - `latest.yml`
+
+4. **Create the GitHub Release** and attach those four files:
+   ```bash
+   gh release create vX.Y.Z \
+     --repo dev-newb/burnwatch \
+     --target feature/fable-usage \
+     --title "vX.Y.Z" \
+     dist/Claude-Usage-Widget-*-win-Setup.exe \
+     dist/Claude-Usage-Widget-*-win-Setup.exe.blockmap \
+     dist/Claude-Usage-Widget-*-win-portable.exe \
+     dist/latest.yml
    ```
 
-2. **Create the final GitHub Release:**
-   - **DO NOT** check "This is a pre-release"
-   - Paste release notes from CHANGELOG.md
-   - Users will be notified of this version only
+5. **Done.** electron-updater reads `latest.yml` from the release and delivers the update to
+   installed (installer-build) clients **silently** — they pick it up on launch or the daily check,
+   download in the background, and apply it on next launch. Portable users update by re-downloading.
 
-## Important Notes
+## Notes
 
-- **Pre-release tags do not notify users** if marked as pre-release on GitHub
-- **Final tags notify all users** watching the repo
-- **Never delete and re-push final tags** — use RC tags for testing
-- **Always test locally** with `npm start` before pushing any tags
+- **All four Windows assets are required.** `latest.yml` and the `.blockmap` are what electron-updater
+  uses to detect and delta-download the new version; omitting them breaks auto-update.
+- **`--target feature/fable-usage`** ties the release to the default branch you just pushed.
+- **No code signing.** Windows builds are unsigned; macOS builds (when built from source) are not
+  signed or notarized. Do not add a signing/notarization step here unless the project actually
+  obtains certificates.
+- **macOS/Linux binaries are not published.** If/when that changes, build with `npm run build:mac` /
+  `npm run build:linux` and attach those artifacts to the same release.
