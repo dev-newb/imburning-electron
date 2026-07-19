@@ -149,7 +149,7 @@
 
                 <!-- Session Usage -->
                 <div class="usage-section">
-                    <span class="usage-label">Current Session</span>
+                    <span class="usage-label" data-code="5H" style="--row-col: #a78bfa;">Session (5h)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill" id="sessionProgress" style="width: 0%"></div>
@@ -169,7 +169,7 @@
 
                 <!-- Weekly Usage -->
                 <div class="usage-section">
-                    <span class="usage-label">Weekly Limit</span>
+                    <span class="usage-label" data-code="7D" style="--row-col: #3b82f6;">All Models (7d)</span>
                     <div class="usage-bar-group">
                         <div class="progress-bar">
                             <div class="progress-fill weekly" id="weeklyProgress" style="width: 0%"></div>
@@ -326,35 +326,9 @@
                 <button class="compact-expand-btn" id="compactExpandBtn" title="Normal mode">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
-                <div class="compact-rows">
-                    <div class="compact-row">
-                        <span class="compact-label">Session</span>
-                        <div class="compact-bar-wrap">
-                            <div class="compact-bar-bg">
-                                <div class="compact-bar-fill" id="compactSessionFill" style="width: 0%"></div>
-                                <span class="compact-pct" id="compactSessionPct">0%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="compact-row">
-                        <span class="compact-label">Weekly</span>
-                        <div class="compact-bar-wrap">
-                            <div class="compact-bar-bg">
-                                <div class="compact-bar-fill weekly" id="compactWeeklyFill" style="width: 0%"></div>
-                                <span class="compact-pct" id="compactWeeklyPct">0%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="compact-row" id="compactScopedRow" style="display: none;">
-                        <span class="compact-label" id="compactScopedLabel">Fable</span>
-                        <div class="compact-bar-wrap">
-                            <div class="compact-bar-bg">
-                                <div class="compact-bar-fill fable" id="compactScopedFill" style="width: 0%"></div>
-                                <span class="compact-pct" id="compactScopedPct">0%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Rows are built dynamically: one slim bar per active pool
+                     across ALL providers, grouped by company edge colour -->
+                <div class="compact-rows" id="compactRows"></div>
             </div>
 
             <!-- Settings Overlay (normal mode) -->

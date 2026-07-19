@@ -205,12 +205,14 @@ function readCodexAuth() {
   }
 }
 
-function codexWindowLabel(windowSeconds) {
-  if (windowSeconds == null) return 'Codex';
+function codexWindowSuffix(windowSeconds) {
+  if (windowSeconds == null) return '7d';
   const hours = Math.round(windowSeconds / 3600);
-  if (hours >= 24 * 6) return 'Codex Weekly (7d)';
-  if (hours <= 6) return `Codex ${hours}h`;
-  return `Codex ${hours}h`;
+  return hours >= 24 * 6 ? '7d' : `${hours}h`;
+}
+
+function codexWindowLabel(windowSeconds) {
+  return `Codex (${codexWindowSuffix(windowSeconds)})`;
 }
 
 function codexWindowKey(windowSeconds, prefix) {
@@ -239,15 +241,27 @@ function normalizeCodexLive(json) {
       resetsAt: sw.reset_at ? new Date(sw.reset_at * 1000).toISOString() : null
     });
   }
+  // Per-feature sub-pools (e.g. GPT-5.3-Codex-Spark) — each is a genuinely
+  // separate limit, so show them even at 0% like every other tracked pool
   for (const extra of (json?.additional_rate_limits || [])) {
     const w = extra?.rate_limit?.primary_window;
-    if (!w || w.used_percent == null || w.used_percent <= 0) continue; // skip untouched sub-limits
+    if (!w || w.used_percent == null) continue;
     const name = String(extra.limit_name || 'Extra').replace(/^gpt-[\d.]+-codex-/i, '');
     limits.push({
       key: 'extra_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_seven_day',
-      label: `Codex ${name} (7d)`,
+      label: `${name} (${codexWindowSuffix(w.limit_window_seconds)})`,
       percent: w.used_percent,
       resetsAt: w.reset_at ? new Date(w.reset_at * 1000).toISOString() : null
+    });
+  }
+  // Code review has its own pool once the account has used the feature
+  const crw = json?.code_review_rate_limit?.primary_window;
+  if (crw && crw.used_percent != null) {
+    limits.push({
+      key: 'code_review_seven_day',
+      label: `Code Review (${codexWindowSuffix(crw.limit_window_seconds)})`,
+      percent: crw.used_percent,
+      resetsAt: crw.reset_at ? new Date(crw.reset_at * 1000).toISOString() : null
     });
   }
   if (!limits.length) return null;
@@ -491,28 +505,30 @@ function getGeminiAccessToken() {
   });
 }
 
-// Group per-model buckets into Pro / Flash family rows (worst bucket wins)
+// One row per quota bucket — Google meters each model VERSION separately
+// (e.g. 2.5 Pro, 2.5 Flash, 2.5 Flash Lite, 3.1 Flash Lite all have their
+// own independent daily pools), so collapsing them loses real information.
+function geminiModelLabel(modelId) {
+  // "gemini-2.5-flash-lite" -> "2.5 Flash Lite (daily)"
+  const parts = String(modelId).replace(/^gemini-/i, '').split('-')
+    .map((p) => /^\d/.test(p) ? p : p.charAt(0).toUpperCase() + p.slice(1));
+  return `${parts.join(' ')} (daily)`;
+}
+
 function normalizeGeminiQuota(json) {
   const buckets = json?.buckets || [];
-  const families = { pro: null, flash: null };
+  const limits = [];
   for (const b of buckets) {
     if (b.remainingFraction == null || !b.modelId) continue;
-    const family = /pro/i.test(b.modelId) ? 'pro' : /flash/i.test(b.modelId) ? 'flash' : null;
-    if (!family) continue;
-    if (!families[family] || b.remainingFraction < families[family].remainingFraction) {
-      families[family] = b;
-    }
-  }
-  const limits = [];
-  for (const [family, bucket] of Object.entries(families)) {
-    if (!bucket) continue;
     limits.push({
-      key: `${family}_daily`,
-      label: `Gemini ${family.charAt(0).toUpperCase() + family.slice(1)} (daily)`,
-      percent: Math.round((1 - bucket.remainingFraction) * 1000) / 10,
-      resetsAt: bucket.resetTime || null
+      key: 'm_' + String(b.modelId).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      label: geminiModelLabel(b.modelId),
+      percent: Math.round((1 - b.remainingFraction) * 1000) / 10,
+      resetsAt: b.resetTime || null
     });
   }
+  // Pro pools first, then the rest in API order
+  limits.sort((a, b) => (/pro/i.test(b.label) ? 1 : 0) - (/pro/i.test(a.label) ? 1 : 0));
   return limits.length ? { source: 'live', limits } : null;
 }
 
@@ -1839,17 +1855,10 @@ function generatePercentageIcon(percent, bgColor, textColor = { r: 255, g: 255, 
   return nativeImage.createFromBuffer(buffer, { width, height });
 }
 
-// Tiny 3x5 letters for the vertical "CLI" column on second-account badges
-const CLI_LETTERS = {
-  C: [0b111, 0b100, 0b100, 0b100, 0b111],
-  L: [0b100, 0b100, 0b100, 0b100, 0b111],
-  I: [0b111, 0b010, 0b010, 0b010, 0b111]
-};
-
 /**
- * Second-account (CLI login) badge: the number squeezed into the left of the
- * icon with narrow digits, and the letters C-L-I stacked vertically along the
- * right edge. At >=99% the number becomes a small X, same as the main badges.
+ * Second-account (CLI login) badge — "terminal cursor" style: the number
+ * sits slightly high and a fat cursor dash blinks-in-spirit along the
+ * bottom-right, like "61_". At >=99% the number becomes the X, cursor kept.
  */
 function generateCliIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255, a: 255 }, outlineColor = null) {
   const width = 20;
@@ -1876,44 +1885,29 @@ function generateCliIcon(percent, bgColor, textColor = { r: 255, g: 255, b: 255,
   };
 
   if (percent >= 99) {
-    // Small X in the left region
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       for (let d = 0; d < 2; d++) {
-        setPx(3 + i + d, 5 + i);
-        setPx(11 - i + d, 5 + i);
+        setPx(4 + i + d, 3 + i);
+        setPx(13 - i + d, 3 + i);
       }
     }
   } else {
-    // Narrow digits squeezed into the left 14px
     const percentText = Math.max(0, Math.round(percent)).toString();
-    const charWidth = 6;
-    const totalWidth = percentText.length * charWidth + (percentText.length - 1);
-    let startX = Math.max(0, Math.floor((14 - totalWidth) / 2));
-    const startY = Math.floor((height - 11) / 2);
+    const useNarrow = percentText.length >= 3;
+    const charWidth = useNarrow ? 6 : 8;
+    const gap = useNarrow ? 0 : 1;
+    const totalWidth = percentText.length * charWidth + (percentText.length - 1) * gap;
+    let startX = Math.max(0, Math.floor((width - totalWidth) / 2));
     for (let i = 0; i < percentText.length; i++) {
-      drawChar(buffer, width, height, percentText[i], startX, startY, textColor, true);
-      startX += charWidth + 1;
+      drawChar(buffer, width, height, percentText[i], startX, 2, textColor, useNarrow);
+      startX += charWidth + gap;
     }
   }
 
-  // Vertical C-L-I down the right edge, separated by a 1px gutter
-  for (let y = 0; y < height; y++) {
-    const offset = (y * width + 14) * 4;
-    // gutter: darken the background column slightly so the letters read
-    buffer[offset] = Math.floor(bgColor.b * 0.6);
-    buffer[offset + 1] = Math.floor(bgColor.g * 0.6);
-    buffer[offset + 2] = Math.floor(bgColor.r * 0.6);
-    buffer[offset + 3] = 255;
+  // The cursor: a long fat dash hugging the bottom-right
+  for (let y = 16; y <= 18; y++) {
+    for (let x = 9; x <= 18; x++) setPx(x, y);
   }
-  ['C', 'L', 'I'].forEach((ch, idx) => {
-    const rows = CLI_LETTERS[ch];
-    const y0 = 1 + idx * 6;
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 3; c++) {
-        if (rows[r] & (1 << (2 - c))) setPx(16 + c, y0 + r);
-      }
-    }
-  });
 
   if (outlineColor) drawIconOutline(buffer, width, height, outlineColor);
 

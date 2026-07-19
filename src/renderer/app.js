@@ -861,6 +861,10 @@ function buildExtraRows(data) {
         const label = document.createElement('span');
         label.className = 'usage-label';
         
+        // Narrow-width code chip (colour-matched to the bar)
+        label.dataset.code = rowCode(key, config.label);
+        label.style.setProperty('--row-col', CODE_COLORS[config.color] || '#8b8fa3');
+
         if (key === 'extra_usage') {
             // Extra usage: ON/OFF indicator goes next to label
             if (value.is_enabled === true) {
@@ -1038,6 +1042,8 @@ function buildExtraRows(data) {
 
         const label = document.createElement('span');
         label.className = 'usage-label';
+        label.dataset.code = 'CR';
+        label.style.setProperty('--row-col', CODE_COLORS.codex);
         const creditsOn = codexCredits.unlimited || codexCredits.hasCredits;
         const statusTag = document.createElement('span');
         statusTag.className = `extra-status ${creditsOn ? 'on' : 'off'}`;
@@ -1095,6 +1101,8 @@ function buildExtraRows(data) {
         const label = document.createElement('span');
         label.className = 'usage-label';
         label.textContent = 'Limit Resets';
+        label.dataset.code = 'RST';
+        label.style.setProperty('--row-col', CODE_COLORS.codex);
         row.appendChild(label);
 
         // One teal dot per banked reset, spread edge to edge across the column
@@ -1141,6 +1149,38 @@ function buildExtraRows(data) {
     applySubgroups();
 
     return count;
+}
+
+// ---- Row identity codes + colours ----
+// At narrow widths the row labels compress to short colour-matched codes;
+// compact mode uses the same codes. Colour follows the row's bar colour.
+const CODE_COLORS = {
+    weekly: '#3b82f6', fable: '#d946ef', codex: '#2dd4bf', gemini: '#f4b400',
+    cc: '#94a3b8', opus: '#f59e0b', sonnet: '#f59e0b', cowork: '#22c55e',
+    design: '#ec4899', extra: '#8b5cf6', oauth_apps: '#22c55e'
+};
+const COMPANY_COLORS = { anthropic: '#d97757', openai: '#10a37f', google: '#f4b400' };
+
+function rowCode(key, label) {
+    const clean = String(label || '').replace(/^CLI /, '');
+    if (key === 'cc_five_hour') return '5H';
+    if (key === 'cc_seven_day') return '7D';
+    if (/^(cc_)?seven_day_scoped_/.test(key)) return clean.slice(0, 3).toUpperCase();
+    if (key === 'extra_usage') return 'EXT';
+    if (key.startsWith('codex_')) {
+        if (/^Codex/i.test(clean)) return 'CDX';
+        if (/Spark/i.test(clean)) return 'SPK';
+        if (/Code Review/i.test(clean)) return 'CRV';
+        return clean.replace(/\s*\(.*\)$/, '').slice(0, 3).toUpperCase();
+    }
+    if (key.startsWith('gemini_')) {
+        // "2.5 Flash Lite (daily)" -> "2.5FL"
+        const base = clean.replace(/\s*\(.*\)$/, '').replace(/^Gemini\s*/i, '');
+        const ver = (base.match(/^[\d.]+/) || [''])[0];
+        const fam = base.replace(/^[\d.]+\s*/, '').split(/\s+/).map((w) => w[0] || '').join('').toUpperCase();
+        return (ver + fam) || 'GEM';
+    }
+    return clean.replace(/\s*\(.*\)$/, '').slice(0, 3).toUpperCase();
 }
 
 // ---- Desktop / CLI subgroups with burnable subheadings ----
@@ -1234,9 +1274,10 @@ function applySqueezeClasses() {
     document.body.classList.toggle('vh-1', on && h < 520);
     document.body.classList.toggle('vh-2', on && h < 430);
     document.body.classList.toggle('vh-3', on && h < 340);
-    // Tall mode: scale 0→1 between 820px and 1320px of height — sections
+    // Tall mode: scale 0→1 between 820px and 1600px of height — sections
     // spread, text grows, and the wordmarks eat the extra vertical space
-    const tall = on ? Math.min(Math.max((h - 820) / 500, 0), 1) : 0;
+    // (CSS caps the wordmarks by window width so they never clip the edge)
+    const tall = on ? Math.min(Math.max((h - 820) / 780, 0), 1) : 0;
     document.body.classList.toggle('tall', tall > 0);
     document.body.style.setProperty('--tall', tall.toFixed(3));
 }
@@ -1432,12 +1473,12 @@ function normalizeUsageData(data) {
         const ccRows = [];
         if (cc.five_hour?.utilization != null) {
             ccRows.push(['cc_five_hour',
-                { label: 'CLI Session', color: 'cc' },
+                { label: 'CLI Session (5h)', color: 'cc' },
                 { utilization: cc.five_hour.utilization, resets_at: cc.five_hour.resets_at }]);
         }
         if (cc.seven_day?.utilization != null) {
             ccRows.push(['cc_seven_day',
-                { label: 'CLI Weekly (7d)', color: 'weekly' },
+                { label: 'CLI All Models (7d)', color: 'weekly' },
                 { utilization: cc.seven_day.utilization, resets_at: cc.seven_day.resets_at }]);
         }
         for (const limit of (cc.limits || [])) {
@@ -1762,44 +1803,80 @@ function applyCompactMode(compact) {
     _saveViewState();
 }
 
-// Update the compact mode progress bars
+// Compact mode: one slim [code][bar][%] row per active pool across ALL
+// providers, grouped by a company-colour edge; CLI second-account rows carry
+// the terminal-cursor underscore, matching the tray badge language.
 function updateCompactBars(data) {
-    const sessionPct = Math.min(Math.max(data.five_hour?.utilization || 0, 0), 100);
-    const weeklyPct = Math.min(Math.max(data.seven_day?.utilization || 0, 0), 100);
+    const container = document.getElementById('compactRows');
+    if (!container) return;
+    const clamp = (v) => Math.min(Math.max(v || 0, 0), 100);
+    const pools = [];
 
-    elements.compactSessionFill.style.width = `${sessionPct}%`;
-    elements.compactSessionPct.textContent = `${Math.round(sessionPct)}%`;
-    elements.compactWeeklyFill.style.width = `${weeklyPct}%`;
-    elements.compactWeeklyPct.textContent = `${Math.round(weeklyPct)}%`;
-
-    // Apply warning/danger classes to compact bars
-    elements.compactSessionFill.className = 'compact-bar-fill';
-    if (sessionPct >= dangerThreshold) elements.compactSessionFill.classList.add('danger');
-    else if (sessionPct >= warnThreshold) elements.compactSessionFill.classList.add('warning');
-
-    elements.compactWeeklyFill.className = 'compact-bar-fill weekly';
-    if (weeklyPct >= dangerThreshold) elements.compactWeeklyFill.classList.add('danger');
-    else if (weeklyPct >= warnThreshold) elements.compactWeeklyFill.classList.add('warning');
-
-    // Scoped weekly limit (e.g. Fable) — third slim red bar, shown while the
-    // API reports one. normalizeUsageData has already synthesized the keys.
-    let scopedShown = false;
+    pools.push({ co: 'anthropic', code: '5H', name: 'Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#a78bfa' });
+    pools.push({ co: 'anthropic', code: '7D', name: 'All Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
-        if (!key.startsWith('seven_day_scoped_')) continue;
         const value = data[key];
         if (!value || value.utilization == null) continue;
-        const pct = Math.min(Math.max(value.utilization, 0), 100);
-        elements.compactScopedLabel.textContent = config.label.replace(/ \(7d\)$/, '');
-        elements.compactScopedFill.style.width = `${pct}%`;
-        elements.compactScopedPct.textContent = `${Math.round(pct)}%`;
-        scopedShown = true;
-        break; // one compact row — first scoped limit wins
+        if (key.startsWith('seven_day_scoped_')) {
+            pools.push({ co: 'anthropic', code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || '#d946ef' });
+        } else if (key.startsWith('cc_')) {
+            pools.push({ co: 'anthropic', cli: true, code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || CODE_COLORS.cc });
+        }
     }
-    const wasHidden = elements.compactScopedRow.style.display === 'none';
-    elements.compactScopedRow.style.display = scopedShown ? '' : 'none';
-    // Resize the compact window when the scoped row appears or disappears
-    if (isCompactMode && wasHidden === scopedShown) {
-        window.electronAPI.setCompactMode(true);
+    for (const lim of (data.codex?.limits || [])) {
+        pools.push({ co: 'openai', code: rowCode('codex_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
+    }
+    for (const lim of (data.codex?.cli?.limits || [])) {
+        pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
+    }
+    for (const lim of (data.gemini?.limits || [])) {
+        pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.gemini });
+    }
+    for (const lim of (data.gemini?.cli?.limits || [])) {
+        pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.gemini });
+    }
+
+    container.innerHTML = '';
+    for (const p of pools) {
+        const row = document.createElement('div');
+        row.className = 'compact-row';
+        row.style.setProperty('--co', COMPANY_COLORS[p.co]);
+        row.title = (p.cli ? 'CLI account — ' : '') + p.name.replace(/^CLI /, '');
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'compact-label';
+        labelEl.style.color = p.color;
+        labelEl.textContent = p.code + (p.cli ? '_' : '');
+        row.appendChild(labelEl);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'compact-bar-wrap';
+        const bg = document.createElement('div');
+        bg.className = 'compact-bar-bg';
+        const fill = document.createElement('div');
+        fill.className = 'compact-bar-fill';
+        fill.style.width = `${p.pct}%`;
+        fill.style.background = p.pct >= dangerThreshold ? '#ef4444'
+            : p.pct >= warnThreshold ? '#f59e0b' : p.color;
+        bg.appendChild(fill);
+        const pctEl = document.createElement('span');
+        pctEl.className = 'compact-pct';
+        pctEl.textContent = `${Math.round(p.pct)}%`;
+        bg.appendChild(pctEl);
+        wrap.appendChild(bg);
+        row.appendChild(wrap);
+        container.appendChild(row);
+    }
+
+    // Fit the compact window to however many pools there are. Measure the
+    // rows container, NOT compactContent — that one stretches to fill the
+    // viewport, so measuring it would just re-affirm the current height.
+    if (isCompactMode) {
+        requestAnimationFrame(() => {
+            const th = elements.titleBar ? elements.titleBar.offsetHeight : 28;
+            const rows = container.scrollHeight;
+            if (rows > 20) window.electronAPI.resizeWindow(th + rows + 24);
+        });
     }
 }
 // Persist compact mode setting without touching the rest of settings — debounced
