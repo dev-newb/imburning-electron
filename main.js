@@ -975,6 +975,11 @@ function checkDailyDigest(data) {
     const label = slug.charAt(0).toUpperCase() + slug.slice(1);
     return `${label} +${burnOf((e) => e.scoped?.[slug])} pts`;
   });
+  const codexBurn = burnOf((e) => e.codex);
+  const geminiBurn = burnOf((e) => e.gemini);
+  const otherParts = [];
+  if (history.some((e) => e.codex != null)) otherParts.push(`OpenAI Codex +${codexBurn} pts`);
+  if (history.some((e) => e.gemini != null)) otherParts.push(`Google Gemini +${geminiBurn} pts`);
 
   const yesterday = localDateString(new Date(yStart));
   const anomalies = store.get(`burnAlerts_${yesterday}`, 0);
@@ -988,8 +993,9 @@ function checkDailyDigest(data) {
     }
   }
 
-  const body = `Yesterday: Weekly +${weeklyBurn} pts${scopedParts.length ? ', ' + scopedParts.join(', ') : ''}`
-    + `${anomalies ? `, ${anomalies} burn alert${anomalies > 1 ? 's' : ''}` : ''}. Weekly now ${weeklyNow}%.${paceStr}`;
+  const body = `Yesterday — Anthropic: Weekly +${weeklyBurn} pts${scopedParts.length ? ', ' + scopedParts.join(', ') : ''}`
+    + `${otherParts.length ? '; ' + otherParts.join(', ') : ''}`
+    + `${anomalies ? `; ${anomalies} burn alert${anomalies > 1 ? 's' : ''}` : ''}. Anthropic weekly now ${weeklyNow}%.${paceStr}`;
 
   store.set('digest.lastShown', today);
   try {
@@ -1091,9 +1097,13 @@ function checkBurnAnomalies() {
   if (history.length < 5) return;
   const now = history[history.length - 1].timestamp;
 
+  // Every series names its company; Anthropic's scoped pools (Fable) are
+  // called out separately from the all-models weekly pool
   const seriesList = [
-    { key: 'session', label: 'Session', pick: (e) => e.session },
-    { key: 'weekly', label: 'Weekly', pick: (e) => e.weekly }
+    { key: 'session', label: 'Anthropic — Session', pick: (e) => e.session },
+    { key: 'weekly', label: 'Anthropic — Weekly (all models)', pick: (e) => e.weekly },
+    { key: 'codex', label: 'OpenAI — Codex weekly', pick: (e) => e.codex },
+    { key: 'gemini', label: 'Google — Gemini daily', pick: (e) => e.gemini }
   ];
   const slugs = new Set();
   for (const entry of history) {
@@ -1101,7 +1111,7 @@ function checkBurnAnomalies() {
   }
   for (const slug of slugs) {
     const label = slug.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    seriesList.push({ key: `scoped_${slug}`, label: `${label} (weekly)`, pick: (e) => e.scoped?.[slug] });
+    seriesList.push({ key: `scoped_${slug}`, label: `Anthropic — ${label} weekly`, pick: (e) => e.scoped?.[slug] });
   }
 
   for (const series of seriesList) {

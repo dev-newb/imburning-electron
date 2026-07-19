@@ -1312,14 +1312,14 @@ function checkUsageAlerts(data) {
         alertFired.session_warn = true; // suppress warn if we jumped straight to danger
         window.electronAPI.showNotification(
             'Burnwatch',
-            `Current Session usage is at ${Math.round(sessionPct)}% — running low`
+            `Anthropic Session usage is at ${Math.round(sessionPct)}% — running low`
         );
     // Current Session — warn threshold
     } else if (sessionPct >= warnThreshold && !alertFired.session_warn) {
         alertFired.session_warn = true;
         window.electronAPI.showNotification(
             'Burnwatch',
-            `Current Session usage has reached ${Math.round(sessionPct)}%`
+            `Anthropic Session usage has reached ${Math.round(sessionPct)}%`
         );
     }
 
@@ -1329,16 +1329,16 @@ function checkUsageAlerts(data) {
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
             'Burnwatch',
-            `Weekly Limit usage is at ${Math.round(weeklyPct)}% — running low`
+            `Anthropic Weekly (all models) usage is at ${Math.round(weeklyPct)}% — running low`
         );
         window.electronAPI.sendAlertWebhook('weekly_danger', 'Claude usage warning',
-            `Weekly Limit usage is at ${Math.round(weeklyPct)}% — running low`);
+            `Anthropic Weekly (all models) usage is at ${Math.round(weeklyPct)}% — running low`);
     // Weekly Limit — warn threshold
     } else if (weeklyPct >= warnThreshold && !alertFired.weekly_warn) {
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
             'Burnwatch',
-            `Weekly Limit usage has reached ${Math.round(weeklyPct)}%`
+            `Anthropic Weekly (all models) usage has reached ${Math.round(weeklyPct)}%`
         );
     }
 
@@ -1367,24 +1367,24 @@ function checkUsageAlerts(data) {
                 : '';
             window.electronAPI.showNotification(
                 'Burnwatch',
-                `${label} limit is maxed out${resetStr}`
+                `Anthropic ${label} limit is maxed out${resetStr}`
             );
             window.electronAPI.sendAlertWebhook('scoped_maxed', 'Claude limit maxed',
-                `${label} limit is maxed out${resetStr}`);
+                `Anthropic ${label} limit is maxed out${resetStr}`);
         } else if (pct >= dangerThreshold && !alertFired[`${key}_danger`]) {
             alertFired[`${key}_danger`] = true;
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
                 'Burnwatch',
-                `${label} usage is at ${Math.round(pct)}% — running low`
+                `Anthropic ${label} usage is at ${Math.round(pct)}% — running low`
             );
             window.electronAPI.sendAlertWebhook('scoped_danger', 'Claude usage warning',
-                `${label} usage is at ${Math.round(pct)}% — running low`);
+                `Anthropic ${label} usage is at ${Math.round(pct)}% — running low`);
         } else if (pct >= warnThreshold && !alertFired[`${key}_warn`]) {
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
                 'Burnwatch',
-                `${label} usage has reached ${Math.round(pct)}%`
+                `Anthropic ${label} usage has reached ${Math.round(pct)}%`
             );
         }
     }
