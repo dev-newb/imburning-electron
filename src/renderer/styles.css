@@ -1075,6 +1075,82 @@ body.theme-light .provider-section {
     display: none;
 }
 
+/* Account-status chip beside the brand name */
+.section-chip {
+    margin-left: 8px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+    align-self: center;
+}
+
+.section-chip.dual {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.section-chip.cli {
+    color: #9090a0;
+    background: rgba(128, 128, 128, 0.1);
+    border: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+/* Connect row for providers with no account yet */
+.connect-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 16px 6px;
+}
+
+.provider-connect-btn {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.provider-connect-btn:hover {
+    background: rgba(139, 92, 246, 0.22);
+    border-color: rgba(139, 92, 246, 0.6);
+}
+
+.provider-connect-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.connect-error {
+    font-size: 10px;
+    color: #ef4444;
+}
+
+.disconnect-btn {
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.disconnect-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
 body.theme-light .section-arrow {
     color: #707090;
 }

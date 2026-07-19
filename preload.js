@@ -76,5 +76,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendAlertWebhook: (event, title, message) => ipcRenderer.send('alert-webhook', { event, title, message }),
 
   // Compact mode
-  setCompactMode: (compact) => ipcRenderer.send('set-compact-mode', compact)
+  setCompactMode: (compact) => ipcRenderer.send('set-compact-mode', compact),
+
+  // Official OAuth connect flows (OpenAI / Google)
+  oauthConnect: (provider) => ipcRenderer.invoke('oauth-connect', provider),
+  oauthDisconnect: (provider) => ipcRenderer.invoke('oauth-disconnect', provider)
 });

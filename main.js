@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage } = require('electron');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
 
@@ -258,20 +259,25 @@ function normalizeCodexLive(json) {
   const resetCredits = json?.rate_limit_reset_credits
     ? { available: json.rate_limit_reset_credits.available_count ?? 0, applicable: json.rate_limit_reset_credits.applicable_available_count ?? 0 }
     : null;
-  return { source: 'live', limits, credits, resetCredits };
+  return {
+    source: 'live',
+    limits,
+    credits,
+    resetCredits,
+    accountId: json?.account_id || json?.user_id || null,
+    email: json?.email || null
+  };
 }
 
-function fetchCodexUsageLive() {
+function fetchCodexWithToken(accessToken, accountId) {
   return new Promise((resolve) => {
-    const auth = readCodexAuth();
-    if (!auth) return resolve(null);
     const req = https.request({
       hostname: 'chatgpt.com',
       path: '/backend-api/wham/usage',
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${auth.accessToken}`,
-        ...(auth.accountId ? { 'chatgpt-account-id': auth.accountId } : {}),
+        'Authorization': `Bearer ${accessToken}`,
+        ...(accountId ? { 'chatgpt-account-id': accountId } : {}),
         'User-Agent': CHROME_USER_AGENT
       },
       timeout: 10000
@@ -280,13 +286,13 @@ function fetchCodexUsageLive() {
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
         if (res.statusCode !== 200) {
-          debugLog('[Codex] Live usage fetch failed with status', res.statusCode);
+          debugLog('[Codex] Usage fetch failed with status', res.statusCode);
           return resolve(null);
         }
         try { resolve(normalizeCodexLive(JSON.parse(body))); } catch { resolve(null); }
       });
     });
-    req.on('error', (err) => { debugLog('[Codex] Live usage error:', err.message); resolve(null); });
+    req.on('error', (err) => { debugLog('[Codex] Usage error:', err.message); resolve(null); });
     req.on('timeout', () => { req.destroy(); resolve(null); });
     req.end();
   });
@@ -350,8 +356,30 @@ function readCodexSessionSnapshot() {
   }
 }
 
+// Primary = the widget's own OpenAI login; CLI creds are fallback + dual source
 async function fetchCodexUsage() {
-  return (await fetchCodexUsageLive()) || readCodexSessionSnapshot();
+  const oauth = await getOAuthAccessToken('openai');
+  const primary = oauth
+    ? await fetchCodexWithToken(oauth.accessToken, oauth.accountId)
+    : null;
+
+  const cliAuth = readCodexAuth();
+  const cliData = cliAuth
+    ? await fetchCodexWithToken(cliAuth.accessToken, cliAuth.accountId)
+    : null;
+
+  if (primary) {
+    const cliSame = !cliData || !cliData.accountId || !primary.accountId
+      || cliData.accountId === primary.accountId;
+    return {
+      ...primary,
+      connected: true,
+      cli: cliSame ? null : cliData
+    };
+  }
+  if (cliData) return { ...cliData, connected: false, cli: null };
+  const snapshot = readCodexSessionSnapshot();
+  return snapshot ? { ...snapshot, connected: false, cli: null } : null;
 }
 
 // ---- Gemini (Google) account usage ----
@@ -482,34 +510,292 @@ function normalizeGeminiQuota(json) {
   return limits.length ? { source: 'live', limits } : null;
 }
 
-function fetchGeminiUsage() {
-  return getGeminiAccessToken().then((token) => {
-    if (!token) return null;
-    return new Promise((resolve) => {
-      const body = JSON.stringify({});
-      const req = https.request({
-        hostname: 'cloudcode-pa.googleapis.com',
-        path: '/v1internal:retrieveUserQuota',
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-        timeout: 10000
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          if (res.statusCode !== 200) {
-            debugLog('[Gemini] Quota fetch failed with status', res.statusCode);
-            return resolve(null);
-          }
-          try { resolve(normalizeGeminiQuota(JSON.parse(data))); } catch { resolve(null); }
-        });
+function fetchGeminiWithToken(token) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({});
+    const req = https.request({
+      hostname: 'cloudcode-pa.googleapis.com',
+      path: '/v1internal:retrieveUserQuota',
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 10000
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          debugLog('[Gemini] Quota fetch failed with status', res.statusCode);
+          return resolve(null);
+        }
+        try { resolve(normalizeGeminiQuota(JSON.parse(data))); } catch { resolve(null); }
       });
-      req.on('error', (err) => { debugLog('[Gemini] Quota fetch error:', err.message); resolve(null); });
-      req.on('timeout', () => { req.destroy(); resolve(null); });
-      req.end(body);
+    });
+    req.on('error', (err) => { debugLog('[Gemini] Quota fetch error:', err.message); resolve(null); });
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end(body);
+  });
+}
+
+// The gemini CLI's login email, from its stored id_token
+function getGeminiCliEmail() {
+  try {
+    const creds = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.gemini', 'oauth_creds.json'), 'utf-8'));
+    return jwtClaims(creds.id_token).email || null;
+  } catch {
+    return null;
+  }
+}
+
+// Primary = the widget's own Google login; CLI creds are fallback + dual source
+async function fetchGeminiUsage() {
+  const oauth = await getOAuthAccessToken('google');
+  let primary = oauth ? await fetchGeminiWithToken(oauth.accessToken) : null;
+  if (primary) {
+    primary.email = oauth.email || null;
+  }
+
+  const cliToken = await getGeminiAccessToken();
+  let cliData = cliToken ? await fetchGeminiWithToken(cliToken) : null;
+  if (cliData) {
+    cliData.email = getGeminiCliEmail();
+  }
+
+  if (primary) {
+    const cliSame = !cliData || !cliData.email || !primary.email
+      || cliData.email === primary.email;
+    return { ...primary, connected: true, cli: cliSame ? null : cliData };
+  }
+  if (cliData) return { ...cliData, connected: false, cli: null };
+  return null;
+}
+
+// ---- Official OAuth connect flows (widget-owned logins) ----
+// The primary account path for OpenAI and Google: the same browser OAuth
+// flows their own CLIs run (public clients, PKCE, localhost callback), but
+// the tokens are OURS — stored encrypted via safeStorage, refreshed by us,
+// fully disconnectable. CLI-borrowed credentials demote to a fallback and a
+// second-account (dual) source.
+function b64url(buf) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function jwtClaims(token) {
+  try {
+    return JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString());
+  } catch {
+    return {};
+  }
+}
+
+function storeOAuthTokens(provider, tokens) {
+  const json = JSON.stringify(tokens);
+  if (safeStorage.isEncryptionAvailable()) {
+    store.set(`oauth_${provider}_encrypted`, safeStorage.encryptString(json).toString('base64'));
+    store.delete(`oauth_${provider}`);
+  } else {
+    store.set(`oauth_${provider}`, json);
+  }
+}
+
+function loadOAuthTokens(provider) {
+  try {
+    const enc = store.get(`oauth_${provider}_encrypted`);
+    if (enc && safeStorage.isEncryptionAvailable()) {
+      return JSON.parse(safeStorage.decryptString(Buffer.from(enc, 'base64')));
+    }
+    const plain = store.get(`oauth_${provider}`);
+    return plain ? JSON.parse(plain) : null;
+  } catch (err) {
+    debugLog(`[OAuth:${provider}] Failed to load tokens:`, err.message);
+    return null;
+  }
+}
+
+function clearOAuthTokens(provider) {
+  store.delete(`oauth_${provider}_encrypted`);
+  store.delete(`oauth_${provider}`);
+}
+
+// Wait for the OAuth redirect on a local HTTP server. port 0 = ephemeral.
+function startOAuthCallbackServer(port, pathName, state) {
+  const http = require('http');
+  return new Promise((resolveListen, rejectListen) => {
+    let settled = false;
+    const server = http.createServer((req, res) => {
+      let u;
+      try { u = new URL(req.url, 'http://127.0.0.1'); } catch { res.writeHead(400); res.end(); return; }
+      if (u.pathname !== pathName) { res.writeHead(404); res.end('Not found'); return; }
+      const code = u.searchParams.get('code');
+      const gotState = u.searchParams.get('state');
+      const error = u.searchParams.get('error');
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body style="font-family:sans-serif;background:#1e1e2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh"><div style="text-align:center"><h2>Burnwatch connected ✓</h2><p>You can close this tab and return to the widget.</p></div></body></html>');
+      setTimeout(() => { try { server.close(); } catch (_) {} }, 500);
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) server.emit('oauth-result', { error: new Error(`Login refused: ${error}`) });
+      else if (!code || gotState !== state) server.emit('oauth-result', { error: new Error('Invalid OAuth callback') });
+      else server.emit('oauth-result', { code });
+    });
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; try { server.close(); } catch (_) {} server.emit('oauth-result', { error: new Error('Login timed out (5 minutes)') }); }
+    }, 5 * 60 * 1000);
+    server.on('error', (err) => { clearTimeout(timer); rejectListen(new Error(`Callback port busy: ${err.message}`)); });
+    server.listen(port, '127.0.0.1', () => {
+      const codePromise = new Promise((resolve, reject) => {
+        server.once('oauth-result', (r) => r.error ? reject(r.error) : resolve(r.code));
+      });
+      resolveListen({ port: server.address().port, codePromise });
     });
   });
 }
+
+// Public OAuth client shipped inside the codex CLI binary (verified locally)
+const OPENAI_OAUTH = {
+  clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
+  authorizeUrl: 'https://auth.openai.com/oauth/authorize',
+  tokenUrl: 'https://auth.openai.com/oauth/token',
+  redirectPort: 1455,               // must match the client's registered redirect
+  redirectPath: '/auth/callback',
+  scope: 'openid profile email offline_access'
+};
+
+const GOOGLE_OAUTH = {
+  authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenUrl: 'https://oauth2.googleapis.com/token',
+  redirectPath: '/oauth2callback',  // installed-app clients allow any localhost port
+  scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile'
+};
+
+async function runOAuthConnect(provider) {
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+  const state = b64url(crypto.randomBytes(16));
+
+  let cfg, clientId, clientSecret;
+  if (provider === 'openai') {
+    cfg = OPENAI_OAUTH;
+    clientId = cfg.clientId;
+  } else if (provider === 'google') {
+    const client = getGeminiOAuthClient();
+    if (!client) throw new Error('gemini-cli install not found — its public OAuth client is required for the Google login');
+    cfg = GOOGLE_OAUTH;
+    clientId = client.id;
+    clientSecret = client.secret;
+  } else {
+    throw new Error(`Unknown provider: ${provider}`);
+  }
+
+  const { port, codePromise } = await startOAuthCallbackServer(
+    provider === 'openai' ? cfg.redirectPort : 0, cfg.redirectPath, state);
+  const redirectUri = `http://localhost:${port}${cfg.redirectPath}`;
+
+  const authParams = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: cfg.scope,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256'
+  });
+  if (provider === 'google') {
+    authParams.set('access_type', 'offline');
+    authParams.set('prompt', 'consent');
+  }
+  shell.openExternal(`${cfg.authorizeUrl}?${authParams.toString()}`);
+
+  const code = await codePromise;
+
+  const tokenBody = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    code_verifier: verifier
+  });
+  if (clientSecret) tokenBody.set('client_secret', clientSecret);
+  const resp = await fetch(cfg.tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: tokenBody.toString()
+  });
+  const json = await resp.json();
+  if (!json.access_token) throw new Error(`Token exchange failed (${resp.status})`);
+
+  const claims = jwtClaims(json.id_token);
+  const tokens = {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token || null,
+    idToken: json.id_token || null,
+    expiresAt: Date.now() + (json.expires_in || 3600) * 1000,
+    email: claims.email || null,
+    accountId: claims['https://api.openai.com/auth']?.chatgpt_account_id || claims.sub || null
+  };
+  storeOAuthTokens(provider, tokens);
+  _providerCache[provider === 'openai' ? 'codex' : 'gemini'] = undefined; // force refetch
+  debugLog(`[OAuth:${provider}] Connected as`, tokens.email || tokens.accountId);
+  return { email: tokens.email, accountId: tokens.accountId };
+}
+
+// Fresh widget-owned access token, refreshing (and persisting rotations) as needed
+async function getOAuthAccessToken(provider) {
+  const tokens = loadOAuthTokens(provider);
+  if (!tokens) return null;
+  if (tokens.expiresAt && Date.now() < tokens.expiresAt - 60000) return tokens;
+  if (!tokens.refreshToken) return null;
+
+  let cfg, clientId, clientSecret;
+  if (provider === 'openai') { cfg = OPENAI_OAUTH; clientId = cfg.clientId; }
+  else {
+    const client = getGeminiOAuthClient();
+    if (!client) return null;
+    cfg = GOOGLE_OAUTH; clientId = client.id; clientSecret = client.secret;
+  }
+  try {
+    const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refreshToken, client_id: clientId });
+    if (clientSecret) body.set('client_secret', clientSecret);
+    const resp = await fetch(cfg.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const json = await resp.json();
+    if (!json.access_token) {
+      debugLog(`[OAuth:${provider}] Refresh failed (${resp.status})`);
+      return null;
+    }
+    const updated = {
+      ...tokens,
+      accessToken: json.access_token,
+      refreshToken: json.refresh_token || tokens.refreshToken, // rotation-safe: ours to keep
+      idToken: json.id_token || tokens.idToken,
+      expiresAt: Date.now() + (json.expires_in || 3600) * 1000
+    };
+    storeOAuthTokens(provider, updated);
+    return updated;
+  } catch (err) {
+    debugLog(`[OAuth:${provider}] Refresh error:`, err.message);
+    return null;
+  }
+}
+
+ipcMain.handle('oauth-connect', async (event, provider) => {
+  try {
+    const result = await runOAuthConnect(provider);
+    return { ok: true, ...result };
+  } catch (err) {
+    debugLog(`[OAuth:${provider}] Connect failed:`, err.message);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('oauth-disconnect', async (event, provider) => {
+  clearOAuthTokens(provider);
+  _providerCache[provider === 'openai' ? 'codex' : 'gemini'] = undefined;
+  return { ok: true };
+});
 
 // The widget refreshes every 30s, but external provider endpoints rate-limit
 // aggressive polling (429s) — cache each provider's result for 5 minutes.

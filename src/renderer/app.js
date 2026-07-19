@@ -88,6 +88,19 @@ const elements = {
     logoutBtn: document.getElementById('logoutBtn'),
     githubBtn: document.getElementById('githubBtn'),
     psychicBtn: document.getElementById('psychicBtn'),
+    chipAnthropic: document.getElementById('chipAnthropic'),
+    chipOpenai: document.getElementById('chipOpenai'),
+    chipGoogle: document.getElementById('chipGoogle'),
+    connectRowOpenai: document.getElementById('connectRowOpenai'),
+    connectOpenaiBtn: document.getElementById('connectOpenaiBtn'),
+    connectErrorOpenai: document.getElementById('connectErrorOpenai'),
+    connectRowGoogle: document.getElementById('connectRowGoogle'),
+    connectGoogleBtn: document.getElementById('connectGoogleBtn'),
+    connectErrorGoogle: document.getElementById('connectErrorGoogle'),
+    disconnectOpenaiBtn: document.getElementById('disconnectOpenaiBtn'),
+    disconnectGoogleBtn: document.getElementById('disconnectGoogleBtn'),
+    openaiLoginStatus: document.getElementById('openaiLoginStatus'),
+    googleLoginStatus: document.getElementById('googleLoginStatus'),
     psychicImg: document.getElementById('psychicImg'),
     openaiExtras: document.getElementById('openaiExtras'),
     openaiExtraRows: document.getElementById('openaiExtraRows'),
@@ -446,6 +459,38 @@ function setupEventListeners() {
         window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
     });
 
+    // Official OAuth connect buttons (OpenAI / Google)
+    const wireConnect = (btn, errEl, provider) => {
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Waiting for browser sign-in...';
+            if (errEl) errEl.textContent = '';
+            const result = await window.electronAPI.oauthConnect(provider);
+            btn.disabled = false;
+            btn.textContent = original;
+            if (result.ok) {
+                await fetchUsageData({ forceExtended: true });
+            } else if (errEl) {
+                errEl.textContent = result.error || 'Connection failed';
+            }
+        });
+    };
+    wireConnect(elements.connectOpenaiBtn, elements.connectErrorOpenai, 'openai');
+    wireConnect(elements.connectGoogleBtn, elements.connectErrorGoogle, 'google');
+
+    const wireDisconnect = (btn, provider) => {
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            await window.electronAPI.oauthDisconnect(provider);
+            await fetchUsageData({ forceExtended: true });
+            await loadSettings();
+        });
+    };
+    wireDisconnect(elements.disconnectOpenaiBtn, 'openai');
+    wireDisconnect(elements.disconnectGoogleBtn, 'google');
+
     // The psychic: toggles the forecast projection lines on the graph
     elements.psychicBtn.addEventListener('click', async () => {
         projectionsVisible = !projectionsVisible;
@@ -561,7 +606,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(560);
+        window.electronAPI.resizeWindow(595);
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -982,9 +1027,9 @@ function buildExtraRows(data) {
     }
 
     // Provider sections appear only when they have rows
-    elements.sectionOpenai.style.display = (elements.openaiRows.children.length || elements.openaiExtraRows.children.length) ? '' : 'none';
+    elements.sectionOpenai.style.display = '';
+    elements.sectionGoogle.style.display = '';
     elements.openaiExpandToggle.style.display = elements.openaiExtraRows.children.length ? 'flex' : 'none';
-    elements.sectionGoogle.style.display = elements.googleRows.children.length ? '' : 'none';
 
     // Hide toggle if no extra rows
     elements.expandToggle.style.display = count > 0 ? 'flex' : 'none';
@@ -1116,6 +1161,12 @@ function normalizeUsageData(data) {
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'codex' };
             data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
         }
+        // Dual mode: the codex CLI is a different account - tracked separately
+        for (const lim of (cx.cli && cx.cli.limits || [])) {
+            const key = 'codex_cli_' + lim.key;
+            if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: 'CLI ' + lim.label, color: 'codex' };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+        }
         const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
         delete EXTRA_ROW_CONFIG.extra_usage;
         EXTRA_ROW_CONFIG.extra_usage = extraUsage;
@@ -1128,6 +1179,12 @@ function normalizeUsageData(data) {
         for (const lim of gm.limits) {
             const key = 'gemini_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'gemini' };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+        }
+        // Dual mode: the gemini CLI is a different account - tracked separately
+        for (const lim of (gm.cli && gm.cli.limits || [])) {
+            const key = 'gemini_cli_' + lim.key;
+            if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: 'CLI ' + lim.label, color: 'gemini' };
             data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
         }
         const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
@@ -1153,6 +1210,33 @@ function updateUI(data) {
             ? `At the current pace, 100% by ${formatResetsAt(data.forecasts.weekly, true, settings.timeFormat || '12h', 'date-day-time')}`
             : '';
     }
+
+    // Account-status chips + connect rows per provider section
+    const setChip = (el, mode) => {
+        if (!el) return;
+        if (!mode) { el.style.display = 'none'; return; }
+        el.style.display = '';
+        el.className = 'section-chip ' + mode.cls;
+        el.textContent = mode.text;
+        el.title = mode.title || '';
+    };
+    const cxStatus = data.codex;
+    const gmStatus = data.gemini;
+    setChip(elements.chipOpenai, cxStatus
+        ? (cxStatus.cli
+            ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your codex CLI (' + (cxStatus.cli.email || 'other account') + ') differs from ' + (cxStatus.email || 'the connected account') + ' - tracked separately below.' }
+            : (!cxStatus.connected ? { cls: 'cli', text: 'via CLI login', title: 'Reading your codex CLI login. Sign in with ChatGPT for a widget-owned connection.' } : null))
+        : null);
+    setChip(elements.chipGoogle, gmStatus
+        ? (gmStatus.cli
+            ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your gemini CLI (' + (gmStatus.cli.email || 'other account') + ') differs from ' + (gmStatus.email || 'the connected account') + ' - tracked separately below.' }
+            : (!gmStatus.connected ? { cls: 'cli', text: 'via CLI login', title: 'Reading your gemini CLI login. Sign in with Google for a widget-owned connection.' } : null))
+        : null);
+    setChip(elements.chipAnthropic, (data.claude_code && data.claude_code_same_account === false)
+        ? { cls: 'dual', text: 'CLI: 2nd account', title: 'Your claude CLI is logged into a different account - its usage is tracked separately below.' }
+        : null);
+    if (elements.connectRowOpenai) elements.connectRowOpenai.style.display = cxStatus ? 'none' : '';
+    if (elements.connectRowGoogle) elements.connectRowGoogle.style.display = gmStatus ? 'none' : '';
 
     // Frozen providers — logo goes on ice when an account has sat unused
     const frozen = data.frozenProviders || {};
@@ -2242,6 +2326,16 @@ async function loadSettings() {
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
+    if (elements.openaiLoginStatus) {
+        const cxNow = latestUsageData && latestUsageData.codex;
+        elements.openaiLoginStatus.textContent = (cxNow && cxNow.connected) ? (cxNow.email || 'Connected') : 'Not connected';
+        elements.disconnectOpenaiBtn.style.display = (cxNow && cxNow.connected) ? '' : 'none';
+    }
+    if (elements.googleLoginStatus) {
+        const gmNow = latestUsageData && latestUsageData.gemini;
+        elements.googleLoginStatus.textContent = (gmNow && gmNow.connected) ? (gmNow.email || 'Connected') : 'Not connected';
+        elements.disconnectGoogleBtn.style.display = (gmNow && gmNow.connected) ? '' : 'none';
+    }
 
     // Populate org selector if user has organizations
     if (credentials.organizations && credentials.organizations.length > 0) {
