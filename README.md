@@ -10,167 +10,74 @@
 
 ---
 
-## Features
+## The headline: every account on your machine, tracked
 
-🎯 **Real-time Usage Tracking** — Monitor both session and weekly usage limits  
-🤖 **Per-model Weekly Limits** — Fable (Claude 5) and any other model-scoped weekly limit get their own always-visible bar, timer, chart line, tray icon, and alerts  
-💻 **CLI Account** — also tracks your local `claude` CLI login's limits, no extra sign-in  
-🟢 **Codex Account** — OpenAI Codex plan limits from your local `codex` CLI login  
-🟡 **Gemini Account** — Google Gemini daily quotas (Pro/Flash) from your local `gemini` CLI login  
-⏳ **Burn-rate Forecast** — projects when Weekly/Fable hit 100%, drawn on the chart and in tooltips  
-🗓️ **Session Planner** — finds your heaviest hours and suggests when to start a fresh 5h window  
-📱 **Phone Alerts** — ntfy/webhook push for burn spikes, danger levels, maxed limits, daily digest  
-🌅 **Daily Digest** — yesterday's burn, anomalies, and pace-to-reset each morning  
-📊 **Visual Progress Bars** — Clean, gradient progress indicators with configurable warning thresholds  
-⏱️ **Countdown Timers** — Circular timers showing time elapsed in the current session window  
-🔄 **Auto-refresh** — Updates every 5 minutes automatically, with animated refresh indicator  
-📈 **Usage History Graph** — Toggleable 7-day chart showing session and weekly trends over time  
-🌍 **Currency Support** — Extra usage displays your account's billing currency (€, £, $)  
-🎨 **Modern UI** — Sleek, draggable widget with dark and light themes  
-🔒 **Secure** — Encrypted credential storage  
-📍 **Always on Top** — User-controlled, stays visible across all workspaces  
-💾 **System Tray** — Minimizes to tray for easy access  
-⚙️ **Settings Panel** — Persistent preferences for startup, theme, tray, thresholds, and date/time formats  
-🔔 **Usage Alerts** — Desktop notifications when usage crosses configurable warn/danger thresholds  
-🔔 **Update Notifications** — Automatic check for new releases on startup  
-🕐 **Configurable Date & Time Formats** — 12h/24h time, and flexible weekly reset date display  
-📐 **Compact Mode** — Minimal view for when you just need a quick glance  
+Power users end up logged into the **desktop app and the CLI with different accounts** — claude.ai in the browser but another account in the `claude` CLI, ChatGPT desktop plus a second account in `codex`, a Google login here and a different one in `gemini`. Every one of those accounts has its **own limits**, and most trackers only see one of them.
+
+Burnwatch tracks **both accounts per company, simultaneously**:
+
+- 🔑 **Sign in with ChatGPT / Google** (official OAuth), or let Burnwatch read your **CLI logins** — no extra setup
+- 🧬 **Same account everywhere?** The views merge automatically — no duplicate rows
+- 🟠 **Different accounts?** An amber **CLI: 2ND ACCT** pill appears and the second account gets its own rows, history series, burn-spike alerts, and tray badge (marked with a terminal-cursor `61▁`)
+- 🖥️ In **wide mode** the two accounts sit **side by side** — one shared model column, a Desktop cluster and a CLI cluster, each under its own labels
+- 🔥 Not interested? **Burn the pill away** — pixel fire chars it (Soot & Sparks finish, smoke included) and the rows roll up until you burn it back
+
+![Burnwatch — wide mode: three companies side by side, Google tracking desktop AND CLI accounts](assets/screenshot-landscape.png)
 
 ---
 
-## What's New in this Fork
+## Every pool, all three companies
 
-> This fork ([dev-newb/claude-usage-widget](https://github.com/dev-newb/burnwatch)) adds support for the per-model weekly limits Claude.ai introduced with the Claude 5 (Fable) launch. It builds on upstream [PR #98](https://github.com/SlavomirDurej/claude-usage-widget/pull/98).
+Each provider meters more than one thing — Burnwatch shows **all of it**:
 
-### 🤖 Fable / Scoped Weekly Limits
+- **Anthropic** — Claude Session (5h), All Claude Models (7d), **Fable (7d)** and any future model-scoped weekly limit (rendered generically from the API), Extra Usage spend
+- **OpenAI** — Codex (7d), the separate **GPT-5.3-Codex-Spark** pool, Code Review (when your account has one), purchased credits, and banked **limit-reset orbs**
+- **Google** — one row per model **version** (2.5 Pro, 2.5 Flash, 2.5 Flash Lite, 3.1 Flash Lite…), because Google meters each separately, in progressive shades of Google blue
 
-Claude.ai now reports per-model weekly limits (e.g. **Fable**) in a new `limits` array, and stopped populating the legacy `seven_day_opus` / `seven_day_sonnet` fields — so v1.7.5 shows no model-specific usage at all on current accounts. This fork:
+Don't care about a pool? **Hover it and click the minus** — hidden trackers collapse everywhere (including compact mode) and come back from the *N hidden* chip.
 
-- Shows a **`Fable (7d)` row** in the expanded panel — progress bar, percentage, and reset countdown — with its own fuchsia colour
-- **Charts Fable usage over time** as a series in the usage history graph
-- Is **generic**: whatever scoped weekly limits Anthropic sends next (new models, surfaces) render automatically, labelled from the API's own display name
-
-The Fable bar is **pinned to the main view** — it sits directly under the Weekly row and stays visible even when the details panel is collapsed. In **compact mode** it appears as a third slim red bar.
-
-### 🔴 Fable Tray Icon
-
-A third tray icon (menu bar icon on macOS) shows your Fable weekly percentage at a glance — **red badge with a black number**, so it's instantly distinguishable from the purple Session and blue Weekly icons. At 99%+ it switches to a black **X** on red. It appears whenever **Show Tray Stats** is enabled and your account has a scoped weekly limit, and its tooltip shows the exact percentage, reset time, and burn-rate forecast.
-
-> **Windows note:** Windows hides new tray icons in the overflow area (the **^** chevron) by default. Drag the red icon onto the taskbar once to keep it visible at a glance.
-
-### 💻 CLI Account Tracking
-
-If the `claude` CLI (Claude Code) is installed on the same machine, the widget also shows **that login's** session, weekly, and Fable usage — read from the CLI's own local credentials, no extra sign-in needed. Useful when your claude.ai login and your CLI login are different accounts with separate limits. Rows appear in the expandable panel with `CLI` labels; toggle with **CLI account** in Settings.
-
-> The widget never touches the CLI's refresh token (that could log the CLI out), so these rows appear only while the CLI's short-lived access token is fresh — any run of the `claude` CLI renews it. If the rows are missing, the token has simply expired.
-
-> Note this is specifically the **CLI's** login: the Claude Code desktop app keeps its own separate session, which the widget can't read.
-
-### 🔥 Desktop / CLI Subgroups (burn them away)
-
-When a provider is tracking **two accounts** — your primary sign-in plus a different account in that company's CLI — the section splits under **Desktop** and **CLI** subheadings so it's obvious which rows belong to which login. Each subheading is clickable: a line of pixel fire sweeps across it right-to-left, **charring the letters** and rolling that subgroup's rows up out of view. Click the charred heading again and the fire sweeps back, un-burning the letters and revealing the rows. Hide either group, or both — the choice persists across restarts (headings stay charred). Merged accounts show no subheadings; there's only one set of numbers to show.
-
-### 📈 Burn-rate Forecast
-
-Using the last few hours of collected history, the widget projects when your Weekly and Fable limits will hit 100% at the current pace. The forecast appears in the tray tooltips and as a hover tooltip on the Weekly and Fable rows. Forecasts only show when there's a meaningful upward trend and the projected time is within the next 7 days.
-
-### 🔔 Fable Usage Alerts
-
-Desktop notifications now also fire for scoped weekly limits: at your configured warn and danger thresholds, plus a dedicated **maxed out** alert at 99%+ that includes the reset time.
-
-### 🎨 Custom Tray Colors & Critical Outline
-
-Every stats tray icon's background and number colour is configurable in Settings. Default scheme: **Weekly (leftmost) = white number on blue, Session = black number on blue, Fable = black number on red**. When Anthropic's API reports a limit's severity as elevated (`critical`), the icon gets a **2px coloured outline** (default yellow) — toggle and colour are both configurable.
-
-### 🚨 Burn-spike Alert
-
-The widget learns your normal token burn rate from its usage history (robust median + MAD baseline over the retention window) and fires a **sound + notification** when a 10-minute window burns far outside that pattern — catching runaway token sinks you didn't intend. No config needed beyond an on/off toggle; the baseline adapts to *your* usage. Until enough history exists it falls back to a conservative absolute threshold.
-
-### 🟢 Codex (OpenAI) Account Tracking
-
-If the `codex` CLI is installed, the widget also shows your **Codex plan limits** (e.g. weekly usage on Pro) as teal rows — read from the CLI's local login and the same usage endpoint the CLI itself polls. When the stored token has expired, it falls back to the newest rate-limit snapshot in the CLI's own session logs. Toggle with **Codex account** in Settings. Provider endpoints are polled at most every 5 minutes.
-
-### 🗂️ Provider Sections
-
-The widget is organised into **Anthropic / OpenAI / Google** sections, each with a labelled header. Sections **collapse and expand** with a click (state persists across restarts), and each header carries an **eye toggle** (open = that provider's tray icons shown, closed slash = hidden) — Anthropic's session/weekly/Fable badges, an OpenAI Codex badge (teal), and a Google Gemini badge (yellow, worst bucket). Provider sections appear only when their CLI is installed and reporting data. Window height adapts automatically to whatever is visible.
-
-### 🟡 Gemini (Google) Account Tracking
-
-If the `gemini` CLI is installed, the widget shows your **Gemini daily quota** as yellow rows — one for the Pro model family, one for Flash, each reflecting the most-consumed model bucket in that family with its reset time. It authenticates with the CLI's own local OAuth credentials against the same quota endpoint the CLI's backend uses (Google refresh tokens don't rotate, so this can never break the CLI's login; nothing is written back). Toggle with **Gemini account** in Settings.
-
-### 📉 Forecast on the Chart
-
-The burn-rate forecast is now drawn on the usage graph: a **dotted projection line** from the newest sample to each series' predicted 100% crossing, plus a grey dashed marker at the weekly reset — so you can see at a glance whether you'll hit the cap or the reset first. Projections only appear for series with a real upward trend.
-
-### 🗓️ Session-window Planner
-
-A small hint under the usage bars analyses your last week of activity and finds your heaviest 5-hour stretch of the day: *"your heaviest hours are 2pm–7pm — start a fresh session just before 2pm to cover them in one 5h window."* Shown only when a clear pattern exists.
-
-### 📱 Phone Alerts (webhook / ntfy)
-
-Point **Phone alerts** in Settings at an [ntfy](https://ntfy.sh) topic or any HTTPS webhook, and the widget pushes burn-spike alerts, danger-threshold crossings, maxed-out limits, and the daily digest to your phone — the alerts that matter most when you're *not* at the machine. ntfy URLs get plain-text pushes with a title; anything else gets a JSON POST.
-
-### 🌅 Daily Digest
-
-Once a day (first refresh after 9am) the widget posts a summary: yesterday's burn per limit, any anomalies, and a pace line — *"stay under ~N pts/day to reach the reset."* Toggle in Settings; also delivered to your webhook if enabled.
-
-### 🔄 Auto-update (no installer wizard)
-
-Updates now download in the background from this fork's releases and apply **silently** — the banner becomes "click to restart & apply", or the update installs itself on next quit. No NSIS wizard, no clicking through pages. (Portable builds keep the banner + link flow, since a portable exe can't replace itself while running.) The legacy update check also points at the fork, so an upstream release can't replace the fork build.
+![Burnwatch — main view: Anthropic, OpenAI, and Google, every pool tracked](assets/screenshot-main.png)
 
 ---
 
-## What's New in v1.7.0
+## A layout for every window
 
-### 🎨 Dynamic Threshold Colors
+Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped text:
 
-All usage bars (Session, Weekly, and Extra Usage) now respect your configured warning and danger thresholds:
-- **Green** below warning threshold
-- **Amber** at or above warning threshold
-- **Red** at or above danger threshold
+- 📏 **Live resize ladder** — full labels → abbreviated windows ("2.5 Pro (1D)", tooltip explains) → colour-coded chips (`CLA 5H · CDX · SPK · 2.5P`) → countdown text becomes **remaining-time pies** → redundant columns bow out — down to a 200px sliver
+- 🖼️ **Orientation aware** — wider than tall? The three companies line up as **columns** with per-column headers and a shared bottom line above the chart. Stretched tall? Text and the company wordmarks **grow to fill the space**
+- 🗜️ **Compact mode** (the boot-stomping-a-can button) — one slim bar per pool across all companies, grouped by company colour, fits any corner
+- 🪟 **Windows Snap** works natively — drag to an edge or Win+Arrow
+- ↕️ The window **grows and contracts with its content**: toggle the graph, burn a group away, hide a tracker — the frame follows
 
-Changes apply immediately when thresholds are adjusted in Settings.
-
-### 📈 Usage History Graph
-
-A toggleable usage history graph now sits below the main widget. Click the graph button in the toolbar to show or hide it.
-
-![Burnwatch — usage history graph with burn-rate projections](assets/screenshot-graph.png)
-
-- Displays up to **7 days** of collected usage data points
-- **Data points are captured each time the app refreshes** (every 5 minutes by default when running)
-- History **persists across restarts** — collected data is retained when you close and reopen the app
-- Sonnet and Extra Usage lines appear automatically when those sections are relevant
-- **Adaptive x-axis labels** — shows times for short spans, weekday+hour for medium spans, and dates for longer spans
-- Respects your **12h/24h time format** setting
-- Hover tooltip shows exact timestamp and value
-
-> **Note:** The graph shows usage snapshots captured at each refresh interval while the app is running. Time periods when the app is closed are not represented on the graph.
-
-### 🌍 Currency Support
-The Extra Usage row now displays the correct currency symbol based on your account's billing currency — **€**, **£**, or **$**.
-
-> For full release history, see the [Releases](../../releases) page. Fork releases auto-apply from v1.9.0 onward.
+<p align="center">
+  <img src="assets/screenshot-narrow.png" width="240" alt="Burnwatch squeezed narrow — colour chips and pie timers">
+  <img src="assets/screenshot-compact.png" width="200" alt="Burnwatch compact mode — one slim bar per pool">
+</p>
 
 ---
 
-## Screenshots
+## Watching the burn
 
-### Settings Panel
+⏳ **Burn-rate Forecast** — projects when each pool hits 100%, on the chart and in tooltips
+🗓️ **Session Planner** — per-company: finds your heaviest hours and suggests when to start a fresh window
+🔔 **Usage & Burn-spike Alerts** — company-attributed desktop notifications; median+MAD anomaly detection on every tracked series (second accounts included)
+📱 **Phone Alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
+🌅 **Daily Digest** — yesterday's burn, per company, each morning
+📈 **History Graph** — 7-day chart with projection lines, toggled by the psychic (eyes closed = forecasting)
+💾 **Tray badges** — per-company colours (Anthropic blue, Fable red, OpenAI green, Google yellow), customizable, with X-on-red at 99% and terminal-cursor badges for second accounts
 
-![Burnwatch — settings panel](assets/screenshot-settings.png)
+---
 
+## The fun parts
 
-### Settings Options
+🔥 **Pixel fire** — hiding an account group sends a pixel flame across its heading, charring the letters sooty-black with sparks and lingering smoke; reversing heals it letter by letter
+✨ **Reset sparkles** — when a limit window completes, its ring gets a wand-tap burst (owed and paid later if you weren't looking)
+🧊 **On ice** — companies you haven't touched in days freeze over, icicles and all
+🟢 **Magic orbs** — banked OpenAI limit-resets glimmer softly
+🤡 **The clown** — click him and he goes to jail, sad and crying, and every animation, glow, and filter in the app goes still. For the resource-conscious and the joyless alike.
 
-- ⚙️ **Launch at startup** — Auto-start with Windows or macOS login
-- 📌 **Hide from taskbar** — Tray-only mode
-- 🎨 **Theme selector** — Dark / Light / System
-- ⚠️ **Warning thresholds** — Configurable amber and red levels for usage bars
-- 🔔 **Usage alerts** — Desktop notifications at warn/danger thresholds
-- 🕐 **Time format** — 12h or 24h
-- 📅 **Date format** — Controls how the weekly reset date is displayed
-- 📐 **Compact mode** — Minimal two-bar view
+![Burnwatch — settings: global options plus one column per company](assets/screenshot-settings.png)
 
 ---
 

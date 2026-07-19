@@ -2168,20 +2168,21 @@ body.theme-light .compact-pct {
 body.theme-light .subheading { color: #8a8aa0; }
 
 /* Letters char in place as the fire line passes over them */
-.subheading.burning .sub-letter {
+.burning .sub-letter {
     animation: charLetter 0.3s both;
     animation-delay: var(--burn-d);
 }
 
-.subheading.unburning .sub-letter {
+.unburning .sub-letter {
     animation: healLetter 0.3s both;
     animation-delay: var(--heal-d);
 }
 
-.subheading.burnt .sub-letter {
-    color: #55483c;
-    opacity: 0.5;
+.burnt .sub-letter {
+    color: var(--char-col, #1e1712);
+    opacity: 0.95;
     transform: translateY(1px) rotate(var(--rot));
+    text-shadow: var(--char-soot);
 }
 
 @keyframes charLetter {
@@ -2192,15 +2193,15 @@ body.theme-light .subheading { color: #8a8aa0; }
         text-shadow: 0 0 6px rgba(255, 120, 20, 0.9), 0 0 2px rgba(255, 220, 120, 0.9);
     }
     100% {
-        color: #55483c;
-        opacity: 0.5;
+        color: var(--char-col, #1e1712);
+        opacity: 0.95;
         transform: translateY(1px) rotate(var(--rot));
-        text-shadow: none;
+        text-shadow: var(--char-soot);
     }
 }
 
 @keyframes healLetter {
-    0% { color: #55483c; opacity: 0.5; transform: translateY(1px) rotate(var(--rot)); }
+    0% { color: var(--char-col, #1e1712); opacity: 0.95; transform: translateY(1px) rotate(var(--rot)); text-shadow: var(--char-soot); }
     45% { color: #ffb257; opacity: 1; text-shadow: 0 0 6px rgba(255, 150, 40, 0.8); }
     100% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
 }
@@ -2936,15 +2937,26 @@ body.landscape .section-body:not(.has-dual) > .usage-headers {
 }
 
 /* Burning leaves things visibly charred until reversed */
-.subheading.cli-pill.burnt {
-    background: rgba(70, 58, 45, 0.25);
-    border-color: rgba(90, 75, 60, 0.65);
-}
+
 
 .dual-pill { position: relative; overflow: visible; }
 
-.dual-table.hide-cli .dual-pill {
-    background: rgba(70, 58, 45, 0.25);
-    border-color: rgba(90, 75, 60, 0.65);
-    color: #6b5d4e;
+
+
+
+/* Soot & Sparks palette (finish #4): sooty char with speckled highlights.
+   Dark theme lifts the char so it still reads against the dark widget. */
+body {
+    --char-col: #4a3b2d;
+    --char-soot: 1px 0 0 rgba(120, 90, 62, 0.8), -1px 1px 0 rgba(20, 14, 10, 0.9), 0 -1px 0 rgba(150, 110, 72, 0.5);
+}
+
+body.theme-light {
+    --char-col: #1e1712;
+    --char-soot: 1px 0 0 rgba(70, 50, 34, 0.8), -1px 1px 0 rgba(15, 10, 8, 0.9), 0 -1px 0 rgba(90, 64, 40, 0.5);
+}
+
+@keyframes bwSpark {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--ry)) scale(0.3); opacity: 0; }
 }

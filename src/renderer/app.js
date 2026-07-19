@@ -1406,6 +1406,29 @@ function runPixelSweep(btn, hide) {
             _spawnPixelSmoke(layer, sx);
         }
         if (t < 1) requestAnimationFrame(frame);
+        else if (hide) {
+            // Soot & Sparks aftermath: lingering smoke + stray sparks, dying out
+            const a0 = performance.now(), ADUR = 3200;
+            (function aftermath() {
+                const at = (performance.now() - a0) / ADUR;
+                if (at >= 1 || document.body.classList.contains('no-pizazz')) {
+                    setTimeout(() => layer.remove(), 1600);
+                    return;
+                }
+                _spawnPixelSmoke(layer, _rnd(0, W));
+                if (Math.random() < 0.5) {
+                    const s = document.createElement('div');
+                    const col = _pick(['#ffd43b', '#ff922b']);
+                    s.className = 'fp';
+                    s.style.cssText = `left:${_rnd(0, W)}px; bottom:${_rnd(2, 10)}px; width:2px; height:2px;
+                        background:${col}; box-shadow: 0 0 4px ${col};
+                        --dx:${_rnd(-14, 14)}px; --ry:${-_rnd(8, 22)}px;
+                        animation: bwSpark ${Math.round(_rnd(300, 600))}ms ease-out forwards;`;
+                    layer.appendChild(s);
+                }
+                setTimeout(aftermath, 260 * (1 + at * 2.5));
+            })();
+        }
         else setTimeout(() => layer.remove(), 1200);
     }
     requestAnimationFrame(frame);
@@ -1688,12 +1711,35 @@ function renderDualTables(data) {
         groupHead.appendChild(Object.assign(document.createElement('span'), { className: 'dual-gap' }));
         const pill = document.createElement('button');
         pill.className = 'dual-pill cli-head';
-        pill.textContent = 'CLI: 2ND ACCT';
         pill.title = 'Second account (CLI login) — click to hide/show its columns';
+        {
+            const chars = [...'CLI: 2ND ACCT'];
+            const span = Math.max(SUBGROUP_SWEEP_MS - 80, 100);
+            chars.forEach((ch, i) => {
+                const s = document.createElement('span');
+                s.className = 'sub-letter';
+                s.textContent = ch === ' ' ? '\u00A0' : ch;
+                s.style.setProperty('--burn-d', `${Math.round(((chars.length - 1 - i) / chars.length) * span)}ms`);
+                s.style.setProperty('--heal-d', `${Math.round((i / chars.length) * span)}ms`);
+                s.style.setProperty('--rot', `${((i * 37) % 7) - 3}deg`);
+                pill.appendChild(s);
+            });
+        }
+        if (hiddenMap[company + '_cli']) pill.classList.add('burnt');
         pill.addEventListener('click', async () => {
+            if (pill.dataset.animating) return;
             const hidden = !table.classList.contains('hide-cli');
+            pill.dataset.animating = '1';
+            pill.classList.remove('burnt', 'burning', 'unburning');
+            void pill.offsetWidth;
+            pill.classList.add(hidden ? 'burning' : 'unburning');
             runPixelSweep(pill, hidden);
-            table.classList.toggle('hide-cli', hidden);
+            setTimeout(() => { table.classList.toggle('hide-cli', hidden); }, 160);
+            setTimeout(() => {
+                pill.classList.remove('burning', 'unburning');
+                pill.classList.toggle('burnt', hidden);
+                delete pill.dataset.animating;
+            }, SUBGROUP_SWEEP_MS + 300);
             const subgroupHidden = { ...((window._cachedSettings || {}).subgroupHidden || {}), [company + '_cli']: hidden };
             await _saveSettingsPatch({ subgroupHidden });
             applySubgroups();
@@ -2257,7 +2303,6 @@ function updateCompactBars(data) {
         container.appendChild(row);
     }
 
-    // Fit the compact window to the pool count. Computed, not measured —
     // the rows container stretches to fill the window (so bars can expand
     // when the user makes it bigger), which makes measuring it circular.
     if (isCompactMode) {
