@@ -2368,3 +2368,79 @@ body.theme-light .provider-col {
 
 body.theme-light .provider-col-title { border-bottom-color: rgba(0, 0, 0, 0.08); }
 body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
+
+/* =================== Responsive squeeze ladders =================== */
+/* The window's natural width is 560px, so these only engage when the user
+   snaps or hand-resizes narrower. Ladder: bars go first, then column
+   headings, then row labels (last text), then Resets-In becomes a ring,
+   then Resets-At (redundant with Resets-In) disappears entirely. */
+
+@media (max-width: 540px) {
+    .usage-section, .usage-headers { grid-template-columns: minmax(0, 1fr) 44px 36px 72px 68px; }
+    .progress-bar { display: none; }
+    .usage-bar-group { justify-content: flex-end; }
+    .compact-collapse-btn { display: none !important; }
+}
+
+@media (max-width: 500px) {
+    .usage-headers { display: none !important; }
+}
+
+@media (max-width: 450px) {
+    .usage-label { display: none; }
+    .credits-approx { display: none; }
+    .extra-balance-label, .extra-balance-amount { display: none; }
+    .usage-section { grid-template-columns: minmax(44px, 1fr) 36px 72px 68px; }
+    /* With the label column gone the stretch rows start one column earlier */
+    .usage-section.stretch-bar .usage-bar-group { grid-column: 1 / 3; }
+}
+
+@media (max-width: 400px) {
+    .usage-section { grid-template-columns: minmax(44px, 1fr) 36px 36px 68px; }
+    /* Resets-In text becomes a remaining-time ring (same family as Elapsed) */
+    .timer-text:not(.extra-balance-label) {
+        font-size: 0 !important;
+        display: flex;
+        justify-content: center;
+    }
+    .timer-text:not(.extra-balance-label)::before {
+        content: '';
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: conic-gradient(var(--rem-col, #8b8fa3) var(--rem-deg, 0deg), rgba(128, 128, 140, 0.15) 0);
+    }
+}
+
+@media (max-width: 350px) {
+    .usage-section { grid-template-columns: minmax(44px, 1fr) 36px 36px; }
+    .resets-at-text { display: none; }
+}
+
+/* Settings adapts too: provider columns stack, panel scrolls when cramped */
+.settings-content { overflow-y: auto; }
+
+@media (max-width: 520px) {
+    .settings-providers { grid-template-columns: 1fr; }
+    .settings-row-2col, .settings-row-2col.tray-colors-row { grid-template-columns: 1fr; }
+}
+
+/* Vertical squeeze — classes set by the renderer ONLY while the user has
+   hand-sized the window (never during auto-height, so no shrink spiral):
+   vh-1 drops planners/headings and tightens rows, vh-2 drops the expandable
+   extras and footers, vh-3 drops the graph and shrinks the wordmarks. */
+body.vh-1 .plan-note { display: none !important; }
+body.vh-1 .usage-headers { display: none !important; }
+body.vh-1 .usage-section { height: 26px; margin-bottom: 0; }
+body.vh-1 .provider-section { margin-bottom: 4px; }
+body.vh-1 .section-footer { padding-top: 0; padding-bottom: 2px; }
+body.vh-1 .content { overflow-y: auto; }
+
+body.vh-2 .expand-section { display: none !important; }
+body.vh-2 .expand-toggle { display: none !important; }
+body.vh-2 .section-footer { display: none !important; }
+body.vh-2 .subheading-row { padding-top: 0; }
+
+body.vh-3 .graph-section { display: none !important; }
+body.vh-3 .section-header { padding-top: 1px; padding-bottom: 0; }
+body.vh-3 .section-name { font-size: 15px; }

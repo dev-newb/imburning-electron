@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSessionExpired: (callback) => {
     ipcRenderer.on('session-expired', () => callback());
   },
+  onWindowUserSized: (callback) => {
+    ipcRenderer.on('window-user-sized', (event, userSized) => callback(userSized));
+  },
 
   // API
   fetchUsageData: () => ipcRenderer.invoke('fetch-usage-data'),

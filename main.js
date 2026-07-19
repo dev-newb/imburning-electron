@@ -1351,8 +1351,10 @@ function createMainWindow() {
     alwaysOnTop: true,
     resizable: true,
     maximizable: true,
-    minWidth: 320,
-    minHeight: 60,
+    // Floor sits where the responsive ladder bottoms out — below this the
+    // remaining elements would overlap
+    minWidth: 300,
+    minHeight: 180,
     skipTaskbar: false,
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
     webPreferences: {
@@ -1372,6 +1374,19 @@ function createMainWindow() {
 
   // Re-announce a downloaded update once the renderer is actually listening
   mainWindow.webContents.on('did-finish-load', sendUpdateReady);
+
+  // Tell the renderer when the window is user-sized (snapped / hand-resized)
+  // so it can apply its squeeze classes — and only then, which keeps the
+  // auto-height loop from ever reacting to its own compression.
+  let resizeNotifyTimer = null;
+  mainWindow.on('resize', () => {
+    if (resizeNotifyTimer) clearTimeout(resizeNotifyTimer);
+    resizeNotifyTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('window-user-sized', windowIsUserSized());
+      }
+    }, 80);
+  });
 
   let positionSaveTimer = null;
   mainWindow.on('move', () => {
@@ -2567,21 +2582,25 @@ ipcMain.on('close-window', () => {
   }
 });
 
-// While the window is snapped (Win+Arrow / drag-to-edge) or hand-resized, its
-// width differs from the widget's own — stop fighting the shell over geometry
-// until it's back at normal size (un-snapping restores the pre-snap bounds).
+// While the window is snapped (Win+Arrow / drag-to-edge) or hand-resized —
+// width OR height differing from the last size we set ourselves — stop
+// fighting the shell over geometry. Un-snapping restores the pre-snap bounds
+// (our own size), which re-enables auto-sizing.
 let _expectedWidth = WIDGET_WIDTH;
+let _lastSetHeight = null;
 
 function windowIsUserSized() {
   if (!mainWindow) return false;
   if (mainWindow.isMaximized()) return true;
-  const [cw] = mainWindow.getContentSize();
-  return Math.abs(cw - _expectedWidth) > 24;
+  const [cw, ch] = mainWindow.getContentSize();
+  if (Math.abs(cw - _expectedWidth) > 24) return true;
+  return _lastSetHeight != null && Math.abs(ch - _lastSetHeight) > 24;
 }
 
 ipcMain.on('resize-window', (event, height) => {
   if (mainWindow && !windowIsUserSized()) {
     mainWindow.setContentSize(_expectedWidth, height);
+    _lastSetHeight = height;
   }
 });
 
@@ -2678,6 +2697,7 @@ ipcMain.on('set-compact-mode', (event, compact) => {
       : 0;
     const height = compact ? 105 + (scopedCount * 26) : WIDGET_HEIGHT;
     mainWindow.setBounds({ x: bounds.x, y: bounds.y, width, height });
+    _lastSetHeight = mainWindow.getContentSize()[1];
   }
 });
 

@@ -1222,6 +1222,28 @@ function runPixelSweep(btn, hide) {
     requestAnimationFrame(frame);
 }
 
+// ---- Vertical squeeze classes ----
+// Applied ONLY while the user has hand-sized/snapped the window (main tells
+// us via window-user-sized). Auto-height mode never compresses, so the
+// resize loop can't react to its own squeeze and spiral the window down.
+let _windowUserSized = false;
+
+function applySqueezeClasses() {
+    const h = window.innerHeight;
+    const on = _windowUserSized;
+    document.body.classList.toggle('vh-1', on && h < 520);
+    document.body.classList.toggle('vh-2', on && h < 430);
+    document.body.classList.toggle('vh-3', on && h < 340);
+}
+
+if (window.electronAPI.onWindowUserSized) {
+    window.electronAPI.onWindowUserSized((userSized) => {
+        _windowUserSized = userSized;
+        applySqueezeClasses();
+    });
+}
+window.addEventListener('resize', applySqueezeClasses);
+
 // Track the window height every few frames while a subgroup rolls, so the
 // window shrinks/grows WITH the content instead of snapping at the end
 function _followResize(durationMs) {
@@ -2110,6 +2132,13 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     const light = 55 - (55 - 47) * f;
     timerElement.classList.remove('warning', 'danger');
     timerElement.style.stroke = `hsl(${Math.round(hue)}, ${Math.round(sat)}%, ${Math.round(light)}%)`;
+
+    // At very narrow widths CSS swaps this text for a remaining-time ring —
+    // feed it the fraction and colour, and keep the words in the tooltip
+    const remFrac = Math.min(Math.max(diff / totalMs, 0), 1);
+    textElement.style.setProperty('--rem-deg', `${Math.round(remFrac * 360)}deg`);
+    textElement.style.setProperty('--rem-col', `hsl(${Math.round(hue)}, ${Math.round(sat)}%, ${Math.round(light)}%)`);
+    textElement.title = `Resets in ${textElement.textContent}`;
 }
 
 // UI State Management
