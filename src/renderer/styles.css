@@ -2676,3 +2676,20 @@ body.sz4 .usage-section, body.sz4 .usage-headers { padding-right: 4px; }
     image-rendering: pixelated;
     display: block;
 }
+
+/* In compressed bands the stretch rows (credits / reset orbs) span the whole
+   remaining row width, so the orbs centre across the window instead of
+   huddling inside the narrow fixed columns */
+body.sz1 .usage-section.stretch-bar,
+body.lbl-code .usage-section.stretch-bar,
+body.sz3 .usage-section.stretch-bar,
+body.sz4 .usage-section.stretch-bar {
+    grid-template-columns: minmax(46px, auto) 1fr;
+}
+
+body.sz1 .usage-section.stretch-bar .usage-bar-group,
+body.lbl-code .usage-section.stretch-bar .usage-bar-group,
+body.sz3 .usage-section.stretch-bar .usage-bar-group,
+body.sz4 .usage-section.stretch-bar .usage-bar-group {
+    grid-column: 2 / -1;
+}
