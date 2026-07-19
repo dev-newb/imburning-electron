@@ -2814,6 +2814,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
       || error.message.startsWith('UnexpectedHTML');
     if (isBlocked) {
       store.delete('sessionKey');
+      store.delete('sessionKey_encrypted'); // was left behind, resurrecting dead sessions
       store.delete('organizationId');
       if (mainWindow) {
         mainWindow.webContents.send('session-expired');

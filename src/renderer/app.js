@@ -566,10 +566,16 @@ function setupEventListeners() {
     });
 
     // Listen for session expiration events (403 errors)
-    window.electronAPI.onSessionExpired(() => {
+    window.electronAPI.onSessionExpired(async () => {
         debugLog('Session expired event received');
-        credentials = { sessionKey: null, organizationId: null };
-        showLoginRequired();
+        credentials = await window.electronAPI.getCredentials();
+        if (credentials.cliFallbackAvailable) {
+            // The claude CLI login keeps the section alive without the web session
+            showMainContent();
+            await fetchUsageData({ forceExtended: true });
+        } else {
+            showLoginRequired();
+        }
     });
 
     // Update banner
@@ -752,8 +758,13 @@ async function fetchUsageData(options = {}) {
     } catch (error) {
         console.error('Error fetching usage data:', error);
         if (error.message.includes('SessionExpired') || error.message.includes('Unauthorized')) {
-            credentials = { sessionKey: null, organizationId: null };
-            showLoginRequired();
+            credentials = await window.electronAPI.getCredentials();
+            if (credentials.cliFallbackAvailable) {
+                showMainContent();
+                setTimeout(() => fetchUsageData({ forceExtended: true }), 1500);
+            } else {
+                showLoginRequired();
+            }
         } else {
             debugLog('Failed to fetch usage data');
         }
