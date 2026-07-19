@@ -471,6 +471,14 @@ function setupEventListeners() {
         window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
     });
 
+    document.getElementById('coffeeBtn').addEventListener('click', () => {
+        window.electronAPI.openExternal('https://buymeacoffee.com/devnewb');
+    });
+
+    document.getElementById('creditLink').addEventListener('click', () => {
+        window.electronAPI.openExternal('https://github.com/SlavomirDurej');
+    });
+
     // Official OAuth connect paths (OpenAI / Google): section connect rows,
     // the clickable 'via CLI login' chips, and the Settings Connect buttons
     const runConnect = async (provider, busyFn, doneFn, errFn) => {
@@ -646,7 +654,7 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(595);
+        window.electronAPI.resizeWindow(615);
     });
 
     // Close compact settings — apply compact toggle value then close

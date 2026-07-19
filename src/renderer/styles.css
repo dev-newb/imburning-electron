@@ -2262,3 +2262,51 @@ body.theme-light .subheading { color: #8a8aa0; }
 
 .subgroup.no-anim .subgroup-roll { transition: none !important; }
 .subgroup.no-anim .sub-letter { animation: none !important; }
+
+/* ---- Settings credit row (original author + coffee) ---- */
+
+.settings-credit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 14px 10px;
+    font-size: 10px;
+    color: #707090;
+}
+
+.credit-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 10px;
+    color: #9090b0;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.credit-link:hover { color: #b0b0d0; }
+
+.coffee-btn {
+    background: rgba(255, 221, 0, 0.12);
+    color: #e6c619;
+    border: 1px solid rgba(255, 221, 0, 0.35);
+    padding: 4px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.coffee-btn:hover {
+    background: rgba(255, 221, 0, 0.22);
+    border-color: rgba(255, 221, 0, 0.6);
+}
+
+body.theme-light .settings-credit { color: #8080a0; }
+body.theme-light .credit-link { color: #606080; }
+body.theme-light .coffee-btn { background: rgba(200, 160, 0, 0.1); color: #8a6d00; border-color: rgba(200, 160, 0, 0.4); }
