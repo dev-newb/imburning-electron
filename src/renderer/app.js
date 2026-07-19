@@ -1458,6 +1458,15 @@ if (window.electronAPI.onWindowUserSized) {
 }
 window.addEventListener('resize', applySqueezeClasses);
 
+// Pay out sparkle bursts owed from resets that happened while hidden
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    document.querySelectorAll('[data-pending-sparkle]').forEach((el) => {
+        delete el.dataset.pendingSparkle;
+        sparkleRing(el);
+    });
+});
+
 // Track the window height every few frames while a subgroup rolls, so the
 // window shrinks/grows WITH the content instead of snapping at the end
 function _followResize(durationMs) {
@@ -1797,17 +1806,6 @@ function resizeWidget(bannerVisible) {
 const SCOPED_COLOR_CLASSES = { fable: 'fable' };
 
 function normalizeUsageData(data) {
-    // claude.ai now reports per-model weekly limits (e.g. Fable) as entries in
-    // the `limits` array with kind "weekly_scoped"; the legacy seven_day_<model>
-    // fields arrive null for those models. Map each scoped weekly limit onto a
-    // synthetic seven_day_* field so it renders like any other extra row.
-    for (const limit of (data.limits || [])) {
-        if (limit.kind !== 'weekly_scoped' || limit.percent == null) continue;
-        const scopeName = limit.scope?.model?.display_name || limit.scope?.surface || 'Scoped';
-        const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-        const key = 'seven_day_scoped_' + slug;
-        if (!EXTRA_ROW_CONFIG[key]) {
-            EXTRA_ROW_CONFIG[key] = { label: `${scopeName} (7d)`, color: SCOPED_COLOR_CLASSES[slug] || 'opus' };
             // Re-insert extra_usage so model rows stay grouped above it
             const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
             delete EXTRA_ROW_CONFIG.extra_usage;
@@ -2465,7 +2463,12 @@ function formatResetsAt(resetsAt, isWeekly, timeFormat, weeklyDateFormat) {
 // A whimsical gold sparkle burst around an elapsed ring — fired when its
 // window completes, as if an unseen Tinkerbell tapped it with her wand
 function sparkleRing(timerElement) {
-    if (document.visibilityState !== 'visible') return; // only when in view
+    if (document.visibilityState !== 'visible') {
+        // Reset happened while we weren't being looked at — owe a burst,
+        // paid out when the window comes back into view
+        timerElement.dataset.pendingSparkle = '1';
+        return;
+    }
     if (document.body.classList.contains('no-pizazz')) return; // clown's in jail
     const anchor = timerElement.closest('.usage-elapsed-group') || timerElement.parentElement;
     if (!anchor || anchor.querySelector('.sparkle-burst')) return;
