@@ -1415,8 +1415,9 @@ body.theme-light .section-header.frozen .section-name {
 .reset-dots {
     flex: 1;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    gap: clamp(4px, calc((100vw - 280px) / 12), 26px);
     padding: 0 7px;
 }
 
@@ -2004,8 +2005,11 @@ body.compact-mode .title {
 .compact-rows {
     display: flex;
     flex-direction: column;
+    justify-content: space-evenly;
     gap: 7px;
     width: 100%;
+    height: 100%;
+    min-height: 0;
 }
 
 .compact-row {
@@ -2013,7 +2017,18 @@ body.compact-mode .title {
     align-items: center;
     gap: 8px;
     width: 100%;
+    flex: 1;
+    min-height: 16px;
+    max-height: 44px;
 }
+
+.compact-row .compact-bar-wrap {
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.compact-row .compact-bar-bg { height: clamp(10px, 55%, 26px); }
 
 .compact-label {
     color: #808090;
@@ -2380,10 +2395,22 @@ body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
     .progress-bar { display: none; }
     .usage-bar-group { justify-content: flex-end; }
     .compact-collapse-btn { display: none !important; }
+    /* Header text no longer fits its shrunken columns */
+    .usage-headers { display: none !important; }
 }
 
-@media (max-width: 500px) {
-    .usage-headers { display: none !important; }
+/* Mid band: labels keep their names but windows abbreviate — (daily)->(1D),
+   with the meaning in a tooltip (set by applyLabelMode, abbreviated only) */
+@media (max-width: 540px) and (min-width: 451px) {
+    .usage-label, .expand-section .usage-label { font-size: 0; }
+    .usage-label > * { display: none; }
+    .usage-label::after {
+        content: attr(data-abbr);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: inherit;
+    }
 }
 
 @media (max-width: 450px) {
@@ -2470,23 +2497,25 @@ body.tall .content {
 body.tall .usage-percentage { width: auto; min-width: 38px; }
 body.tall .progress-bar { min-width: 56px; }
 
-body.tall .section-name { font-size: min(calc(24px + var(--tall, 0) * 56px), 17vw); }
-body.tall .section-header { padding-top: calc(4px + var(--tall, 0) * 10px); padding-bottom: calc(2px + var(--tall, 0) * 8px); }
-body.tall .provider-section { margin-bottom: calc(12px + var(--tall, 0) * 30px); }
+@media (min-width: 541px) {
+    body.tall .section-name { font-size: min(calc(24px + var(--tall, 0) * 56px), 17vw); }
+    body.tall .section-header { padding-top: calc(4px + var(--tall, 0) * 10px); padding-bottom: calc(2px + var(--tall, 0) * 8px); }
+    body.tall .provider-section { margin-bottom: calc(12px + var(--tall, 0) * 30px); }
 
-body.tall .usage-label { font-size: calc(11px + var(--tall, 0) * 4px); }
-body.tall .usage-percentage { font-size: calc(12px + var(--tall, 0) * 5px); }
-body.tall .timer-text:not(.extra-balance-label) { font-size: calc(11px + var(--tall, 0) * 4px); }
-body.tall .extra-balance-label, body.tall .extra-balance-amount { font-size: calc(11px + var(--tall, 0) * 3px); }
-body.tall .resets-at-text { font-size: calc(10px + var(--tall, 0) * 4px); }
-body.tall .col-header { font-size: calc(9px + var(--tall, 0) * 1.5px); }
-body.tall .plan-note { font-size: calc(10px + var(--tall, 0) * 3px); }
-body.tall .subheading { font-size: calc(9px + var(--tall, 0) * 3px); }
-body.tall .usage-section { height: calc(32px + var(--tall, 0) * 18px); margin-bottom: calc(2px + var(--tall, 0) * 6px); }
-body.tall .progress-bar { height: calc(7px + var(--tall, 0) * 5px); }
-body.tall .usage-elapsed-group svg.mini-timer {
-    width: calc(24px + var(--tall, 0) * 12px);
-    height: calc(24px + var(--tall, 0) * 12px);
+    body.tall .usage-label { font-size: calc(11px + var(--tall, 0) * 4px); }
+    body.tall .usage-percentage { font-size: calc(12px + var(--tall, 0) * 5px); }
+    body.tall .timer-text:not(.extra-balance-label) { font-size: calc(11px + var(--tall, 0) * 4px); }
+    body.tall .extra-balance-label, body.tall .extra-balance-amount { font-size: calc(11px + var(--tall, 0) * 3px); }
+    body.tall .resets-at-text { font-size: calc(10px + var(--tall, 0) * 4px); }
+    body.tall .col-header { font-size: calc(9px + var(--tall, 0) * 1.5px); }
+    body.tall .plan-note { font-size: calc(10px + var(--tall, 0) * 3px); }
+    body.tall .subheading { font-size: calc(9px + var(--tall, 0) * 3px); }
+    body.tall .usage-section { height: calc(32px + var(--tall, 0) * 18px); margin-bottom: calc(2px + var(--tall, 0) * 6px); }
+    body.tall .progress-bar { height: calc(7px + var(--tall, 0) * 5px); }
+    body.tall .usage-elapsed-group svg.mini-timer {
+        width: calc(24px + var(--tall, 0) * 12px);
+        height: calc(24px + var(--tall, 0) * 12px);
+    }
 }
 
 /* Wider columns for the bigger type — but never while the narrow ladder is
@@ -2514,3 +2543,36 @@ body.tall .usage-elapsed-group svg.mini-timer {
     white-space: nowrap;
     overflow: hidden;
 }
+
+
+/* ---- Title-bar sprite buttons (press + clown) ---- */
+.sprite-btn img {
+    width: 18px;
+    height: 18px;
+    image-rendering: pixelated;
+    display: block;
+}
+
+/* ---- Anthropic rows wear the company clay (Fable keeps its fuchsia) ---- */
+.progress-fill {
+    background: linear-gradient(90deg, #e59b78, #d97757);
+}
+
+.progress-fill.weekly {
+    background: linear-gradient(90deg, #d97757, #b85c3c);
+}
+
+.progress-fill.cc {
+    background: linear-gradient(90deg, #d9a18a, #c8846a);
+}
+
+/* ---- No-pizazz mode: the clown is in jail, the party is over ---- */
+body.no-pizazz *,
+body.no-pizazz *::before,
+body.no-pizazz *::after {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* The press button in the title bar replaces the old compact chevrons */
+.compact-collapse-btn, .compact-expand-btn { display: none !important; }

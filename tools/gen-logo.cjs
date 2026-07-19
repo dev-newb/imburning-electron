@@ -234,6 +234,125 @@ const PSYCHIC_ON = [
   '....DDDDDDDDDDDDDDDD....'
 ];
 
+// ---- the hydraulic press (compact-mode toggle) ----
+// Up: piston raised, pristine can waiting. Down: piston slammed, can crushed.
+const PRESS_UP = [
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  'DSSSSSSSSSSSSSSSSSSSSSSD',
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '........DDDSSDDD........',
+  '.......DHSSSSSSHD.......',
+  '.......DDDDDDDDDD.......',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '........DDDDDDDD........',
+  '.......DEEEEEEEED.......',
+  '.......DEEEEEEEED.......',
+  '.......DENNNNNNED.......',
+  '.......DENNNNNNED.......',
+  '.......DEEEEEEEED.......',
+  '.......DEEEEEEEED.......',
+  '.......DDDDDDDDDD.......',
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  'DSSSSSSSSSSSSSSSSSSSSSSD'
+];
+
+const PRESS_DOWN = [
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  'DSSSSSSSSSSSSSSSSSSSSSSD',
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '..........DSSD..........',
+  '........DDDSSDDD........',
+  '.......DHSSSSSSHD.......',
+  '.......DDDDDDDDDD.......',
+  '......Y..........Y......',
+  '....Y..DDDDDDDDDD..Y....',
+  '.......DENEENEEED.......',
+  '......DDEENEENEEDD......',
+  '.....DDDDDDDDDDDDDD.....',
+  'DDDDDDDDDDDDDDDDDDDDDDDD',
+  'DSSSSSSSSSSSSSSSSSSSSSSD'
+];
+
+// ---- the pizazz clown ----
+// Happy: rainbow hair, red nose, big grin. Jailed: behind bars, sad, crying.
+const CLOWN_HAPPY = [
+  '',
+  '....RR....CC....FF......',
+  '...RRRR..CCCC..FFFF.....',
+  '..RRORRDDDDDDDDFFYFF....',
+  '..RORRDUUUUUUUUDFYFF....',
+  '...RRDUUUUUUUUUUDFF.....',
+  '....DUUUUUUUUUUUUD......',
+  '....DUUDDUUUUDDUUD......',
+  '....DUUDDUUUUDDUUD......',
+  '....DUUUUUUUUUUUUD......',
+  '....DUUUUUNNUUUUUD......',
+  '....DUUUUNNNNUUUUD......',
+  '....DUUUUUNNUUUUUD......',
+  '....DUDUUUUUUUUDUD......',
+  '....DUUDUUUUUUDUUD......',
+  '....DUUUDDDDDDUUUD......',
+  '.....DUUUUUUUUUUD.......',
+  '......DUUUUUUUUD........',
+  '.......DDDDDDDD.........',
+  ''
+];
+
+const CLOWN_JAIL = [
+  '',
+  '....RR....CC....FF......',
+  '...RRRR..CCCC..FFFF.....',
+  '..RRORRDDDDDDDDFFYFF....',
+  '..RORRDUUUUUUUUDFYFF....',
+  '...RRDUUUUUUUUUUDFF.....',
+  '....DUUUUUUUUUUUUD......',
+  '....DUUDDUUUUDDUUD......',
+  '....DUUDDUUUUDDUUD......',
+  '....DUCUUUUUUUUUUD......',
+  '....DUCUUUNNUUUUUD......',
+  '....DUUUUNNNNUUUUD......',
+  '....DUUUUUNNUUUUUD......',
+  '....DUUUUUUUUUUUUD......',
+  '....DUUUDDDDDDUUUD......',
+  '....DUUDUUUUUUDUUD......',
+  '.....DUDUUUUUUDUD.......',
+  '......DUUUUUUUUD........',
+  '.......DDDDDDDD.........',
+  ''
+];
+
+// stamp jail bars in front of the sad clown
+for (let r = 0; r < CLOWN_JAIL.length; r++) {
+  const row = (CLOWN_JAIL[r] || '').padEnd(24, '.').split('');
+  for (const c of [2, 7, 12, 17, 22]) row[c] = 'G';
+  if (r === 0 || r === CLOWN_JAIL.length - 1) for (let c = 1; c < 23; c++) row[c] = 'G';
+  CLOWN_JAIL[r] = row.join('');
+}
+
+// Rows may be ragged for readability — pad everything to a 24x24 grid
+function pad24(art) {
+  const rows = art.map((row) => (row || '').padEnd(24, '.').slice(0, 24));
+  while (rows.length < 24) rows.push('.'.repeat(24));
+  return rows.slice(0, 24);
+}
+
 function artToRGBA(art, scale) {
   const h = art.length, w = art[0].length;
   const out = Buffer.alloc(w * scale * h * scale * 4);
@@ -260,4 +379,8 @@ const hero = buildHeroGrid();
 fs.writeFileSync(path.join(assets, 'burnwatch-hero.png'), encodePNG(512, 512, artToRGBA(hero, 8)));
 fs.writeFileSync(path.join(assets, 'psychic-idle.png'), encodePNG(24, 24, artToRGBA(PSYCHIC_IDLE, 1)));
 fs.writeFileSync(path.join(assets, 'psychic-on.png'), encodePNG(24, 24, artToRGBA(PSYCHIC_ON, 1)));
-console.log('logo.png, tray-icon.png, icon.ico, burnwatch-hero.png, psychic sprites written');
+fs.writeFileSync(path.join(assets, 'press-up.png'), encodePNG(24, 24, artToRGBA(pad24(PRESS_UP), 1)));
+fs.writeFileSync(path.join(assets, 'press-down.png'), encodePNG(24, 24, artToRGBA(pad24(PRESS_DOWN), 1)));
+fs.writeFileSync(path.join(assets, 'clown-happy.png'), encodePNG(24, 24, artToRGBA(pad24(CLOWN_HAPPY), 1)));
+fs.writeFileSync(path.join(assets, 'clown-jail.png'), encodePNG(24, 24, artToRGBA(pad24(CLOWN_JAIL), 1)));
+console.log('logo, tray-icon, icon.ico, hero, psychic, press + clown sprites written');

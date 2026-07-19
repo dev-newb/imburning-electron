@@ -266,6 +266,7 @@ async function init() {
     elements.openaiExtras.style.display = isOpenaiExtrasOpen ? 'block' : 'none';
     projectionsVisible = settings.projectionsOn !== false;
     applyPsychicState();
+    applyPizazz(settings.pizazz !== false);
 
     if ((credentials.sessionKey && credentials.organizationId) || credentials.cliFallbackAvailable) {
         // Populate org selector if user has multiple orgs
@@ -485,6 +486,22 @@ function setupEventListeners() {
 
     document.getElementById('creditLink').addEventListener('click', () => {
         window.electronAPI.openExternal('https://github.com/SlavomirDurej');
+    });
+
+    // The hydraulic press: crushes the widget into compact mode
+    const pressBtn = document.getElementById('compactPressBtn');
+    pressBtn.addEventListener('click', async () => {
+        const compact = !isCompactMode;
+        applyCompactMode(compact);
+        await _saveCompactSetting(compact);
+    });
+
+    // The clown: jail him to turn off all visual pizazz
+    const clownBtn = document.getElementById('clownBtn');
+    clownBtn.addEventListener('click', async () => {
+        const jailed = !document.body.classList.contains('no-pizazz');
+        applyPizazz(!jailed);
+        await _saveSettingsPatch({ pizazz: !jailed });
     });
 
     // Official OAuth connect paths (OpenAI / Google): section connect rows,
@@ -861,9 +878,13 @@ function buildExtraRows(data) {
         const label = document.createElement('span');
         label.className = 'usage-label';
         
-        // Narrow-width code chip (colour-matched to the bar)
+        // Narrow-width code chip (colour-matched to the bar) + abbreviated
+        // form for the mid band
         label.dataset.code = rowCode(key, config.label);
         label.style.setProperty('--row-col', CODE_COLORS[config.color] || '#8b8fa3');
+        label.dataset.abbr = config.label.replace(/^CLI /, '').replace(/\(daily\)/i, '(1D)');
+        const tip = windowTip(config.label);
+        if (tip) label.dataset.tip = tip;
 
         if (key === 'extra_usage') {
             // Extra usage: ON/OFF indicator goes next to label
@@ -1025,8 +1046,16 @@ function buildExtraRows(data) {
         } else if (key.startsWith('gemini_cli_')) {
             label.textContent = config.label.replace(/^CLI /, '');
             elements.googleCliRows.appendChild(row);
+            const cliShade = GEMINI_BLUES[(elements.googleCliRows.children.length - 1) % GEMINI_BLUES.length];
+            const cliFill = row.querySelector('.progress-fill');
+            if (cliFill) cliFill.style.background = cliShade;
+            label.style.setProperty('--row-col', cliShade);
         } else if (key.startsWith('gemini_')) {
             elements.googleRows.appendChild(row);
+            const shade = GEMINI_BLUES[(elements.googleRows.children.length - 1) % GEMINI_BLUES.length];
+            const fill = row.querySelector('.progress-fill');
+            if (fill) fill.style.background = shade;
+            label.style.setProperty('--row-col', shade);
         } else {
             elements.extraRows.appendChild(row);
             count++;
@@ -1043,6 +1072,7 @@ function buildExtraRows(data) {
         const label = document.createElement('span');
         label.className = 'usage-label';
         label.dataset.code = 'CR';
+        label.dataset.abbr = 'Credits';
         label.style.setProperty('--row-col', CODE_COLORS.codex);
         const creditsOn = codexCredits.unlimited || codexCredits.hasCredits;
         const statusTag = document.createElement('span');
@@ -1102,6 +1132,7 @@ function buildExtraRows(data) {
         label.className = 'usage-label';
         label.textContent = 'Limit Resets';
         label.dataset.code = 'RST';
+        label.dataset.abbr = 'Resets';
         label.style.setProperty('--row-col', CODE_COLORS.codex);
         row.appendChild(label);
 
@@ -1147,6 +1178,7 @@ function buildExtraRows(data) {
     }
 
     applySubgroups();
+    applyLabelMode();
 
     return count;
 }
@@ -1155,11 +1187,38 @@ function buildExtraRows(data) {
 // At narrow widths the row labels compress to short colour-matched codes;
 // compact mode uses the same codes. Colour follows the row's bar colour.
 const CODE_COLORS = {
-    weekly: '#3b82f6', fable: '#d946ef', codex: '#2dd4bf', gemini: '#f4b400',
-    cc: '#94a3b8', opus: '#f59e0b', sonnet: '#f59e0b', cowork: '#22c55e',
+    weekly: '#d97757', fable: '#d946ef', codex: '#2dd4bf', gemini: '#4285f4',
+    cc: '#c8846a', opus: '#f59e0b', sonnet: '#f59e0b', cowork: '#22c55e',
     design: '#ec4899', extra: '#8b5cf6', oauth_apps: '#22c55e'
 };
-const COMPANY_COLORS = { anthropic: '#d97757', openai: '#10a37f', google: '#f4b400' };
+const COMPANY_COLORS = { anthropic: '#d97757', openai: '#10a37f', google: '#4285f4' };
+// Google meters each model version separately — each pool gets its own
+// shade of Google blue, darkest first
+const GEMINI_BLUES = ['#1a5ce8', '#4285f4', '#7baaf7', '#a8c7fa', '#c9dcfc'];
+
+// Tooltip text for abbreviated window suffixes (shown only when abbreviated)
+function windowTip(label) {
+    if (/daily/i.test(label) || /\(1D\)/i.test(label)) return 'Daily limit — resets every day';
+    if (/\(7d\)/i.test(label)) return '7-day limit — resets weekly';
+    if (/\(5h\)/i.test(label)) return '5-hour session limit';
+    return '';
+}
+
+// Swap row-label verbosity by width band: full names, abbreviated windows
+// ("(daily)" -> "(1D)"), or colour-coded chips. Tooltips carry the meaning
+// only while abbreviated.
+function applyLabelMode() {
+    const w = window.innerWidth;
+    const mode = w <= 450 ? 'code' : w <= 540 ? 'abbr' : 'full';
+    document.querySelectorAll('.usage-label').forEach((el) => {
+        const tip = el.dataset.tip || '';
+        const full = (el.dataset.abbr || el.textContent || '').replace(/\(1D\)/, '(daily)');
+        if (mode === 'code') el.title = tip ? `${full} — ${tip}` : full;
+        else if (mode === 'abbr') el.title = tip;
+        else el.title = '';
+    });
+}
+window.addEventListener('resize', applyLabelMode);
 
 function rowCode(key, label) {
     const clean = String(label || '').replace(/^CLI /, '');
@@ -1233,6 +1292,7 @@ function _spawnPixelSmoke(layer, x) {
 // a trail flame that keeps burning until the front finishes, and smoke rises
 // from both the front and random lit spots along the trail.
 function runPixelSweep(btn, hide) {
+    if (document.body.classList.contains('no-pizazz')) return; // clown's in jail
     const layer = document.createElement('div');
     layer.className = 'fx';
     btn.appendChild(layer);
@@ -1743,8 +1803,24 @@ function checkUsageAlerts(data) {
 }
 
 // Apply or remove compact mode — switches view, resizes window, syncs all toggles
+// Pizazz on: happy clown, everything animates. Off: clown in jail, sad and
+// crying, and every animation/transition in the app goes dead still.
+function applyPizazz(on) {
+    document.body.classList.toggle('no-pizazz', !on);
+    const img = document.getElementById('clownImg');
+    const btn = document.getElementById('clownBtn');
+    if (img) img.src = on ? '../../assets/clown-happy.png' : '../../assets/clown-jail.png';
+    if (btn) btn.title = on
+        ? 'Pizazz: ON — click to jail the clown and turn off all visual effects'
+        : 'Pizazz: OFF — the clown weeps behind bars. Click to free him and the sparkles.';
+}
+
 function applyCompactMode(compact) {
     isCompactMode = compact;
+
+    // Press slams down while the widget is crushed
+    const pressImg = document.getElementById('pressImg');
+    if (pressImg) pressImg.src = compact ? '../../assets/press-down.png' : '../../assets/press-up.png';
 
     // Add/remove compact-mode class from body for CSS styling
     if (compact) {
@@ -1812,7 +1888,7 @@ function updateCompactBars(data) {
     const clamp = (v) => Math.min(Math.max(v || 0, 0), 100);
     const pools = [];
 
-    pools.push({ co: 'anthropic', code: '5H', name: 'Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#a78bfa' });
+    pools.push({ co: 'anthropic', code: '5H', name: 'Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
     pools.push({ co: 'anthropic', code: '7D', name: 'All Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
@@ -1829,12 +1905,12 @@ function updateCompactBars(data) {
     for (const lim of (data.codex?.cli?.limits || [])) {
         pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
     }
-    for (const lim of (data.gemini?.limits || [])) {
-        pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.gemini });
-    }
-    for (const lim of (data.gemini?.cli?.limits || [])) {
-        pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.gemini });
-    }
+    (data.gemini?.limits || []).forEach((lim, i) => {
+        pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
+    });
+    (data.gemini?.cli?.limits || []).forEach((lim, i) => {
+        pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
+    });
 
     container.innerHTML = '';
     for (const p of pools) {
@@ -1868,15 +1944,12 @@ function updateCompactBars(data) {
         container.appendChild(row);
     }
 
-    // Fit the compact window to however many pools there are. Measure the
-    // rows container, NOT compactContent — that one stretches to fill the
-    // viewport, so measuring it would just re-affirm the current height.
+    // Fit the compact window to the pool count. Computed, not measured —
+    // the rows container stretches to fill the window (so bars can expand
+    // when the user makes it bigger), which makes measuring it circular.
     if (isCompactMode) {
-        requestAnimationFrame(() => {
-            const th = elements.titleBar ? elements.titleBar.offsetHeight : 28;
-            const rows = container.scrollHeight;
-            if (rows > 20) window.electronAPI.resizeWindow(th + rows + 24);
-        });
+        const th = elements.titleBar ? elements.titleBar.offsetHeight : 28;
+        window.electronAPI.resizeWindow(th + pools.length * 26 + 18);
     }
 }
 // Persist compact mode setting without touching the rest of settings — debounced
@@ -2091,6 +2164,7 @@ function formatResetsAt(resetsAt, isWeekly, timeFormat, weeklyDateFormat) {
 // window completes, as if an unseen Tinkerbell tapped it with her wand
 function sparkleRing(timerElement) {
     if (document.visibilityState !== 'visible') return; // only when in view
+    if (document.body.classList.contains('no-pizazz')) return; // clown's in jail
     const anchor = timerElement.closest('.usage-elapsed-group') || timerElement.parentElement;
     if (!anchor || anchor.querySelector('.sparkle-burst')) return;
     anchor.style.position = 'relative';
