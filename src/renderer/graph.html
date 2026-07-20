@@ -16,8 +16,8 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; }
         body {
-            background: #16161e;
-            color: #cfcfe0;
+            background: var(--g-bg, #16161e);
+            color: var(--g-text, #cfcfe0);
             font-family: 'Segoe UI', system-ui, sans-serif;
             display: flex;
             flex-direction: column;
@@ -27,10 +27,10 @@
             align-items: center;
             gap: 10px;
             padding: 6px 12px;
-            border-bottom: 1px solid #2a2a38;
+            border-bottom: 1px solid var(--g-border, #2a2a38);
             flex: 0 0 auto;
         }
-        .gtitle { font-size: 12px; font-weight: 700; color: #e6e6f0; letter-spacing: .2px; }
+        .gtitle { font-size: 12px; font-weight: 700; color: var(--g-title, #e6e6f0); letter-spacing: .2px; }
         .gspacer { flex: 1; }
         .pin-btn {
             display: inline-flex;
@@ -46,6 +46,8 @@
             transition: color .15s, border-color .15s, background .15s;
         }
         .pin-btn.on { color: #35e0ff; border-color: rgba(53, 224, 255, .5); background: rgba(53, 224, 255, .12); }
+        body.light .pin-btn { border-color: rgba(60, 60, 90, .3); background: rgba(60, 60, 90, .07); color: #4a4a60; }
+        body.light .pin-btn.on { color: #0a8bb0; border-color: rgba(10, 139, 176, .5); background: rgba(53, 224, 255, .12); }
         .gwrap { flex: 1; position: relative; padding: 8px 10px 10px; min-height: 0; }
         canvas { position: absolute; inset: 8px 10px 10px; }
         .gempty {

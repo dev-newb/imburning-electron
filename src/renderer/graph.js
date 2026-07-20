@@ -1,7 +1,7 @@
 // Detached graph window renderer. Self-contained (does not share app.js
 // state): it pulls the usage history + latest usage (for forecasts) over IPC,
-// draws a multi-provider Chart.js line chart, and re-renders whenever the main
-// process signals new data. Also owns its own always-on-top pin.
+// draws a multi-provider Chart.js line chart, follows the user's theme, and
+// re-renders whenever the main process signals new data. Owns its own pin.
 (async function () {
     const api = window.electronAPI;
     const COMPANY = { anthropic: '#d97757', openai: '#10a37f', google: '#4285f4' };
@@ -11,6 +11,29 @@
     const canvas = document.getElementById('usageChart');
     const empty = document.getElementById('gEmpty');
     let chart = null;
+
+    // ---- Theme (mirrors the main window's Dark / Light / System setting) ----
+    const THEMES = {
+        dark: { bg: '#16161e', text: '#cfcfe0', title: '#e6e6f0', border: '#2a2a38', tick: '#8a8aa0', grid: 'rgba(255,255,255,0.05)', legend: '#b9b9cc' },
+        light: { bg: '#f4f4f8', text: '#2a2a3a', title: '#1a1a2e', border: '#d8d8e2', tick: '#5a5a70', grid: 'rgba(0,0,0,0.08)', legend: '#4a4a60' }
+    };
+    let T = THEMES.dark;
+    async function applyTheme() {
+        let dark = true;
+        try {
+            const s = await api.getSettings();
+            const theme = (s && s.theme) || 'dark';
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            dark = theme === 'dark' || (theme === 'system' && prefersDark);
+        } catch (e) { /* default dark */ }
+        T = dark ? THEMES.dark : THEMES.light;
+        const root = document.documentElement.style;
+        root.setProperty('--g-bg', T.bg);
+        root.setProperty('--g-text', T.text);
+        root.setProperty('--g-title', T.title);
+        root.setProperty('--g-border', T.border);
+        document.body.classList.toggle('light', !dark);
+    }
 
     function build(history, latest) {
         if (chart) { chart.destroy(); chart = null; }
@@ -43,9 +66,17 @@
         });
 
         const datasets = [
-            line('Session', '#8b5cf6', (e) => e.session),
-            line('Weekly', '#3b82f6', (e) => e.weekly)
+            line('CLA 5H', '#8b5cf6', (e) => e.session),
+            line('CLA 7D', '#3b82f6', (e) => e.weekly)
         ];
+        // Anthropic per-model/surface pools, when present.
+        for (const [lbl, color, key] of [
+            ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
+            ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
+        ]) {
+            const vals = history.map((e) => e[key] || 0);
+            if (vals.some((v) => v > 0)) datasets.push(line(lbl, color, (e) => e[key]));
+        }
         let ci = 0;
         for (const k of scopedKeys) {
             const vals = history.map((e) => (e.scoped ? e.scoped[k] : 0) || 0);
@@ -88,10 +119,18 @@
             });
             xMax = Math.max(xMax, t);
         };
-        addProj('Weekly', '#3b82f6', last.weekly, forecasts.weekly);
+        addProj('CLA 5H', '#8b5cf6', last.session, forecasts.session);
+        addProj('CLA 7D', '#3b82f6', last.weekly, forecasts.weekly);
+        for (const [lbl, color, key] of [
+            ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
+            ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
+        ]) {
+            addProj(lbl, color, last[key], forecasts[key]);
+        }
         for (const k of scopedKeys) {
-            addProj(k.charAt(0).toUpperCase() + k.slice(1), SCOPED_COLORS[k] || '#84cc16',
-                last.scoped ? last.scoped[k] : null, forecasts.scoped ? forecasts.scoped[k] : null);
+            addProj(k.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                SCOPED_COLORS[k] || '#84cc16', last.scoped ? last.scoped[k] : null,
+                forecasts.scoped ? forecasts.scoped[k] : null);
         }
         for (const [lbl, color, key] of [
             ['Codex', CODE.codex, 'codex'], ['Gemini', COMPANY.google, 'gemini'],
@@ -120,14 +159,14 @@
                         type: 'linear',
                         min: first.getTime(),
                         max: xMax,
-                        ticks: { font: { size: 10 }, color: '#8a8aa0', maxRotation: 0 },
+                        ticks: { font: { size: 10 }, color: T.tick, maxRotation: 0 },
                         grid: { display: false }
                     },
                     y: {
                         min: 0,
                         max: yMax,
-                        ticks: { font: { size: 10 }, color: '#8a8aa0', callback: (v) => v + '%' },
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        ticks: { font: { size: 10 }, color: T.tick, callback: (v) => v + '%' },
+                        grid: { color: T.grid }
                     }
                 },
                 plugins: {
@@ -136,7 +175,7 @@
                         position: 'bottom',
                         labels: {
                             boxWidth: 8, boxHeight: 8, padding: 6,
-                            font: { size: 9 }, color: '#b9b9cc',
+                            font: { size: 9 }, color: T.legend,
                             filter: (item) => !/→ 100%|reset/i.test(item.text)
                         }
                     }
@@ -145,9 +184,12 @@
         });
     }
 
+    let lastHistory = null, lastLatest = null;
     async function refresh() {
         try {
             const [history, latest] = await Promise.all([api.getUsageHistory(), api.getLatestUsage()]);
+            lastHistory = history; lastLatest = latest;
+            await applyTheme();
             build(history, latest);
         } catch (err) { /* window may be closing */ }
     }
@@ -161,6 +203,13 @@
     paintPin();
     pin.addEventListener('click', () => { onTop = !onTop; api.graphSetAlwaysOnTop(onTop); paintPin(); });
 
+    // React to OS light/dark flips when the user's theme is "System".
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
+        await applyTheme();
+        if (lastHistory) build(lastHistory, lastLatest);
+    });
+
     if (api.onUsageUpdated) api.onUsageUpdated(() => refresh());
+    await applyTheme();
     refresh();
 })();

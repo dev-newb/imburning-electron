@@ -1111,7 +1111,14 @@ function computeForecasts() {
     .filter((sample) => sample.v != null);
 
   const forecasts = {
+    session: forecastSeries(series((entry) => entry.session)),
     weekly: forecastSeries(series((entry) => entry.weekly)),
+    // Anthropic per-model/surface weekly pools (present when the account has them)
+    sonnet: forecastSeries(series((entry) => entry.sonnet)),
+    opus: forecastSeries(series((entry) => entry.opus)),
+    cowork: forecastSeries(series((entry) => entry.cowork)),
+    design: forecastSeries(series((entry) => entry.design)),
+    oauthApps: forecastSeries(series((entry) => entry.oauthApps)),
     scoped: {},
     // Cross-provider: same least-squares projection, from the per-provider
     // history series storeUsageHistory already records
@@ -2895,7 +2902,7 @@ ipcMain.on('apply-window-preset', (event, preset) => {
     return;
   }
   let width, height;
-  if (preset === 'wide') { width = 900; height = 480; }
+  if (preset === 'wide') { width = 900; height = 600; }
   else if (preset === 'tall') { width = WIDGET_WIDTH; height = 1150; }
   else return;
   // Clamp to the current display's work area so a tall window can't run off

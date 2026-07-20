@@ -26,7 +26,16 @@
                     <img src="../../assets/logo.png" alt="Logo" class="app-logo">
                     <span>Burnwatch</span>
                 </div>
-                            </div>
+                <div class="title-caption">
+                    <button class="caption-btn preset-btn" id="wideBtn" title="Wide layout — spread the sections into side-by-side columns">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5" /></svg>
+                    </button>
+                    <button class="caption-btn preset-btn" id="tallBtn" title="Tall layout — stack the sections with room to breathe">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="1.5" /></svg>
+                    </button>
+                    <button class="caption-btn caption-close" id="closeBtn" title="Exit Application">×</button>
+                </div>
+            </div>
 
             <!-- Toolbar (dedicated strip under the title bar, never hidden): minimize · press · clown · refresh · graph · settings · close -->
             <div class="bottom-bar" id="bottomBar">
@@ -48,18 +57,7 @@
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                     </svg>
                 </button>
-                <button class="control-btn preset-btn" id="wideBtn" title="Wide layout — spread the sections into side-by-side columns">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="7" width="20" height="10" rx="1.5" />
-                    </svg>
-                </button>
-                <button class="control-btn preset-btn" id="tallBtn" title="Tall layout — stack the sections with room to breathe">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="7" y="2" width="10" height="20" rx="1.5" />
-                    </svg>
-                </button>
                 <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
-                <button class="control-btn close-btn" id="closeBtn" title="Exit Application">×</button>
             </div>
 
             <!-- Update Banner (hidden by default) -->

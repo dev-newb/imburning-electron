@@ -196,11 +196,10 @@ npm start
 
 ### Widget Controls
 
-- **Drag** — Click and drag the title bar to move the widget
-- **Refresh** — Click the refresh icon to update data immediately
-- **Graph** — Click the graph icon to toggle usage history
-- **Minimize** — Click the minus icon to hide to system tray / dock
-- **Close** — Click the X to Close the app
+- **Drag** — click and drag the title bar to move the widget
+- **Title bar (top-right)** — **Wide** and **Tall** layout buttons (snap to a landscape three-column or a tall arrangement; click again to return to the auto-sized widget) and the **✕** close button, Windows-style
+- **Toolbar (second strip)** — Minimize to tray · Compact (stomp) · Pizazz clown · Refresh · Graph toggle · Settings
+- **Pop out the graph** — the corner button on the graph opens it in its own always-on-top window (which follows your theme and updates live); the inline graph hides while it's detached
 
 ### System Tray
 

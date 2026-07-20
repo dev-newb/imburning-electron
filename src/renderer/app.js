@@ -404,8 +404,9 @@ function setupEventListeners() {
     elements.graphBtn.addEventListener('click', async () => {
         graphVisible = !graphVisible;
         elements.graphBtn.classList.toggle('active', graphVisible);
-        elements.graphSection.style.display = graphVisible ? 'block' : 'none';
-        if (graphVisible) {
+        // Keep the inline graph hidden while it's detached into its own window.
+        elements.graphSection.style.display = (graphVisible && !graphDetached) ? 'block' : 'none';
+        if (graphVisible && !graphDetached) {
             await loadChart();
         }
         _forceFitHeight();
@@ -416,15 +417,27 @@ function setupEventListeners() {
     // landscape or tall geometry; the existing squeeze/landscape/tall reflow
     // then engages smoothly (main leaves the size trackers alone so the
     // window reports "user-sized").
-    // Pop the graph out into its own always-on-top window.
+    // Pop the graph out into its own always-on-top window. While detached, the
+    // inline graph is hidden in the main window; it returns when the pop-out closes.
     if (elements.graphPopoutBtn) {
         elements.graphPopoutBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             window.electronAPI.openGraphWindow();
+            graphDetached = true;
             elements.graphPopoutBtn.classList.add('active');
+            if (elements.graphSection) elements.graphSection.style.display = 'none';
+            _forceFitHeight();
         });
         if (window.electronAPI.onGraphWindowClosed) {
-            window.electronAPI.onGraphWindowClosed(() => elements.graphPopoutBtn.classList.remove('active'));
+            window.electronAPI.onGraphWindowClosed(() => {
+                graphDetached = false;
+                elements.graphPopoutBtn.classList.remove('active');
+                if (graphVisible && elements.graphSection) {
+                    elements.graphSection.style.display = 'block';
+                    loadChart();
+                }
+                _forceFitHeight();
+            });
         }
     }
 
@@ -432,14 +445,20 @@ function setupEventListeners() {
     // auto-sized widget.
     if (elements.wideBtn) {
         elements.wideBtn.addEventListener('click', () => {
-            if (_activePreset === 'wide') { _activePreset = null; window.electronAPI.applyWindowPreset('reset'); }
-            else { _activePreset = 'wide'; window.electronAPI.applyWindowPreset('wide'); }
+            const goWide = _activePreset !== 'wide';
+            _activePreset = goWide ? 'wide' : null;
+            window.electronAPI.applyWindowPreset(goWide ? 'wide' : 'reset');
+            elements.wideBtn.classList.toggle('active', goWide);
+            if (elements.tallBtn) elements.tallBtn.classList.remove('active');
         });
     }
     if (elements.tallBtn) {
         elements.tallBtn.addEventListener('click', () => {
-            if (_activePreset === 'tall') { _activePreset = null; window.electronAPI.applyWindowPreset('reset'); }
-            else { _activePreset = 'tall'; window.electronAPI.applyWindowPreset('tall'); }
+            const goTall = _activePreset !== 'tall';
+            _activePreset = goTall ? 'tall' : null;
+            window.electronAPI.applyWindowPreset(goTall ? 'tall' : 'reset');
+            elements.tallBtn.classList.toggle('active', goTall);
+            if (elements.wideBtn) elements.wideBtn.classList.remove('active');
         });
     }
 
@@ -1618,6 +1637,7 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
 // resize loop can't react to its own squeeze and spiral the window down.
 let _windowUserSized = false;
 let _activePreset = null; // 'wide' | 'tall' | null — tracked synchronously for reliable toggle-back
+let graphDetached = false; // true while the graph is popped out into its own window
 
 function applySqueezeClasses() {
     const w = window.innerWidth;
@@ -1646,7 +1666,13 @@ function applySqueezeClasses() {
     // Tall mode: scale 0→1 between 820px and 1600px of height — sections
     // spread, text grows, and the wordmarks eat the extra vertical space.
     // Not in landscape, where the three columns own the layout.
-    const tall = on && !landscape ? Math.min(Math.max((h - 600) / 780, 0), 1) : 0;
+    // The enlarged "big" tall mode (giant wordmarks + text) only kicks in when
+    // 1–2 companies are tracked. With all three it pushes content off-screen,
+    // so keep the compact size no matter how tall the window is.
+    const companyCount = ['sectionAnthropic', 'sectionOpenai', 'sectionGoogle']
+        .filter((id) => { const s = document.getElementById(id); return s && s.querySelector('.usage-section'); }).length;
+    const tall = (on && !landscape && companyCount > 0 && companyCount < 3)
+        ? Math.min(Math.max((h - 600) / 780, 0), 1) : 0;
     document.body.classList.toggle('tall', tall > 0);
     document.body.style.setProperty('--tall', tall.toFixed(3));
     applyLabelMode(eff);
@@ -1658,7 +1684,12 @@ if (window.electronAPI.onWindowUserSized) {
         applySqueezeClasses();
         // Resumed auto-height (e.g. a preset "reset", or the user dragging the
         // window back near default) — clear the preset and snap to content.
-        if (!userSized) { _activePreset = null; _forceFitHeight(); }
+        if (!userSized) {
+            _activePreset = null;
+            if (elements.wideBtn) elements.wideBtn.classList.remove('active');
+            if (elements.tallBtn) elements.tallBtn.classList.remove('active');
+            _forceFitHeight();
+        }
     });
 }
 window.addEventListener('resize', applySqueezeClasses);
@@ -2967,7 +2998,7 @@ function renderChart(history) {
 
     const datasets = [
         {
-            label: 'Session',
+            label: 'CLA 5H',
             data: history.map((entry) => ({ x: entry.timestamp, y: entry.session })),
             borderColor: '#8b5cf6',
             backgroundColor: 'transparent',
@@ -2978,7 +3009,7 @@ function renderChart(history) {
             pointHitRadius: 10
         },
         {
-            label: 'Weekly',
+            label: 'CLA 7D',
             data: history.map((entry) => ({ x: entry.timestamp, y: entry.weekly })),
             borderColor: '#3b82f6',
             backgroundColor: 'transparent',
@@ -3174,35 +3205,32 @@ function renderChart(history) {
         chartXMax = Math.max(chartXMax, eta);
     };
     if (projectionsVisible) {
-        // A series hidden from the legend should hide its dotted projection too
-        // (the projection isn't a legend item, so there's no other way to hide it).
+        // A series hidden from the legend hides its dotted projection too (the
+        // projection is not a legend item, so there's no other way to hide it).
         const chartHiddenP = (window._cachedSettings || {}).chartHiddenSeries || {};
-        if (!chartHiddenP['Weekly']) addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
+        const proj = (lbl, col, lv, eta, resetMs) => { if (!chartHiddenP[lbl]) addProjection(lbl, col, lv, eta, resetMs); };
+        // Anthropic session (5h) + weekly (7d) + per-model/surface pools.
+        proj('CLA 5H', '#8b5cf6', lastEntry.session, forecasts.session, null);
+        proj('CLA 7D', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
+        proj('Sonnet', '#f43f5e', lastEntry.sonnet, forecasts.sonnet, weeklyResetMs);
+        proj('Opus', '#f59e0b', lastEntry.opus, forecasts.opus, weeklyResetMs);
+        proj('Cowork', '#06b6d4', lastEntry.cowork, forecasts.cowork, weeklyResetMs);
+        proj('Design', '#92400e', lastEntry.design, forecasts.design, weeklyResetMs);
+        proj('OAuth Apps', '#f97316', lastEntry.oauthApps, forecasts.oauthApps, weeklyResetMs);
+        // Scoped weekly pools (e.g. Fable) — label matches the base series.
         const SCOPED_CHART_COLORS = { fable: '#d946ef' };
         for (const key of scopedKeys) {
-            // Match the base-series label form so the hide state keys line up.
             const scopedLabel = key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            if (chartHiddenP[scopedLabel]) continue;
             const scopedResetIso = latestUsageData?.['seven_day_scoped_' + key]?.resets_at;
-            addProjection(
-                scopedLabel,
-                SCOPED_CHART_COLORS[key] || '#84cc16',
-                lastEntry.scoped?.[key],
-                forecasts.scoped?.[key],
-                scopedResetIso ? new Date(scopedResetIso).getTime() : null
-            );
+            proj(scopedLabel, SCOPED_CHART_COLORS[key] || '#84cc16', lastEntry.scoped?.[key],
+                forecasts.scoped?.[key], scopedResetIso ? new Date(scopedResetIso).getTime() : null);
         }
-        // Cross-provider forecast lines. These pools have no Claude-style
-        // reset window, so pass resetMs=null (no reset-first suppression).
-        for (const [lbl, col, lv, eta] of [
-            ['Codex', CODE_COLORS.codex, lastEntry.codex, forecasts.codex],
-            ['Gemini', COMPANY_COLORS.google, lastEntry.gemini, forecasts.gemini],
-            ['Claude CLI', COMPANY_COLORS.anthropic, lastEntry.claudeCli, forecasts.claudeCli],
-            ['Codex CLI', CODE_COLORS.codex, lastEntry.codexCli, forecasts.codexCli],
-            ['Gemini CLI', COMPANY_COLORS.google, lastEntry.geminiCli, forecasts.geminiCli]
-        ]) {
-            if (!chartHiddenP[lbl]) addProjection(lbl, col, lv, eta, null);
-        }
+        // Cross-provider pools have no Claude-style reset window → resetMs=null.
+        proj('Codex', CODE_COLORS.codex, lastEntry.codex, forecasts.codex, null);
+        proj('Gemini', COMPANY_COLORS.google, lastEntry.gemini, forecasts.gemini, null);
+        proj('Claude CLI', COMPANY_COLORS.anthropic, lastEntry.claudeCli, forecasts.claudeCli, null);
+        proj('Codex CLI', CODE_COLORS.codex, lastEntry.codexCli, forecasts.codexCli, null);
+        proj('Gemini CLI', COMPANY_COLORS.google, lastEntry.geminiCli, forecasts.geminiCli, null);
     }
     if (projections.length) {
         datasets.push(...projections);
@@ -3598,6 +3626,8 @@ window.addEventListener('beforeunload', () => {
     stopAutoUpdate();
     if (countdownInterval) clearInterval(countdownInterval);
 });
+
+
 
 
 

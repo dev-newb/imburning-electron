@@ -98,6 +98,36 @@ body.theme-light:root, html:has(body.theme-light) { background: #e8e8f0; }
     margin-right: -10px;
 }
 
+/* Window-caption buttons in the title bar (right corner): wide · tall · close,
+   Windows-style tight spacing (flush, no gap). */
+.title-caption {
+    -webkit-app-region: no-drag;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.caption-btn {
+    width: 36px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    color: #b0b0c0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 16px;
+    line-height: 1;
+    transition: background .12s, color .12s;
+}
+.caption-btn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.caption-btn.active { background: rgba(139, 92, 246, 0.28); color: #b79cff; }
+.caption-close:hover { background: #e81123; color: #fff; }
+body.theme-light .caption-btn { color: #505070; }
+body.theme-light .caption-btn:hover { background: rgba(0, 0, 0, 0.10); color: #1a1a2e; }
+body.theme-light .caption-close:hover { background: #e81123; color: #fff; }
+
 .control-btn {
     width: 28px;
     height: 28px;
@@ -2609,7 +2639,10 @@ body.landscape:not(.compact-mode) .content {
     padding: 0 10px;
 }
 
-body.landscape .graph-section { grid-column: 1 / -1; }
+body.landscape .graph-section { grid-column: 1 / -1; height: clamp(120px, 30vh, 240px); }
+/* Landscape/wide is user-sized, so if the columns + graph overflow the window,
+   let the content scroll instead of clipping the graph. */
+body.landscape:not(.compact-mode) .content { overflow-y: auto; }
 body.landscape .compact-collapse-btn { display: none !important; }
 body.landscape .provider-section { margin-bottom: 4px; }
 
@@ -2755,7 +2788,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
 .graph-popout-btn {
     position: absolute;
     top: 6px;
-    right: 8px;
+    left: 8px;
     z-index: 6;
     width: 22px;
     height: 22px;
@@ -2779,8 +2812,8 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
     -webkit-app-region: no-drag;
     display: flex;
     align-items: center;
-    justify-content: space-evenly;
-    gap: 4px;
+    justify-content: center;
+    gap: 8px;
     padding: 3px 10px;
     height: 34px;
     flex-shrink: 0;
