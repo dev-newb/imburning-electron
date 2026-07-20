@@ -2209,7 +2209,8 @@ body.theme-light .subheading { color: #8a8aa0; }
 /* JS-driven pixel fire: the sweep engine in app.js spawns these particles.
    Flames are chunky 2px-cell sprites (box-shadow art in the robot palette);
    smoke is blocky grey cells rising in steps. */
-.subheading .fx {
+.subheading .fx,
+.usage-section .fx {
     position: absolute;
     inset: 0;
     pointer-events: none;
@@ -2734,6 +2735,43 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
 }
 
 .hidden-rows-chip:hover { color: #b0b0c8; border-color: rgba(128, 128, 150, 0.7); }
+
+/* Row hide/show choreography: incinerate a row to nothing, sparkle it back.
+   The fire layer (.fx) stays lit while the row's own content chars to ash. */
+.usage-section.row-burning > *:not(.fx) { opacity: 0; transition: opacity 0.5s ease; }
+/* A row being restored starts fully collapsed so the window measures small,
+   then revealMarkedRows() animates it open. */
+.usage-section.reveal-init {
+    height: 0 !important;
+    min-height: 0;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    opacity: 0;
+    overflow: hidden;
+}
+
+/* Pop-out control on the inline graph — detaches it into its own window. */
+.graph-section { position: relative; }
+.graph-popout-btn {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 6;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid rgba(140, 140, 170, 0.3);
+    background: rgba(30, 30, 42, 0.6);
+    color: #9a9ab8;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.graph-section:hover .graph-popout-btn { opacity: 1; }
+.graph-popout-btn:hover, .graph-popout-btn.active { opacity: 1; color: #35e0ff; border-color: rgba(53, 224, 255, 0.5); }
 
 
 /* ---- Toolbar strip (directly under the title bar, never hidden) ---- */

@@ -84,6 +84,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Compact mode
   setCompactMode: (compact) => ipcRenderer.send('set-compact-mode', compact),
 
+  // Wide / tall window presets
+  applyWindowPreset: (preset) => ipcRenderer.send('apply-window-preset', preset),
+
+  // Detachable graph window
+  openGraphWindow: () => ipcRenderer.send('open-graph-window'),
+  closeGraphWindow: () => ipcRenderer.send('close-graph-window'),
+  isGraphWindowOpen: () => ipcRenderer.invoke('is-graph-window-open'),
+  getLatestUsage: () => ipcRenderer.invoke('get-latest-usage'),
+  graphSetAlwaysOnTop: (flag) => ipcRenderer.send('graph-set-always-on-top', flag),
+  graphGetAlwaysOnTop: () => ipcRenderer.invoke('graph-get-always-on-top'),
+  onUsageUpdated: (callback) => { ipcRenderer.on('usage-updated', () => callback()); },
+  onGraphWindowClosed: (callback) => { ipcRenderer.on('graph-window-closed', () => callback()); },
+
   // Official OAuth connect flows (OpenAI / Google)
   oauthConnect: (provider) => ipcRenderer.invoke('oauth-connect', provider),
   oauthDisconnect: (provider) => ipcRenderer.invoke('oauth-disconnect', provider)

@@ -1118,7 +1118,8 @@ function computeForecasts() {
     codex: forecastSeries(series((entry) => entry.codex)),
     gemini: forecastSeries(series((entry) => entry.gemini)),
     codexCli: forecastSeries(series((entry) => entry.codexCli)),
-    geminiCli: forecastSeries(series((entry) => entry.geminiCli))
+    geminiCli: forecastSeries(series((entry) => entry.geminiCli)),
+    claudeCli: forecastSeries(series((entry) => entry.claudeCli))
   };
   const slugs = new Set();
   for (const entry of recent) {
@@ -1446,6 +1447,56 @@ function createMainWindow() {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+}
+
+// ---- Detachable graph window ----
+// A second BrowserWindow that renders the usage chart on its own, fed history
+// + latest usage over IPC, with its own always-on-top pin and saved bounds.
+let graphWindow = null;
+
+function createGraphWindow() {
+  if (graphWindow && !graphWindow.isDestroyed()) { graphWindow.focus(); return; }
+  const saved = store.get('graphWindowBounds') || {};
+  const onTop = store.get('settings.graphAlwaysOnTop', true);
+  graphWindow = new BrowserWindow({
+    width: saved.width || 660,
+    height: saved.height || 400,
+    x: saved.x,
+    y: saved.y,
+    backgroundColor: '#16161e',
+    alwaysOnTop: onTop,
+    minWidth: 360,
+    minHeight: 240,
+    title: 'Burnwatch — Graph',
+    icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+  if (onTop) graphWindow.setAlwaysOnTop(true, 'floating');
+  graphWindow.loadFile('src/renderer/graph.html');
+
+  let saveT = null;
+  const saveBounds = () => {
+    if (saveT) clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      if (graphWindow && !graphWindow.isDestroyed()) store.set('graphWindowBounds', graphWindow.getBounds());
+    }, 300);
+  };
+  graphWindow.on('move', saveBounds);
+  graphWindow.on('resize', saveBounds);
+  graphWindow.on('closed', () => {
+    graphWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('graph-window-closed');
+  });
+}
+
+// Ping the detached graph window (if open) after each fetch so it re-pulls
+// history + latest usage and re-renders.
+function notifyGraphWindow() {
+  if (graphWindow && !graphWindow.isDestroyed()) graphWindow.webContents.send('usage-updated');
 }
 
 /**
@@ -2826,6 +2877,48 @@ ipcMain.on('set-compact-mode', (event, compact) => {
   }
 });
 
+// Wide / tall preset layouts. We deliberately do NOT touch _expectedWidth /
+// _lastSetHeight here: leaving them at the widget defaults makes
+// windowIsUserSized() report true, which is exactly what engages the
+// renderer's landscape (wide) / tall reflow. The debounced 'resize' listener
+// then broadcasts window-user-sized and the layout re-flows smoothly.
+ipcMain.on('apply-window-preset', (event, preset) => {
+  if (!mainWindow) return;
+  const { screen } = require('electron');
+  const b = mainWindow.getBounds();
+  if (preset === 'reset') {
+    // Return to the default auto-sized widget: restore the size trackers so
+    // windowIsUserSized() reports false and the renderer resumes auto-height.
+    _expectedWidth = WIDGET_WIDTH;
+    mainWindow.setBounds({ x: b.x, y: b.y, width: WIDGET_WIDTH, height: WIDGET_HEIGHT });
+    _lastSetHeight = mainWindow.getContentSize()[1];
+    return;
+  }
+  let width, height;
+  if (preset === 'wide') { width = 900; height = 480; }
+  else if (preset === 'tall') { width = WIDGET_WIDTH; height = 1150; }
+  else return;
+  // Clamp to the current display's work area so a tall window can't run off
+  // the bottom of the screen, and keep it fully on-screen.
+  const wa = screen.getDisplayMatching(b).workArea;
+  width = Math.min(width, wa.width);
+  height = Math.min(height, wa.height);
+  const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - width);
+  const y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - height);
+  mainWindow.setBounds({ x, y, width, height });
+});
+
+// ---- Detachable graph window IPC ----
+ipcMain.on('open-graph-window', () => createGraphWindow());
+ipcMain.on('close-graph-window', () => { if (graphWindow && !graphWindow.isDestroyed()) graphWindow.close(); });
+ipcMain.handle('is-graph-window-open', () => !!(graphWindow && !graphWindow.isDestroyed()));
+ipcMain.handle('get-latest-usage', () => store.get('latestUsageData', null));
+ipcMain.on('graph-set-always-on-top', (event, flag) => {
+  store.set('settings.graphAlwaysOnTop', !!flag);
+  if (graphWindow && !graphWindow.isDestroyed()) graphWindow.setAlwaysOnTop(!!flag, 'floating');
+});
+ipcMain.handle('graph-get-always-on-top', () => store.get('settings.graphAlwaysOnTop', true));
+
 // Settings handlers
 ipcMain.handle('get-settings', () => {
   return {
@@ -3217,6 +3310,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     checkBurnAnomalies();
     checkDailyDigest(data);
     store.set('latestUsageData', data);
+    notifyGraphWindow();
     updateTrayIcon(data);
     return data;
   }
@@ -3372,6 +3466,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
   // Store latest usage data for settings refresh
   store.set('latestUsageData', data);
+  notifyGraphWindow();
 
   // Update tray icon with current usage data
   updateTrayIcon(data);
@@ -3384,6 +3479,9 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     if (alwaysOnTop) {
       mainWindow.setAlwaysOnTop(true, 'floating');
     }
+  }
+  if (graphWindow && !graphWindow.isDestroyed() && store.get('settings.graphAlwaysOnTop', true)) {
+    graphWindow.setAlwaysOnTop(true, 'floating');
   }
 
   return data;
@@ -3441,6 +3539,11 @@ app.whenReady().then(async () => {
       if (alwaysOnTopSetting) {
         mainWindow.setAlwaysOnTop(true, 'floating');
       }
+    }
+    // Re-assert the detached graph AFTER the widget so a pinned graph window
+    // isn't repeatedly covered by the widget's topmost re-assertion.
+    if (graphWindow && !graphWindow.isDestroyed() && store.get('settings.graphAlwaysOnTop', true)) {
+      graphWindow.setAlwaysOnTop(true, 'floating');
     }
   }, 5000);
 });

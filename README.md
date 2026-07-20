@@ -35,7 +35,7 @@ Each provider meters more than one thing — Burnwatch shows **all of it**:
 - **OpenAI** — Codex (7d), the separate **GPT-5.3-Codex-Spark** pool, Code Review (when your account has one), purchased credits, and banked **limit-reset orbs**
 - **Google** — one row per model **version** (2.5 Pro, 2.5 Flash, 2.5 Flash Lite, 3.1 Flash Lite…), because Google meters each separately, in progressive shades of Google blue
 
-Don't care about a pool? **Hover it and click the minus** — hidden trackers collapse everywhere (including compact mode) and come back from the *N hidden* chip.
+Don't care about a pool? **Hover it and click the minus** — the row **burns away to nothing** (pixel fire, no ash left behind) and the window smoothly closes the gap. Bring it back from the *N hidden* chip and it **fades in under a shower of gold sparkles** as the window grows to fit. Works everywhere, including compact mode.
 
 ![Burnwatch — main view: Anthropic, OpenAI, and Google, every pool tracked](assets/screenshot-main.png)
 
@@ -47,6 +47,7 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 
 - 📏 **Live resize ladder** — full labels → abbreviated windows ("2.5 Pro (1D)", tooltip explains) → colour-coded chips (`CLA 5H · CDX · SPK · 2.5P`) → countdown text becomes **remaining-time pies** → redundant columns bow out — down to a 200px sliver
 - 🖼️ **Orientation aware** — wider than tall? The three companies line up as **columns** with per-column headers and a shared bottom line above the chart. Stretched tall? Text and the company wordmarks **grow to fill the space**
+- 🖥️↕️ **Wide / Tall presets** — two toolbar buttons snap the window straight into the landscape three-column layout or a tall stacked view, then toggle back to the auto-sized widget — all with the same smooth realtime reflow
 - 🗜️ **Compact mode** (the boot-stomping-a-can button) — one slim bar per pool across all companies, grouped by company colour, fits any corner
 - 🪟 **Windows Snap** works natively — drag to an edge or Win+Arrow
 - ↕️ The window **grows and contracts with its content**: toggle the graph, burn a group away, hide a tracker — the frame follows
@@ -72,12 +73,13 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 
 ## Watching the burn
 
-⏳ **Burn-rate Forecast** — projects when each pool hits 100%, on the chart and in tooltips
+⏳ **Burn-rate Forecast** — projects when each pool hits 100%, on the chart and in tooltips, now for **every provider** — Anthropic, Codex, Gemini, and second accounts — not just Anthropic
 🗓️ **Session Planner** — per-company: finds your heaviest hours and suggests when to start a fresh window
 🔔 **Usage & Burn-spike Alerts** — company-attributed desktop notifications; median+MAD anomaly detection on every tracked series (second accounts included)
 📱 **Phone Alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
 🌅 **Daily Digest** — yesterday's burn, per company, each morning
-📈 **The Prediction Graph** — a 7-day history chart with **dotted burn-rate projections** showing when each pool will hit 100%. Toggled by the resident **pixel psychic**: eyes-open idle means history only; click him into his eyes-closed trance and the projections appear. Roomiest in wide mode, where it stretches beneath all three columns
+📈 **The Prediction Graph** — a 7-day history chart with **dotted burn-rate projections** showing when each pool will hit 100%. Now plots **cross-provider comparison lines** — Anthropic, Codex, Gemini and second accounts share one 0–100% axis — with a **clickable legend** to show or hide any series (your choice sticks). Toggled by the resident **pixel psychic**: eyes-open idle means history only; click him into his eyes-closed trance and the projections appear. **Pop it out** into its own always-on-top window with the corner button. Roomiest in wide mode, where it stretches beneath all three columns
+💾 **History export** — one click dumps your full usage history to **CSV or JSON** (Settings → Export) — a local file save, nothing uploaded
 💾 **Tray badges** — per-company colours (Anthropic blue, Fable red, OpenAI green, Google yellow), customizable, with X-on-red at 99%, terminal-cursor badges for second accounts, and an optional critical-severity outline
 🔄 **Silent auto-update** — new releases download in the background and apply on next launch; you install Burnwatch exactly once
 
@@ -262,11 +264,17 @@ If issues persist, open a [Support discussion](../../discussions/categories/supp
 - [x] Hide any pool, collapse any company, burn away account groups
 - [x] Dark / Light / System themes + full customization
 
+**Shipped in 2.1**
+- [x] Cross-provider comparison lines + per-series legend toggles on the graph
+- [x] Burn-rate forecasts for every provider (Anthropic, Codex, Gemini, second accounts)
+- [x] Detachable graph window with its own always-on-top
+- [x] Wide / Tall one-click window presets
+- [x] Row hide reimagined — burn-away with no residue, sparkle-return
+- [x] One-click usage-history export (CSV/JSON)
+
 **Planned**
 - [ ] Prebuilt macOS & Linux binaries (build-from-source works today)
 - [ ] "Headroom right now" — a chip naming the provider with the most capacity for your next big job
-- [ ] Burn-rate forecasts extended to OpenAI & Google pools
-- [ ] One-click usage-history export (CSV/JSON)
 - [ ] Keyboard shortcuts
 
 ---

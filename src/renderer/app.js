@@ -44,6 +44,9 @@ const elements = {
     sessionKeyError: document.getElementById('sessionKeyError'),
     refreshBtn: document.getElementById('refreshBtn'),
     graphBtn: document.getElementById('graphBtn'),
+    graphPopoutBtn: document.getElementById('graphPopoutBtn'),
+    wideBtn: document.getElementById('wideBtn'),
+    tallBtn: document.getElementById('tallBtn'),
     minimizeBtn: document.getElementById('minimizeBtn'),
     closeBtn: document.getElementById('closeBtn'),
 
@@ -408,6 +411,37 @@ function setupEventListeners() {
         _forceFitHeight();
         _saveViewState();
     });
+
+    // Wide / tall preset arrangements — one click snaps the window to a
+    // landscape or tall geometry; the existing squeeze/landscape/tall reflow
+    // then engages smoothly (main leaves the size trackers alone so the
+    // window reports "user-sized").
+    // Pop the graph out into its own always-on-top window.
+    if (elements.graphPopoutBtn) {
+        elements.graphPopoutBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.electronAPI.openGraphWindow();
+            elements.graphPopoutBtn.classList.add('active');
+        });
+        if (window.electronAPI.onGraphWindowClosed) {
+            window.electronAPI.onGraphWindowClosed(() => elements.graphPopoutBtn.classList.remove('active'));
+        }
+    }
+
+    // Buttons toggle: clicking the active layout again returns to the default
+    // auto-sized widget.
+    if (elements.wideBtn) {
+        elements.wideBtn.addEventListener('click', () => {
+            if (_activePreset === 'wide') { _activePreset = null; window.electronAPI.applyWindowPreset('reset'); }
+            else { _activePreset = 'wide'; window.electronAPI.applyWindowPreset('wide'); }
+        });
+    }
+    if (elements.tallBtn) {
+        elements.tallBtn.addEventListener('click', () => {
+            if (_activePreset === 'tall') { _activePreset = null; window.electronAPI.applyWindowPreset('reset'); }
+            else { _activePreset = 'tall'; window.electronAPI.applyWindowPreset('tall'); }
+        });
+    }
 
     elements.minimizeBtn.addEventListener('click', () => {
         window.electronAPI.minimizeWindow();
@@ -1330,11 +1364,15 @@ async function restoreRows(provider) {
 }
 
 function attachHideBtn(row, key, label) {
+    row.dataset.rowKey = key;
+    // Rows being restored this render start collapsed so the window measures
+    // small; revealMarkedRows() then grows them back in with sparkles.
+    if (_revealRowKeys && _revealRowKeys.has(key)) row.classList.add('reveal-init');
     const btn = document.createElement('button');
     btn.className = 'row-hide-btn';
     btn.textContent = '–';
     btn.title = 'Hide "' + String(label || key).replace(/^CLI /, '') + '" — restore from the "hidden" chip at the section bottom';
-    btn.addEventListener('click', (e) => { e.stopPropagation(); hideRow(key); });
+    btn.addEventListener('click', (e) => { e.stopPropagation(); burnHideRow(row, key); });
     row.appendChild(btn);
 }
 
@@ -1355,12 +1393,119 @@ function updateHiddenChips() {
         if (!chip) {
             chip = document.createElement('button');
             chip.className = 'hidden-rows-chip';
-            chip.addEventListener('click', () => restoreRows(provider));
+            chip.addEventListener('click', () => restoreRowsSparkle(provider));
             footer.appendChild(chip);
         }
         chip.textContent = count + ' hidden';
         chip.title = 'Click to restore the ' + count + ' hidden tracker' + (count > 1 ? 's' : '') + ' in this section';
     }
+}
+
+// ---- Row hide/show choreography ----
+// Hiding a row incinerates it with the pixel-fire sweep (leaving no ash) and
+// then smoothly collapses the gap while the window shrinks to follow. Showing
+// again is NOT the burn reversed: gold sparkles rain over the returning rows
+// as they fade in and the window grows to fit them at the same time.
+let _revealRowKeys = null;
+
+async function burnHideRow(row, key) {
+    if (row.dataset.animating) return;
+    // Respect the pizazz kill-switch / compact mode: just hide instantly.
+    if (document.body.classList.contains('no-pizazz') || isCompactMode) { return hideRow(key); }
+    row.dataset.animating = '1';
+    // A row is far wider than a subheading — stretch the sweep so the fire
+    // front doesn't race across, but cap it so it never drags.
+    const SWEEP = Math.round(Math.max(440, Math.min(760, row.offsetWidth * 1.5)));
+    row.classList.add('row-burning');       // CSS fades the row's content (not the fire) to ash
+    runPixelSweep(row, true, SWEEP, 900);    // shorter soot-and-sparks aftermath than a subheading
+    const COLLAPSE = 340;
+    setTimeout(() => {
+        const h = row.offsetHeight;
+        row.style.height = h + 'px';
+        row.style.overflow = 'hidden';
+        void row.offsetWidth;
+        row.style.transition = `height ${COLLAPSE}ms ease, margin ${COLLAPSE}ms ease, opacity ${COLLAPSE}ms ease`;
+        requestAnimationFrame(() => {
+            row.style.height = '0px';
+            row.style.marginTop = '0';
+            row.style.marginBottom = '0';
+            row.style.opacity = '0';
+        });
+        _followResize(COLLAPSE + 220);            // window shrinks in step with the gap closing
+        setTimeout(() => { hideRow(key); }, COLLAPSE + 120); // persist + re-render without the row (no residue)
+    }, Math.round(SWEEP * 0.72));
+}
+
+async function restoreRowsSparkle(provider) {
+    if (document.body.classList.contains('no-pizazz') || isCompactMode) { return restoreRows(provider); }
+    const map = hiddenRowsMap();
+    _revealRowKeys = new Set(Object.keys(map).filter((k) => rowProvider(k) === provider && _availableRowKeys.has(k)));
+    // revealMarkedRows() clears _revealRowKeys on its first line, so run it in
+    // finally: if the settings save rejects we must NOT leave the flag set, or
+    // every later render would re-collapse those rows (reveal-init) forever.
+    try {
+        await restoreRows(provider);   // re-renders; rows in _revealRowKeys get the reveal-init class (collapsed)
+    } finally {
+        revealMarkedRows();
+    }
+}
+
+function revealMarkedRows() {
+    _revealRowKeys = null;
+    const rows = [...document.querySelectorAll('.usage-section.reveal-init')];
+    if (!rows.length) return;
+    rows.forEach((r) => {
+        r.classList.remove('reveal-init');
+        const h = r.offsetHeight;                 // natural height once un-collapsed
+        r.style.height = '0px';
+        r.style.overflow = 'hidden';
+        r.style.opacity = '0';
+        r.style.marginTop = '0';
+        r.style.marginBottom = '0';
+        void r.offsetWidth;
+        r.style.transition = 'height .5s ease, opacity .5s ease .12s, margin .5s ease';
+        requestAnimationFrame(() => {
+            r.style.height = h + 'px';
+            r.style.opacity = '1';
+            r.style.marginTop = '';
+            r.style.marginBottom = '';
+        });
+        sparkleRow(r);
+        setTimeout(() => {
+            r.style.height = ''; r.style.overflow = ''; r.style.transition = ''; r.style.opacity = '';
+        }, 720);
+    });
+    _followResize(780);   // window grows in step with the rows fading in
+}
+
+// Gold sparkle sprinkle scattered across a whole row (reuses the reset-ring
+// sparkleFly keyframe) for the magic-sparkle un-hide.
+function sparkleRow(row) {
+    if (document.body.classList.contains('no-pizazz')) return;
+    if (document.visibilityState !== 'visible') return;
+    const W = row.offsetWidth || 200, H = row.offsetHeight || 28;
+    const burst = document.createElement('div');
+    burst.className = 'sparkle-burst';
+    const glyphs = ['✦', '✧', '✨', '⋆', '✦'];
+    const colors = ['#ffd700', '#fff3b0', '#ffe066', '#ffffff', '#ffec99'];
+    const count = Math.max(10, Math.min(26, Math.round(W / 16)));
+    for (let i = 0; i < count; i++) {
+        const s = document.createElement('span');
+        s.className = 'sparkle';
+        s.textContent = glyphs[i % glyphs.length];
+        const sx = (Math.random() - 0.5) * (W - 20);
+        const sy = (Math.random() - 0.5) * (H + 4);
+        s.style.setProperty('--sx', sx.toFixed(1) + 'px');
+        s.style.setProperty('--sy', sy.toFixed(1) + 'px');
+        s.style.setProperty('--dx', (sx + (Math.random() - 0.5) * 12).toFixed(1) + 'px');
+        s.style.setProperty('--dy', (sy - 6 - Math.random() * 12).toFixed(1) + 'px');
+        s.style.color = colors[i % colors.length];
+        s.style.animationDelay = (Math.random() * 0.5).toFixed(2) + 's';
+        s.style.fontSize = Math.round(6 + Math.random() * 7) + 'px';
+        burst.appendChild(s);
+    }
+    row.appendChild(burst);
+    setTimeout(() => burst.remove(), 1900);
 }
 
 // ---- Desktop / CLI subgroups with burnable subheadings ----
@@ -1412,8 +1557,9 @@ function _spawnPixelSmoke(layer, x) {
 // The sweep itself: a hot front races across the word; every few px it leaves
 // a trail flame that keeps burning until the front finishes, and smoke rises
 // from both the front and random lit spots along the trail.
-function runPixelSweep(btn, hide) {
+function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
     if (document.body.classList.contains('no-pizazz')) return; // clown's in jail
+    const SWEEP = sweepMs || SUBGROUP_SWEEP_MS; // wider targets (rows) pass a longer sweep
     const layer = document.createElement('div');
     layer.className = 'fx';
     btn.appendChild(layer);
@@ -1423,9 +1569,9 @@ function runPixelSweep(btn, hide) {
     let lastFront = 0, lastSmoke = 0;
     const lit = [];
     function frame(now) {
-        const t = Math.min(1, (now - t0) / SUBGROUP_SWEEP_MS);
+        const t = Math.min(1, (now - t0) / SWEEP);
         const x = hide ? W * (1 - t) : W * t;
-        const remaining = SUBGROUP_SWEEP_MS - (now - t0);
+        const remaining = SWEEP - (now - t0);
         if (now - lastFront > 22) { lastFront = now; _spawnPixelFlame(layer, x, _rnd(160, 300)); }
         while (hide ? trailX > x : trailX < x) {
             _spawnPixelFlame(layer, trailX + _rnd(-1, 1), remaining + _rnd(60, 220));
@@ -1440,7 +1586,7 @@ function runPixelSweep(btn, hide) {
         if (t < 1) requestAnimationFrame(frame);
         else if (hide) {
             // Soot & Sparks aftermath: lingering smoke + stray sparks, dying out
-            const a0 = performance.now(), ADUR = 3200;
+            const a0 = performance.now(), ADUR = aftermathMs || 3200;
             (function aftermath() {
                 const at = (performance.now() - a0) / ADUR;
                 if (at >= 1 || document.body.classList.contains('no-pizazz')) {
@@ -1471,6 +1617,7 @@ function runPixelSweep(btn, hide) {
 // us via window-user-sized). Auto-height mode never compresses, so the
 // resize loop can't react to its own squeeze and spiral the window down.
 let _windowUserSized = false;
+let _activePreset = null; // 'wide' | 'tall' | null — tracked synchronously for reliable toggle-back
 
 function applySqueezeClasses() {
     const w = window.innerWidth;
@@ -1499,7 +1646,7 @@ function applySqueezeClasses() {
     // Tall mode: scale 0→1 between 820px and 1600px of height — sections
     // spread, text grows, and the wordmarks eat the extra vertical space.
     // Not in landscape, where the three columns own the layout.
-    const tall = on && !landscape ? Math.min(Math.max((h - 820) / 780, 0), 1) : 0;
+    const tall = on && !landscape ? Math.min(Math.max((h - 600) / 780, 0), 1) : 0;
     document.body.classList.toggle('tall', tall > 0);
     document.body.style.setProperty('--tall', tall.toFixed(3));
     applyLabelMode(eff);
@@ -1509,6 +1656,9 @@ if (window.electronAPI.onWindowUserSized) {
     window.electronAPI.onWindowUserSized((userSized) => {
         _windowUserSized = userSized;
         applySqueezeClasses();
+        // Resumed auto-height (e.g. a preset "reset", or the user dragging the
+        // window back near default) — clear the preset and snap to content.
+        if (!userSized) { _activePreset = null; _forceFitHeight(); }
     });
 }
 window.addEventListener('resize', applySqueezeClasses);
@@ -2810,6 +2960,7 @@ function renderChart(history) {
         if (showOAuthApps) values.push(entry.oauthApps || 0);
         if (showExtraUsage) values.push(entry.extraUsage || 0);
         for (const key of scopedKeys) values.push(entry.scoped?.[key] || 0);
+        values.push(entry.codex || 0, entry.gemini || 0, entry.codexCli || 0, entry.geminiCli || 0, entry.claudeCli || 0);
         return values;
     });
     const yMax = Math.max(10, Math.ceil(Math.max(...allValues) / 10) * 10);
@@ -2967,6 +3118,34 @@ function renderChart(history) {
         });
     }
 
+    // Cross-provider comparison lines — OpenAI (Codex) and Google (Gemini),
+    // plus their CLI second accounts and the Claude CLI. All are already
+    // 0-100% utilization so they share the y-axis with no normalization.
+    // Toggle any of them on/off from the chart legend.
+    const PROVIDER_SERIES = [
+        { key: 'codex', label: 'Codex', color: CODE_COLORS.codex, dash: null },
+        { key: 'gemini', label: 'Gemini', color: COMPANY_COLORS.google, dash: null },
+        { key: 'claudeCli', label: 'Claude CLI', color: COMPANY_COLORS.anthropic, dash: [5, 3] },
+        { key: 'codexCli', label: 'Codex CLI', color: CODE_COLORS.codex, dash: [5, 3] },
+        { key: 'geminiCli', label: 'Gemini CLI', color: COMPANY_COLORS.google, dash: [5, 3] }
+    ];
+    for (const s of PROVIDER_SERIES) {
+        const vals = history.map((entry) => entry[s.key] || 0);
+        if (!vals.some((v) => v > 0)) continue;
+        datasets.push({
+            label: s.label,
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry[s.key] || 0 })),
+            borderColor: s.color,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: s.dash || undefined,
+            stepped: true,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            pointHitRadius: 10
+        });
+    }
+
     // Burn-rate projections: dotted line from the newest sample to the
     // forecast 100% crossing, plus a grey marker at the weekly reset — the
     // visual race between "when I max out" and "when the window resets".
@@ -2995,17 +3174,34 @@ function renderChart(history) {
         chartXMax = Math.max(chartXMax, eta);
     };
     if (projectionsVisible) {
-        addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
+        // A series hidden from the legend should hide its dotted projection too
+        // (the projection isn't a legend item, so there's no other way to hide it).
+        const chartHiddenP = (window._cachedSettings || {}).chartHiddenSeries || {};
+        if (!chartHiddenP['Weekly']) addProjection('Weekly', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
         const SCOPED_CHART_COLORS = { fable: '#d946ef' };
         for (const key of scopedKeys) {
+            // Match the base-series label form so the hide state keys line up.
+            const scopedLabel = key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            if (chartHiddenP[scopedLabel]) continue;
             const scopedResetIso = latestUsageData?.['seven_day_scoped_' + key]?.resets_at;
             addProjection(
-                key.charAt(0).toUpperCase() + key.slice(1),
+                scopedLabel,
                 SCOPED_CHART_COLORS[key] || '#84cc16',
                 lastEntry.scoped?.[key],
                 forecasts.scoped?.[key],
                 scopedResetIso ? new Date(scopedResetIso).getTime() : null
             );
+        }
+        // Cross-provider forecast lines. These pools have no Claude-style
+        // reset window, so pass resetMs=null (no reset-first suppression).
+        for (const [lbl, col, lv, eta] of [
+            ['Codex', CODE_COLORS.codex, lastEntry.codex, forecasts.codex],
+            ['Gemini', COMPANY_COLORS.google, lastEntry.gemini, forecasts.gemini],
+            ['Claude CLI', COMPANY_COLORS.anthropic, lastEntry.claudeCli, forecasts.claudeCli],
+            ['Codex CLI', CODE_COLORS.codex, lastEntry.codexCli, forecasts.codexCli],
+            ['Gemini CLI', COMPANY_COLORS.google, lastEntry.geminiCli, forecasts.geminiCli]
+        ]) {
+            if (!chartHiddenP[lbl]) addProjection(lbl, col, lv, eta, null);
         }
     }
     if (projections.length) {
@@ -3030,6 +3226,10 @@ function renderChart(history) {
 
     const firstDayMidnight = new Date(history[0].timestamp);
     firstDayMidnight.setHours(0, 0, 0, 0);
+
+    // Apply persisted per-series show/hide (toggled from the chart legend).
+    const chartHidden = (window._cachedSettings || {}).chartHiddenSeries || {};
+    datasets.forEach((d) => { if (chartHidden[d.label]) d.hidden = true; });
 
     usageChart = new Chart(elements.usageChart.getContext('2d'), {
         type: 'line',
@@ -3091,7 +3291,28 @@ function renderChart(history) {
             },
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 6,
+                        font: { size: 9 },
+                        // Keep the legend to real series — hide the dotted
+                        // "→ 100%" projections and the reset marker.
+                        filter: (item) => !/→ 100%|reset/i.test(item.text)
+                    },
+                    // Click a series to show/hide it; the choice persists.
+                    onClick: (e, item, legend) => {
+                        const ci = legend.chart;
+                        const willHide = ci.isDatasetVisible(item.datasetIndex);
+                        ci.getDatasetMeta(item.datasetIndex).hidden = willHide ? true : null;
+                        ci.update();
+                        const key = ci.data.datasets[item.datasetIndex].label;
+                        const chartHiddenSeries = { ...((window._cachedSettings || {}).chartHiddenSeries || {}) };
+                        if (willHide) chartHiddenSeries[key] = true; else delete chartHiddenSeries[key];
+                        _saveSettingsPatch({ chartHiddenSeries });
+                    }
                 },
                 tooltip: {
                     callbacks: {
@@ -3377,3 +3598,8 @@ window.addEventListener('beforeunload', () => {
     stopAutoUpdate();
     if (countdownInterval) clearInterval(countdownInterval);
 });
+
+
+
+
+

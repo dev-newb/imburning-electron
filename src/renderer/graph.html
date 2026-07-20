@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'none';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline';
+        font-src 'self';
+        img-src 'self' data:;
+        connect-src 'none';
+    ">
+    <title>Burnwatch — Graph</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            background: #16161e;
+            color: #cfcfe0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+        .gtoolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 12px;
+            border-bottom: 1px solid #2a2a38;
+            flex: 0 0 auto;
+        }
+        .gtitle { font-size: 12px; font-weight: 700; color: #e6e6f0; letter-spacing: .2px; }
+        .gspacer { flex: 1; }
+        .pin-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 7px;
+            border: 1px solid rgba(140, 140, 170, .35);
+            background: rgba(140, 140, 170, .12);
+            color: #b9b9cc;
+            cursor: pointer;
+            transition: color .15s, border-color .15s, background .15s;
+        }
+        .pin-btn.on { color: #35e0ff; border-color: rgba(53, 224, 255, .5); background: rgba(53, 224, 255, .12); }
+        .gwrap { flex: 1; position: relative; padding: 8px 10px 10px; min-height: 0; }
+        canvas { position: absolute; inset: 8px 10px 10px; }
+        .gempty {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: #7a7a90; font-size: 12px; text-align: center; padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="gtoolbar">
+        <span class="gtitle">Burnwatch — Usage Graph</span>
+        <span class="gspacer"></span>
+        <button class="pin-btn" id="pinBtn" title="Keep this graph window above other windows">📌 <span id="pinLabel">On top</span></button>
+    </div>
+    <div class="gwrap">
+        <canvas id="usageChart"></canvas>
+        <div class="gempty" id="gEmpty" style="display:none;">No usage history yet — the graph fills in as data is collected.</div>
+    </div>
+    <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
+    <script src="graph.js"></script>
+</body>
+
+</html>
