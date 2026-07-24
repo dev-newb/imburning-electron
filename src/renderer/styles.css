@@ -2857,6 +2857,88 @@ body.theme-light {
     100% { transform: translate(var(--dx), var(--ry)) scale(0.3); opacity: 0; }
 }
 
+/* ---- Burn-alert fire ----
+   A pool that trips the token-burn detector wears a flame in ITS OWN colour
+   until the pace settles (main.js owns the hysteresis; --fire-col is set
+   from whatever colour the bar actually renders with — model colour,
+   threshold recolour, or Gemini shade — so every colour source carries
+   straight into the fire). Pure CSS, no per-frame JS. */
+@keyframes barFireFlicker {
+    0%   { transform: scaleY(0.8); opacity: 0.85; }
+    45%  { transform: scaleY(1.3) translateY(-1px); opacity: 1; }
+    70%  { transform: scaleY(1.05); opacity: 0.95; }
+    100% { transform: scaleY(0.85) translateY(-0.5px); opacity: 0.9; }
+}
+
+@keyframes barHeatPulse {
+    from { box-shadow: 0 0 5px 1px color-mix(in srgb, var(--fire-col, #ff922b) 50%, transparent); }
+    to   { box-shadow: 0 0 11px 3px color-mix(in srgb, var(--fire-col, #ff922b) 80%, transparent); }
+}
+
+.progress-fill.on-fire,
+.compact-bar-fill.on-fire {
+    overflow: visible;
+    animation: barHeatPulse 1.1s ease-in-out infinite alternate;
+}
+
+/* The containers clip by default — let the flames out */
+.progress-bar:has(.progress-fill.on-fire),
+.compact-bar-bg:has(.compact-bar-fill.on-fire) {
+    overflow: visible;
+}
+
+/* Pixel flame riding the tip of the fill, cells in the bar's colour family */
+.progress-fill.on-fire::after,
+.compact-bar-fill.on-fire::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: -8px;
+    width: 2px;
+    height: 2px;
+    background: transparent;
+    transform-origin: 50% 100%;
+    box-shadow:
+        0 6px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 55%, #ffffff),
+        -2px 7px 0 0 var(--fire-col, #ff922b),
+        2px 7px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 75%, transparent),
+        0 4px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 70%, #ffffff),
+        -1px 5px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 88%, #ffffff),
+        1px 3px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 45%, transparent),
+        0 2px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 35%, transparent);
+    animation: barFireFlicker 0.55s steps(3, end) infinite alternate;
+}
+
+/* Codex banked-reset orbs idle with a faint flame in their own colour.
+   animation-delay: inherit staggers each flame with its orb's glimmer. */
+.reset-dots {
+    --fire-col: #34d0a8;
+}
+
+.reset-dot {
+    position: relative;
+}
+
+.reset-dot::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -5px;
+    width: 2px;
+    height: 2px;
+    margin-left: -1px;
+    background: transparent;
+    transform-origin: 50% 100%;
+    box-shadow:
+        0 3px 0 0 color-mix(in srgb, var(--fire-col) 60%, #ffffff),
+        -1px 4px 0 0 color-mix(in srgb, var(--fire-col) 85%, transparent),
+        1px 4px 0 0 color-mix(in srgb, var(--fire-col) 55%, transparent),
+        0 1px 0 0 color-mix(in srgb, var(--fire-col) 35%, transparent);
+    opacity: 0.75;
+    animation: barFireFlicker 0.8s ease-in-out infinite alternate;
+    animation-delay: inherit;
+}
+
 /* Export-history buttons in Settings */
 .export-btns { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .export-btns .settings-connect-btn { padding: 3px 10px; }

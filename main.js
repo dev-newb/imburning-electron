@@ -1397,6 +1397,23 @@ const BURN_FALLBACK_JUMP = 8;                 // floor when too little baseline 
 const BURN_MAD_K = 6;                         // sensitivity: median + K * MAD
 const _burnAlertAt = {};                      // seriesKey -> last alert timestamp
 
+// ---- Burning state (drives the on-fire bars in the renderer) ----
+// A series that trips the anomaly detector is "burning" until it settles:
+// its 10-min pace falls below HALF the threshold that lit it (hysteresis),
+// or ten quiet minutes pass without re-qualifying. Independent of the alert
+// cooldown — notifications are throttled, the flames are live state.
+const BURN_SETTLE_MS = 10 * 60 * 1000;
+const _burningSeries = {};                    // seriesKey -> { until }
+function getBurningSeriesMap() {
+  const cutoff = Date.now();
+  const burning = {};
+  for (const [key, entry] of Object.entries(_burningSeries)) {
+    if (entry.until > cutoff) burning[key] = true;
+    else delete _burningSeries[key];
+  }
+  return burning;
+}
+
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -1451,7 +1468,11 @@ function checkBurnAnomalies() {
     const spanMs = last.t - first.t;
     if (spanMs < BURN_MIN_WINDOW_MS) continue;
     const jump = last.v - first.v;
-    if (jump < BURN_MIN_JUMP) continue; // negative = reset, small = normal
+    if (jump < BURN_MIN_JUMP) {
+      // Well below any trigger — a burning series has clearly settled
+      if (_burningSeries[series.key] && jump < BURN_MIN_JUMP / 2) delete _burningSeries[series.key];
+      continue; // negative = reset, small = normal
+    }
 
     // Baseline: per-minute rates from consecutive pairs OLDER than the window
     const rates = [];
@@ -1467,16 +1488,27 @@ function checkBurnAnomalies() {
     const jumpRate = jump / (spanMs / 60000);
     let isAnomaly;
     let typicalJump;
+    let adaptiveThreshold = null;
     if (rates.length >= 50) {
       const med = median(rates);
       const mad = median(rates.map((r) => Math.abs(r - med))) * 1.4826;
-      const threshold = med + BURN_MAD_K * Math.max(mad, 0.01);
-      isAnomaly = jumpRate > threshold;
+      adaptiveThreshold = med + BURN_MAD_K * Math.max(mad, 0.01);
+      isAnomaly = jumpRate > adaptiveThreshold;
       typicalJump = Math.round(med * (BURN_WINDOW_MS / 60000) * 10) / 10;
     } else {
       // Not enough learned baseline yet — use a conservative absolute floor
       isAnomaly = jump >= BURN_FALLBACK_JUMP;
       typicalJump = null;
+    }
+
+    // Burning-state bookkeeping (feeds the renderer's on-fire bars)
+    if (isAnomaly) {
+      _burningSeries[series.key] = { until: now + BURN_SETTLE_MS };
+    } else if (_burningSeries[series.key]) {
+      const settled = adaptiveThreshold != null
+        ? jumpRate <= adaptiveThreshold / 2
+        : jump < BURN_FALLBACK_JUMP / 2;
+      if (settled) delete _burningSeries[series.key];
     }
     if (!isAnomaly) continue;
 
@@ -3757,6 +3789,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     data.sessionPlans = computeSessionPlans();
     data.frozenProviders = computeFrozenProviders(data);
     checkBurnAnomalies();
+    data.burningSeries = getBurningSeriesMap();
     checkDailyDigest(data);
     store.set('latestUsageData', data);
     notifyGraphWindow();
@@ -3902,6 +3935,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   data.sessionPlans = computeSessionPlans();
   data.frozenProviders = computeFrozenProviders(data);
   checkBurnAnomalies();
+  data.burningSeries = getBurningSeriesMap();
   checkDailyDigest(data);
 
   // Store latest usage data for settings refresh

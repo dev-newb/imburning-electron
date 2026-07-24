@@ -195,6 +195,23 @@ test('the compact chevron ghost is fully gone (markup, styles, wiring)', () => {
   }
 });
 
+test('burn-detector fire is wired end to end in the pool colour', () => {
+  const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  // main tracks burning state with settle hysteresis and ships it in the snapshot
+  assert.match(main, /function getBurningSeriesMap\(\)/);
+  assert.match(main, /data\.burningSeries = getBurningSeriesMap\(\);/);
+  assert.match(main, /BURN_SETTLE_MS/);
+  // renderer maps series onto rows and tints the flame from the bar's colour
+  assert.match(app, /function computeBurningRowKeys\(data\)/);
+  assert.match(app, /_burningRowKeys = computeBurningRowKeys\(data\);/);
+  assert.match(app, /--fire-col/);
+  // CSS: flames on full and compact bars, ambient flame on the reset orbs
+  assert.match(css, /\.progress-fill\.on-fire,\s*\.compact-bar-fill\.on-fire/);
+  assert.match(css, /\.reset-dot::after/);
+});
+
 test('no-pizazz keeps functional spinners alive and reaches the detached graph', () => {
   const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
   const graphHtml = fs.readFileSync(path.join(rendererDir, 'graph.html'), 'utf8');

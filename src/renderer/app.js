@@ -1212,6 +1212,11 @@ function buildExtraRows(data) {
             const progressFill = document.createElement('div');
             progressFill.className = `progress-fill ${colorClass}`;
             progressFill.style.width = `${Math.min(utilization, 100)}%`;
+            // Burn-detector fire, tinted with this row's own bar colour
+            if (_burningRowKeys.has(key)) {
+                progressFill.classList.add('on-fire');
+                progressFill.style.setProperty('--fire-col', CODE_COLORS[config.color] || '#8b8fa3');
+            }
             progressBar.appendChild(progressFill);
             barGroup.appendChild(progressBar);
 
@@ -1291,13 +1296,19 @@ function buildExtraRows(data) {
             elements.googleCliRows.appendChild(row);
             const cliShade = GEMINI_BLUES[(elements.googleCliRows.children.length - 1) % GEMINI_BLUES.length];
             const cliFill = row.querySelector('.progress-fill');
-            if (cliFill) cliFill.style.background = cliShade;
+            if (cliFill) {
+                cliFill.style.background = cliShade;
+                if (cliFill.classList.contains('on-fire')) cliFill.style.setProperty('--fire-col', cliShade);
+            }
             label.style.setProperty('--row-col', cliShade);
         } else if (key.startsWith('gemini_')) {
             elements.googleRows.appendChild(row);
             const shade = GEMINI_BLUES[(elements.googleRows.children.length - 1) % GEMINI_BLUES.length];
             const fill = row.querySelector('.progress-fill');
-            if (fill) fill.style.background = shade;
+            if (fill) {
+                fill.style.background = shade;
+                if (fill.classList.contains('on-fire')) fill.style.setProperty('--fire-col', shade);
+            }
             label.style.setProperty('--row-col', shade);
         } else {
             elements.extraRows.appendChild(row);
@@ -2418,14 +2429,58 @@ function normalizeUsageData(data) {
     return data;
 }
 
+// ---- Burn-alert fire: which rows wear flames right now ----
+// main.js tracks per-series burning state with settle hysteresis (a series
+// that tripped the anomaly detector stays lit until its pace halves);
+// this maps that state onto concrete rows. Structural Session/Weekly bars
+// use sentinels since they aren't dynamic rows.
+let _burningRowKeys = new Set();
+function computeBurningRowKeys(data) {
+    const burning = data.burningSeries || {};
+    const keys = new Set();
+    if (burning.session) keys.add('STRUCT_SESSION');
+    if (burning.weekly) keys.add('STRUCT_WEEKLY');
+    for (const seriesKey of Object.keys(burning)) {
+        if (seriesKey.startsWith('scoped_')) keys.add('seven_day_scoped_' + seriesKey.slice('scoped_'.length));
+    }
+    if (burning.claudeCli) keys.add('cc_seven_day');
+    if (burning.codex && data.codex?.limits?.[0]) keys.add('codex_' + data.codex.limits[0].key);
+    if (burning.codexCli && data.codex?.cli?.limits?.[0]) keys.add('codex_cli_' + data.codex.cli.limits[0].key);
+    const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+    if (burning.gemini) {
+        const worst = worstOf(data.gemini?.limits);
+        if (worst) keys.add('gemini_' + worst.key);
+    }
+    if (burning.geminiCli) {
+        const worst = worstOf(data.gemini?.cli?.limits);
+        if (worst) keys.add('gemini_cli_' + worst.key);
+    }
+    return keys;
+}
+
 function updateUI(data) {
     latestUsageData = normalizeUsageData(data);
+    _burningRowKeys = computeBurningRowKeys(data);
 
     showMainContent();
     buildExtraRows(data);
     renderDualTables(data);
     refreshTimers();
     refreshExtraTimers(); // pinned scoped rows tick even when collapsed
+
+    // Structural bars catch fire when their series tripped the burn detector.
+    // The flame wears whatever colour the bar currently renders (threshold
+    // recolours included) — so any colour source carries into the fire.
+    const structuralFire = (el, on, pct, baseColor) => {
+        if (!el) return;
+        el.classList.toggle('on-fire', on);
+        if (on) {
+            const col = pct >= dangerThreshold ? '#ef4444' : pct >= warnThreshold ? '#f59e0b' : baseColor;
+            el.style.setProperty('--fire-col', col);
+        }
+    };
+    structuralFire(elements.sessionProgress, _burningRowKeys.has('STRUCT_SESSION'), data.five_hour?.utilization || 0, '#d97757');
+    structuralFire(elements.weeklyProgress, _burningRowKeys.has('STRUCT_WEEKLY'), data.seven_day?.utilization || 0, '#b85c3c');
 
     // Burn-rate forecast tooltip on the Weekly row
     const weeklySection = elements.weeklyProgress.closest('.usage-section');
@@ -2704,34 +2759,34 @@ function updateCompactBars(data) {
     const clamp = (v) => Math.min(Math.max(v || 0, 0), 100);
     const pools = [];
 
-    pools.push({ co: 'anthropic', code: 'CLA 5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f' });
-    pools.push({ co: 'anthropic', code: 'CLA 7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly });
+    pools.push({ co: 'anthropic', code: 'CLA 5H', name: 'Claude Session (5h)', pct: clamp(data.five_hour?.utilization), color: '#e0916f', burnKey: 'STRUCT_SESSION' });
+    pools.push({ co: 'anthropic', code: 'CLA 7D', name: 'Claude Models (7d)', pct: clamp(data.seven_day?.utilization), color: CODE_COLORS.weekly, burnKey: 'STRUCT_WEEKLY' });
     const hiddenRows = hiddenRowsMap();
     for (const [key, config] of Object.entries(EXTRA_ROW_CONFIG)) {
         const value = data[key];
         if (!value || value.utilization == null) continue;
         if (hiddenRows[key]) continue;
         if (key.startsWith('seven_day_scoped_')) {
-            pools.push({ co: 'anthropic', code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || '#d946ef' });
+            pools.push({ co: 'anthropic', code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || '#d946ef', burnKey: key });
         } else if (key.startsWith('cc_')) {
-            pools.push({ co: 'anthropic', cli: true, code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || CODE_COLORS.cc });
+            pools.push({ co: 'anthropic', cli: true, code: rowCode(key, config.label), name: config.label, pct: clamp(value.utilization), color: CODE_COLORS[config.color] || CODE_COLORS.cc, burnKey: key });
         }
     }
     for (const lim of (data.codex?.limits || [])) {
         if (hiddenRows['codex_' + lim.key]) continue;
-        pools.push({ co: 'openai', code: rowCode('codex_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
+        pools.push({ co: 'openai', code: rowCode('codex_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex, burnKey: 'codex_' + lim.key });
     }
     for (const lim of (data.codex?.cli?.limits || [])) {
         if (hiddenRows['codex_cli_' + lim.key]) continue;
-        pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex });
+        pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex, burnKey: 'codex_cli_' + lim.key });
     }
     (data.gemini?.limits || []).forEach((lim, i) => {
         if (hiddenRows['gemini_' + lim.key]) return;
-        pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
+        pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length], burnKey: 'gemini_' + lim.key });
     });
     (data.gemini?.cli?.limits || []).forEach((lim, i) => {
         if (hiddenRows['gemini_cli_' + lim.key]) return;
-        pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length] });
+        pools.push({ co: 'google', cli: true, code: rowCode('gemini_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length], burnKey: 'gemini_cli_' + lim.key });
     });
 
     // Honor the same hide actions the full view uses: collapsed companies and
@@ -2769,6 +2824,12 @@ function updateCompactBars(data) {
         fill.style.width = `${p.pct}%`;
         fill.style.background = p.pct >= dangerThreshold ? '#ef4444'
             : p.pct >= warnThreshold ? '#f59e0b' : p.color;
+        // Compact bars carry the same burn-detector fire, tinted with the
+        // exact colour the fill just received (threshold recolours included)
+        if (p.burnKey && _burningRowKeys.has(p.burnKey)) {
+            fill.classList.add('on-fire');
+            fill.style.setProperty('--fire-col', fill.style.background);
+        }
         bg.appendChild(fill);
         const pctEl = document.createElement('span');
         pctEl.className = 'compact-pct';
