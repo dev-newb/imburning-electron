@@ -1992,6 +1992,13 @@ body.theme-light .subheading { color: #8a8aa0; }
     100% { transform: translate(var(--dx), var(--ry)) scale(1.5); opacity: 0; }
 }
 
+/* Style 2 fire-motes: born at the fill, rising fast, guttering out */
+@keyframes fireRise {
+    0% { transform: translate(0, 0) scale(1); opacity: 0; }
+    12% { opacity: 1; }
+    100% { transform: translate(var(--dx, 0px), var(--ry, -14px)) scale(0.4); opacity: 0; }
+}
+
 /* Ash flakes drifting down off freshly charred text */
 @keyframes ashFall {
     0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
@@ -2612,6 +2619,18 @@ body.landscape .dual-head {
     grid-template-columns: minmax(42px, 46px) minmax(0, 1fr) 10px minmax(0, 1fr);
     padding-left: 12px;
     padding-right: 4px;
+}
+
+/* One row rhythm across all three columns: the dual table's rows match the
+   regular provider rows' 34px pitch (they were 27px, so each Google row
+   drifted 7px further out of line), and its second header sheds the 3px
+   start offset so row one shares the same baseline. */
+body.landscape .dual-row {
+    height: 34px;
+}
+
+body.landscape .dual-table .dual-head:nth-child(2) {
+    height: 17px;
 }
 
 body.landscape .dual-table.hide-cli .dual-row,

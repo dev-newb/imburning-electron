@@ -214,6 +214,12 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.match(css, /\.ambient-fire/);
   assert.match(app, /function _tickElementFire/);
   assert.match(app, /_spawnPixelFlame\(layer, _rnd\(0, width\), _rnd\(240, 460\), Math\.random\(\) < 0\.1, palette\)/);
+  // Flame style selector: dual-side whitelist + both engines present
+  assert.match(main, /flameStyle: store\.get\('settings\.flameStyle', 'classic'\)/);
+  assert.match(main, /settings\.flameStyle === 'particle' \? 'particle' : 'classic'/);
+  assert.match(app, /function _spawnFireParticle/);
+  const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+  assert.match(html, /id="flameStyle"/);
 });
 
 test('no-pizazz keeps functional spinners alive and reaches the detached graph', () => {

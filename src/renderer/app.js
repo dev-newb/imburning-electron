@@ -173,6 +173,7 @@ const elements = {
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
     sortByUsageToggle: document.getElementById('sortByUsageToggle'),
+    flameStyle: document.getElementById('flameStyle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
     showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
@@ -1412,11 +1413,12 @@ function _forceFitHeight({ fitPreset = false, intrinsic = false, userAction = fa
         const bh = _bannersHeight();
         if (th >= 10 && ch >= 40) {
             const target = th + bh + ch + 10;
-            // Fixed-point guard: .content flex-stretches to the window, so a
-            // scrollHeight measurement can track the window instead of the
-            // content — re-fitting on that reading adds the breathing room
-            // every pass and the window creeps to the screen bottom forever.
-            if (Math.abs(target - window.innerHeight) <= 12) return;
+            // Asymmetric fixed-point guard: GROWTH is always honoured (a
+            // skipped grow leaves real overflow — an exposed scrollbar);
+            // only shrinks inside the tolerance are ignored, which is what
+            // keeps the old resize feedback loop dead.
+            const delta = target - window.innerHeight;
+            if (delta > 0 ? delta <= 2 : delta >= -12) return;
             window.electronAPI.resizeWindow(target, true, fitPreset, userAction);
         }
     });
@@ -1772,6 +1774,22 @@ function _spawnPixelSmoke(layer, x) {
     layer.appendChild(s);
 }
 
+// Style 2 ("particle inferno") building block: micro fire-motes born at the
+// fill that rise fast, drift, and gutter out — denser and more chaotic than
+// the classic chunky sprites.
+function _spawnFireParticle(layer, x, palette) {
+    if (layer.childElementCount > 140) return;
+    const p = document.createElement('div');
+    p.className = 'fp';
+    const size = Math.random() < 0.6 ? 2 : 1;
+    const col = _pick([palette.core, palette.bright, palette.bright, palette.mid, palette.mid, palette.deep]);
+    p.style.cssText = `left:${x.toFixed(1)}px; bottom:${_rnd(0, 3).toFixed(0)}px; width:${size}px; height:${size}px;
+        background:${col}; box-shadow: 0 0 3px ${col};
+        --dx:${_rnd(-7, 7).toFixed(0)}px; --ry:${(-_rnd(9, 22)).toFixed(0)}px;
+        animation: fireRise ${Math.round(_rnd(320, 680))}ms ease-out forwards;`;
+    layer.appendChild(p);
+}
+
 // Charred-paper ash: tiny grey flakes tumbling DOWN off the burn line
 function _spawnAshFlake(layer, x) {
     if (layer.childElementCount > 110) return;
@@ -1869,7 +1887,7 @@ function _scheduleAmbientFire(delayMs) {
     }, delayMs);
 }
 
-function _tickElementFire(el, now, minGapMs, isOrb) {
+function _tickElementFire(el, now, minGapMs, isOrb, particleStyle) {
     let layer = el.__fireLayer;
     if (!layer || layer.parentNode !== el) {
         layer = document.createElement('div');
@@ -1883,8 +1901,20 @@ function _tickElementFire(el, now, minGapMs, isOrb) {
     const width = Math.max(4, el.offsetWidth - 4);
     const palette = _firePalette(getComputedStyle(el).getPropertyValue('--fire-col') || '#ff922b');
     if (isOrb) {
-        _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), false, palette);
+        if (particleStyle) {
+            _spawnFireParticle(layer, width / 2 + _rnd(-3, 3), palette);
+            if (Math.random() < 0.35) _spawnPixelFlame(layer, width / 2 + _rnd(-2, 2), _rnd(240, 380), false, palette);
+        } else {
+            _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), false, palette);
+        }
+    } else if (particleStyle) {
+        // Style 2: a storm of rising motes with the occasional small tongue
+        const count = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) _spawnFireParticle(layer, _rnd(0, width), palette);
+        if (Math.random() < 0.3) _spawnPixelFlame(layer, _rnd(0, width), _rnd(180, 340), false, palette);
+        if (Math.random() < 0.08) _spawnPixelSmoke(layer, _rnd(0, width));
     } else {
+        // Style 1: classic chunky pixel flames
         _spawnPixelFlame(layer, _rnd(0, width), _rnd(240, 460), Math.random() < 0.1, palette);
         if (Math.random() < 0.1) _spawnPixelSmoke(layer, _rnd(0, width));
     }
@@ -1897,8 +1927,9 @@ function _ambientFireFrame(now) {
     }
     const bars = document.querySelectorAll('.progress-fill.on-fire, .compact-bar-fill.on-fire');
     const orbs = document.querySelectorAll('.reset-dot');
-    for (const el of bars) _tickElementFire(el, now, 60, false);
-    for (const el of orbs) _tickElementFire(el, now, 300, true);
+    const particleStyle = (window._cachedSettings || {}).flameStyle === 'particle';
+    for (const el of bars) _tickElementFire(el, now, particleStyle ? 26 : 60, false, particleStyle);
+    for (const el of orbs) _tickElementFire(el, now, particleStyle ? 140 : 300, true, particleStyle);
     if (bars.length || orbs.length) {
         requestAnimationFrame(_ambientFireFrame);
     } else {
@@ -2412,7 +2443,10 @@ function resizeWidget(bannerVisible) {
         const bannerHeight = _bannersHeight();
         // +2 for the widget-container border, +8 bottom breathing room
         const target = titleHeight + bannerHeight + contentHeight + 10;
-        if (Math.abs(target - window.innerHeight) <= 8) return; // already fits
+        // Grow whenever needed (skipping leaves a scrollbar); skip only
+        // small shrinks so measurement noise can't thrash the window.
+        const delta = target - window.innerHeight;
+        if (delta > 0 ? delta <= 2 : delta >= -10) return;
         window.electronAPI.resizeWindow(target);
     });
 }
@@ -3896,6 +3930,7 @@ async function loadSettings() {
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.sortByUsageToggle) elements.sortByUsageToggle.checked = settings.sortByUsage === true;
+    if (elements.flameStyle) elements.flameStyle.value = settings.flameStyle === 'particle' ? 'particle' : 'classic';
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
     if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
@@ -3990,6 +4025,7 @@ async function saveSettings() {
         },
         dailyDigest: elements.dailyDigestToggle.checked,
         sortByUsage: elements.sortByUsageToggle ? elements.sortByUsageToggle.checked : false,
+        flameStyle: elements.flameStyle ? elements.flameStyle.value : 'classic',
         showCodex: elements.showCodexToggle.checked,
         showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
