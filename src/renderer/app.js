@@ -786,9 +786,14 @@ function syncAnthropicAuthControls() {
     const connected = hasClaudeWebCredentials();
     const usingCli = !connected && !!credentials?.cliFallbackAvailable;
     if (elements.anthropicLoginStatus) {
+        // The CLI-fallback wording matters: after a logout the section keeps
+        // showing data from the local claude CLI login, which used to read as
+        // "the logout didn't work". Say exactly what is happening instead.
         elements.anthropicLoginStatus.textContent = connected
             ? 'Connected to Claude.ai'
-            : (usingCli ? 'Not connected (using CLI login)' : 'Not connected');
+            : (usingCli
+                ? 'Claude.ai logged out — still tracking your local claude CLI login (toggle "CLI account" off to stop)'
+                : 'Not connected');
     }
     if (elements.logoutBtn) {
         elements.logoutBtn.textContent = connected ? 'Log Out' : 'Log In';
@@ -1355,13 +1360,18 @@ function syncGraphLayoutState() {
 function _fitPresetIfGraphHidden() {
     if (_activePreset === null || _graphIsInline()) return;
     // Wait for Electron's preset bounds and the resulting CSS reflow before
-    // measuring the provider rows. The callback re-checks state in case the
-    // chart was enabled during the transition.
-    setTimeout(() => {
-        if (_activePreset === null || _graphIsInline()) return;
-        syncGraphLayoutState();
-        _forceFitHeight({ fitPreset: true, intrinsic: true });
-    }, 120);
+    // measuring the provider rows. A preset switch (wide→tall) triggers a
+    // large reflow that can outlast one timer, so the fit runs in several
+    // idempotent passes — each re-checks state in case the chart was enabled
+    // mid-transition. (One 120ms pass used to measure mid-reflow and leave
+    // the reserved-graph void the tall preset was reported with.)
+    for (const delay of [150, 450, 900]) {
+        setTimeout(() => {
+            if (_activePreset === null || _graphIsInline()) return;
+            syncGraphLayoutState();
+            _forceFitHeight({ fitPreset: true, intrinsic: true });
+        }, delay);
+    }
 }
 
 // Combined height of any visible notice banners (update + stale-session)
@@ -3128,9 +3138,9 @@ function showLoginRequired() {
     elements.loadingContainer.style.display = 'none';
     elements.noUsageContainer.style.display = 'none';
     elements.mainContent.style.display = isCompactMode ? 'none' : 'block';
-    // Close any open overlays
-    elements.settingsOverlay.style.display = 'none';
-    elements.compactSettingsOverlay.style.display = 'none';
+    // Deliberately do NOT close the settings overlay here: logging out lands
+    // in this path when no fallback exists, and yanking the user out of
+    // Settings made the logout look like a silent malfunction.
     // Logged out — the stale-session notice no longer applies
     const staleBanner = document.getElementById('staleBanner');
     if (staleBanner) staleBanner.style.display = 'none';
