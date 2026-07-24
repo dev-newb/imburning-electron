@@ -4,6 +4,7 @@
   "description": "Burnwatch — desktop widget tracking AI usage across Anthropic, OpenAI and Google",
   "main": "main.js",
   "scripts": {
+    "test": "node --test",
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
@@ -27,8 +28,8 @@
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
     "cross-env": "^7.0.3",
-    "electron": "^28.3.3",
-    "electron-builder": "^24.9.1"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
@@ -67,7 +68,9 @@
     "files": [
       "**/*",
       "!**/*.ts",
-      "!*.md"
+      "!*.md",
+      "!test/**",
+      "!tools/**"
     ],
     "mac": {
       "target": [
