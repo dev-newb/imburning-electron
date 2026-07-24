@@ -15,14 +15,18 @@ step. Only **Windows** binaries are published; macOS/Linux are build-from-source
 1. **Bump the version** in `package.json` (the `version` field). This value drives both the built
    artifact filenames and the electron-updater `latest.yml`.
 
-2. **Commit and push** to the default branch:
+2. **Gate it:** `npm test` (must be all-green) and `npm audit --omit=dev` (no high/critical, or an
+   explicitly documented acceptance).
+
+3. **Commit and push** to the default branch — the lockfile ships with every version/dependency
+   change, never `package.json` alone:
    ```bash
-   git add package.json
+   git add package.json package-lock.json
    git commit -m "release: vX.Y.Z"
    git push origin feature/fable-usage
    ```
 
-3. **Build the Windows artifacts:**
+4. **Build the Windows artifacts:**
    ```bash
    npm run build:win
    ```
@@ -32,7 +36,7 @@ step. Only **Windows** binaries are published; macOS/Linux are build-from-source
    - `Claude-Usage-Widget-{version}-win-portable.exe`
    - `latest.yml`
 
-4. **Create the GitHub Release** and attach those four files:
+5. **Create the GitHub Release** and attach those four files:
    ```bash
    gh release create vX.Y.Z \
      --repo dev-newb/burnwatch \
@@ -44,7 +48,7 @@ step. Only **Windows** binaries are published; macOS/Linux are build-from-source
      dist/latest.yml
    ```
 
-5. **Done.** electron-updater reads `latest.yml` from the release and delivers the update to
+6. **Done.** electron-updater reads `latest.yml` from the release and delivers the update to
    installed (installer-build) clients **silently** — they pick it up on launch or the daily check,
    download in the background, and apply it on next launch. Portable users update by re-downloading.
 

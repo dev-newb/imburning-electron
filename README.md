@@ -27,6 +27,17 @@ Burnwatch tracks **both accounts per company, simultaneously**:
 
 ---
 
+## New in 2.2 — rank by burn, richer fire, and a hardening pass
+
+- 📊 **Sort models by usage** *(Settings, optional)* — inside every company the pools you're burning hardest rise to the top, live: portrait rows, wide-mode dual tables, and compact bars all rank by current %. Session & Weekly stay pinned; credits and reset orbs keep the bottom.
+- 🔥 **The burn got better** — an ember glow rides the fire front, letters flash white-hot as they ignite, ash flakes tumble off freshly charred text, and restored rows return under a golden sheen. It's cheaper too: particle counts are capped and everything stops cold while the window is hidden.
+- 🔐 **Hardening** — the Claude session key now never leaves the main process (the whole login flow runs there), diagnostics never print key material or account identity, and Settings warns when no OS keychain is available for encrypted storage.
+- ⚡ **One parked fetch window** instead of a fresh hidden browser per request — far less process churn, plus real HTTP statuses so an expired session is detected exactly instead of guessed.
+- 🐧 **WSL that behaves** — discovery skips docker-desktop-style utility distros and no longer re-probes (or accidentally boots) distros every few minutes; the rescan button is the explicit refresh.
+- 🧭 **Gemini order** — Pro first, then 3.6 Flash and 3.5 Flash-Lite. Plus day-boundary chart ticks, detached-graph parity (reset marker + clamped projections), a stale-session notice instead of silently stale rows, keyboard & screen-reader accessibility, light-theme fixes, and ~370 lines of dead CSS gone.
+
+---
+
 ## Every pool, all three companies
 
 Each provider meters more than one thing — Burnwatch shows **all of it**:
@@ -65,7 +76,7 @@ Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped t
 - 🎨 **Themes** — Dark, Light, or follow the System, plus a custom widget **font colour**
 - 🖌️ **Tray badge colours** — per-company background + number colours, all editable in Settings
 - 🚨 **Critical outline** — badges gain a coloured border the moment a provider's API flags a limit as critical
-- ⏱️ **Refresh interval** — 15s / 30s / 1m / 2m / 5m (default 5m); the countdowns keep ticking live in between
+- ⏱️ **Refresh interval** — 30s / 1m / 2m / 5m (default 5m); the countdowns keep ticking live in between
 - 📌 **Window behaviour** — launch at startup, always-on-top, hide-from-taskbar, remembered position — all in-app toggles
 - 🧯 **Thresholds** — set your own warn/danger percentages that recolour every bar
 

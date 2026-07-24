@@ -81,7 +81,8 @@ build-from-source (see [INSTALL.md](INSTALL.md)).
 - **Renderer (widget UI):** run `npm run dev`, or set `NODE_ENV=development` — DevTools opens
   automatically. Use the DevTools console and Network tab to inspect the UI and provider API calls.
 - **Main process:** logs print to the terminal where you launched Burnwatch.
-- **Verbose logging:** set `DEBUG_LOG=1` (or pass `--burnwatch-debug`) to enable the main process's verbose
+- **Verbose logging:** diagnostics are redacted — they never print session-key material or OAuth
+  account identity, so the flag is safe to use around real logins. Set `DEBUG_LOG=1` (or pass `--burnwatch-debug`) to enable the main process's verbose
   debug logging:
   ```bash
   DEBUG_LOG=1 npm start          # macOS/Linux
