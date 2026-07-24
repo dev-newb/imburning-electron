@@ -2428,18 +2428,18 @@ body.sz3 .usage-headers { grid-template-columns: 46px 44px 36px 36px 68px; justi
 body.sz4 .usage-headers { grid-template-columns: 46px 44px 36px 36px; justify-content: start; gap: clamp(3px, 1.8vw, 7px); }
 
 /* ---- The CLI subheading IS the second-account pill now ---- */
+/* Quiet amber text, no pill box (the framed background read as cheap chrome) */
 .subheading.cli-pill {
-    background: rgba(245, 158, 11, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.45);
-    border-radius: 9px;
-    padding: 2px 9px;
+    background: none;
+    border: none;
+    padding: 2px 4px;
     color: #d97706;
     font-size: 8px;
     letter-spacing: 1.2px;
 }
 
 body.theme-light .subheading.cli-pill {
-    background: rgba(245, 158, 11, 0.14);
+    background: none;
     color: #b45309;
 }
 
@@ -2646,6 +2646,23 @@ body.landscape .dual-table.hide-cli .dual-head {
 
 body.landscape .section-footer { margin-top: auto; }
 
+/* Wide mode: the planner text starts at the SAME height in every column,
+   whether or not a column shows a "via CLI login" / "N hidden" chip. The
+   footer reserves a fixed band and top-anchors the planner; the chip floats
+   to the bottom-right instead of pushing the planner up a line. */
+body.landscape .section-footer {
+    position: relative;
+    align-content: start;
+    min-height: 60px;
+}
+body.landscape .section-footer .section-chip,
+body.landscape .section-footer .hidden-rows-chip {
+    position: absolute;
+    right: 14px;
+    bottom: 0;
+    margin: 0;
+}
+
 /* CLI second account as a mini strip at the top of the column: abbreviated
    pill + label-less rows (percent, ring, pie only) */
 body.landscape.dual-compact .section-body > .connect-row,
@@ -2754,7 +2771,9 @@ body.landscape .dual-table.hide-cli .dual-head {
     height: 16px;
     padding: 0;
     border-radius: 3px;
-    border-color: rgba(45, 212, 191, 0.55);
+    /* Full border here — the base .dual-pill is now border:none (no box), so
+       the collapsed >_ terminal button must declare its own frame. */
+    border: 1px solid rgba(45, 212, 191, 0.55);
     background: rgba(45, 212, 191, 0.10);
     color: #2dd4bf;
     font-family: Consolas, 'Courier New', monospace;
@@ -2770,7 +2789,7 @@ body.landscape .dual-table.hide-cli .dual-head {
 }
 
 body.theme-light .dual-table.hide-cli .dual-pill {
-    border-color: rgba(8, 127, 107, 0.55);
+    border: 1px solid rgba(8, 127, 107, 0.55);
     background: rgba(8, 127, 107, 0.08);
     color: #087f6b;
 }
@@ -2818,11 +2837,13 @@ body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
     justify-items: center;
 }
 
+/* Expanded "CLI: 2ND ACCT" label: plain amber text, no pill box. (The
+   collapsed >_ terminal button below keeps its own frame — that's a
+   deliberate affordance, not chrome.) */
 .dual-pill {
-    background: rgba(245, 158, 11, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.45);
-    border-radius: 9px;
-    padding: 1px 7px;
+    background: none;
+    border: none;
+    padding: 1px 3px;
     color: #d97706;
     font-size: 7px;
     font-weight: 700;
@@ -2831,7 +2852,7 @@ body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
     white-space: nowrap;
 }
 
-.dual-pill:hover { background: rgba(245, 158, 11, 0.22); }
+.dual-pill:hover { color: #b45309; }
 
 /* Remaining-time pies inside the pair trios */
 .pie-cell { font-size: 0 !important; display: flex; justify-content: center; }
