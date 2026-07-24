@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-widget",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "description": "Burnwatch — desktop widget tracking AI usage across Anthropic, OpenAI and Google",
   "main": "main.js",
   "scripts": {

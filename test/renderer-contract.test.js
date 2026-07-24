@@ -149,10 +149,10 @@ test('collapsed landscape CLI groups become terminal buttons and release preset-
   const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
   const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
 
-  assert.match(preload, /fitLandscapeWidth: \(expanded\) => ipcRenderer\.send\('fit-landscape-width', expanded === true\)/);
-  assert.match(main, /const WIDE_COLLAPSED_WIDTH = 780;/);
+  assert.match(preload, /fitLandscapeWidth: \(width\) => ipcRenderer\.send\('fit-landscape-width', Number\(width\) \|\| 0\)/);
   assert.match(main, /ipcMain\.on\('fit-landscape-width'[\s\S]*Math\.abs\(bounds\.width - _managedPresetWidth\) > PRESET_WIDTH_TOLERANCE[\s\S]*_managedPresetWidth = null/);
-  assert.match(app, /function syncLandscapeCliWidth\(\)[\s\S]*tables\.some\(\(table\) => !table\.classList\.contains\('hide-cli'\)\)/);
+  // Collapsed columns get a fixed narrow width; the window shrinks to fit them
+  assert.match(app, /function syncLandscapeCliWidth\(\)[\s\S]*COLLAPSED_COL_W[\s\S]*fitLandscapeWidth\(Math\.max\(786, target\)\)/);
   assert.match(app, /if \(!hidden\) \{[\s\S]*table\.classList\.remove\('hide-cli'\)[\s\S]*syncLandscapeCliWidth\(\)/);
   assert.match(css, /body\.landscape \.dual-table\.hide-cli \.dual-row,[\s\S]*grid-template-columns: minmax\(42px, 46px\) minmax\(0, 1fr\) 24px;/);
   assert.match(css, /\.dual-table\.hide-cli \.dual-pill::after\s*\{[\s\S]*content: '>_';/);

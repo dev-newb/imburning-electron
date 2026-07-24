@@ -1983,6 +1983,10 @@ function applySqueezeClasses() {
         if (window.electronAPI.setMinHeight) window.electronAPI.setMinHeight(landscape ? 340 : 180);
     }
     document.body.classList.toggle('landscape', landscape);
+    // Leaving wide mode drops the per-column width override (collapsed-CLI fit)
+    if (!landscape && elements.mainContent.style.gridTemplateColumns) {
+        elements.mainContent.style.gridTemplateColumns = '';
+    }
     document.body.classList.toggle('vh-short', landscape && h < 420);
     const eff = landscape ? Math.floor(w / 3) - 10 : w;
     document.body.classList.toggle('sz1', eff <= 540);
@@ -2269,16 +2273,38 @@ function buildDualPair(info, cliSide) {
     return pair;
 }
 
+// Wide mode: a company whose second (CLI) account is collapsed no longer
+// needs a full third of the window. Give each collapsed column a fixed narrow
+// width and let the rest flex, then shrink the window by the reclaimed space
+// so there's no empty gap. Expanding a cluster restores the full preset width.
+const COLLAPSED_COL_W = 196;   // label + desktop trio + >_ restore + padding
+const EXPANDED_COL_W = 284;    // a full desktop+CLI dual column (measured)
+const WIDE_H_CHROME = 48;      // .content padding (20) + two 14px column gaps
 function syncLandscapeCliWidth() {
     if (_activePreset !== 'wide' || !document.body.classList.contains('landscape')
         || !window.electronAPI.fitLandscapeWidth) return;
-    const tables = ['dualTableAnthropic', 'dualTableOpenai', 'dualTableGoogle']
-        .map((id) => document.getElementById(id))
-        .filter((table) => table && table.parentElement?.classList.contains('has-dual'));
-    if (!tables.length) return;
-    // One open second-account cluster still needs the full preset width. Only
-    // contract when every visible provider has collapsed its CLI columns.
-    window.electronAPI.fitLandscapeWidth(tables.some((table) => !table.classList.contains('hide-cli')));
+    const mc = elements.mainContent;
+    const sections = ['sectionAnthropic', 'sectionOpenai', 'sectionGoogle']
+        .map((id) => document.getElementById(id));
+    const cols = [];
+    let collapsed = 0;
+    let target = WIDE_H_CHROME;
+    for (const sec of sections) {
+        const dual = sec && sec.querySelector('.dual-table');
+        const isCollapsed = !!(dual && dual.classList.contains('hide-cli'));
+        if (isCollapsed) { cols.push(COLLAPSED_COL_W + 'px'); target += COLLAPSED_COL_W; collapsed++; }
+        else { cols.push('minmax(0, 1fr)'); target += EXPANDED_COL_W; }
+    }
+    if (collapsed === 0) {
+        // All second accounts shown — hand geometry back to the full preset.
+        mc.style.gridTemplateColumns = '';
+        window.electronAPI.fitLandscapeWidth(0);
+        return;
+    }
+    mc.style.gridTemplateColumns = cols.join(' ');
+    // Never shrink below the landscape threshold (innerWidth >= 760) or the
+    // wide layout would disengage back to portrait.
+    window.electronAPI.fitLandscapeWidth(Math.max(786, target));
 }
 
 function renderDualTables(data) {

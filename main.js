@@ -104,7 +104,6 @@ const WIDGET_WIDTH = process.platform === 'darwin' ? 590 : 560;
 const WIDGET_HEIGHT = 155;
 const MIN_WIDGET_WIDTH = 290;
 const WIDE_PRESET_WIDTH = 900;
-const WIDE_COLLAPSED_WIDTH = 780;
 const PRESET_WIDTH_TOLERANCE = 12;
 const HISTORY_RETENTION_DAYS = 8;
 const CHART_DAYS = 7;
@@ -3133,7 +3132,11 @@ ipcMain.on('resize-window', (event, height, force, fitPreset, userAction) => {
 // columns; revealing one restores the normal preset width. A mismatched
 // current width means the user resized it, so stop managing width until the
 // wide preset is explicitly chosen again.
-ipcMain.on('fit-landscape-width', (event, expanded) => {
+// The renderer computes the exact width the wide layout needs given which CLI
+// clusters are collapsed (each collapsed column is a fixed narrow width, the
+// rest flex), and passes it here. 0 restores the full wide preset. Only acts
+// while the wide preset still owns the width (a manual drag releases it).
+ipcMain.on('fit-landscape-width', (event, targetWidth) => {
   if (!mainWindow || _activeWindowPreset !== 'wide' || _managedPresetWidth == null) return;
   const bounds = mainWindow.getBounds();
   if (Math.abs(bounds.width - _managedPresetWidth) > PRESET_WIDTH_TOLERANCE) {
@@ -3141,8 +3144,11 @@ ipcMain.on('fit-landscape-width', (event, expanded) => {
     return;
   }
   const workArea = screen.getDisplayMatching(bounds).workArea;
-  const requested = expanded ? WIDE_PRESET_WIDTH : WIDE_COLLAPSED_WIDTH;
+  const requested = (typeof targetWidth === 'number' && targetWidth > 0)
+    ? Math.max(MIN_WIDGET_WIDTH, Math.round(targetWidth))
+    : WIDE_PRESET_WIDTH;
   const width = Math.min(requested, workArea.width);
+  if (Math.abs(width - bounds.width) < 2) { _managedPresetWidth = width; return; }
   const x = Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - width);
   mainWindow.setBounds({ x, y: bounds.y, width, height: bounds.height });
   _managedPresetWidth = mainWindow.getBounds().width;
