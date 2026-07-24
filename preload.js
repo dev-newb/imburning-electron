@@ -1,5 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Sandboxed preloads may only require Electron and a small built-in subset.
+// Keep this tiny sanitizer local and validate again in the main process.
+function sanitizeFetchOptions(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const sanitized = {};
+  if (value.forceExtended === true) sanitized.forceExtended = true;
+  if (value.forceProviders === true) sanitized.forceProviders = true;
+  if (value.refreshLocalCredentials === true) sanitized.refreshLocalCredentials = true;
+  return sanitized;
+}
+
 // Allowed domains for openExternal — prevents renderer from opening arbitrary URLs
 const ALLOWED_EXTERNAL_DOMAINS = [
   'claude.ai',
@@ -31,7 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window controls
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
-  resizeWindow: (height, force) => ipcRenderer.send('resize-window', height, force),
+  resizeWindow: (height, force, fitPreset) => ipcRenderer.send('resize-window', height, force, fitPreset),
+  fitLandscapeWidth: (expanded) => ipcRenderer.send('fit-landscape-width', expanded === true),
   setMinHeight: (h) => ipcRenderer.send('set-min-height', h),
 
   // Window position
@@ -50,7 +62,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // API
-  fetchUsageData: () => ipcRenderer.invoke('fetch-usage-data'),
+  fetchUsageData: (options = {}) => ipcRenderer.invoke('fetch-usage-data', sanitizeFetchOptions(options)),
   getUsageHistory: () => ipcRenderer.invoke('get-usage-history'),
   exportHistory: (format) => ipcRenderer.invoke('export-history', format),
   openExternal: (url) => {
@@ -95,6 +107,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   graphSetAlwaysOnTop: (flag) => ipcRenderer.send('graph-set-always-on-top', flag),
   graphGetAlwaysOnTop: () => ipcRenderer.invoke('graph-get-always-on-top'),
   onUsageUpdated: (callback) => { ipcRenderer.on('usage-updated', () => callback()); },
+  onGraphSettingsUpdated: (callback) => { ipcRenderer.on('graph-settings-updated', () => callback()); },
   onGraphWindowClosed: (callback) => { ipcRenderer.on('graph-window-closed', () => callback()); },
 
   // Official OAuth connect flows (OpenAI / Google)

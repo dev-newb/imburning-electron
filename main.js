@@ -1,9 +1,16 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage, dialog, screen } = require('electron');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const Store = require('electron-store');
-const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
+const { fetchViaWindow } = require('./src/fetch-via-window');
+const { JsonlHistoryStore, DAY_MS, dedupeEntries } = require('./src/history-store');
+const { finiteOrNull, sampleGapLimitMs, positiveBurn, latestContiguousRun, isExplicitAuthFailure } = require('./src/usage-math');
+const { clampBoundsToDisplays } = require('./src/window-bounds');
+const { startOAuthCallbackServer } = require('./src/oauth-callback');
+const { sanitizeHiddenSeries, sanitizeFetchOptions } = require('./src/settings-validation');
+const { normalizeGeminiQuota } = require('./src/provider-models');
+const { discoverCredentialHomes, clearCredentialHomeCache } = require('./src/local-credential-sources');
 
 const GITHUB_OWNER = 'dev-newb';
 const GITHUB_REPO = 'burnwatch';
@@ -44,9 +51,10 @@ try {
 // Non-sensitive settings storage (no encryption needed)
 const store = new Store();
 
-// Debug mode: set DEBUG_LOG=1 env var or pass --debug flag to see verbose logs.
+// Debug mode: set DEBUG_LOG=1 or pass the app-specific flag below. Electron 43
+// reserves --debug for Node and exits before app startup when it is present.
 // Regular users will only see critical errors in the console.
-const DEBUG = process.env.DEBUG_LOG === '1' || process.argv.includes('--debug');
+const DEBUG = process.env.DEBUG_LOG === '1' || process.argv.includes('--burnwatch-debug');
 function debugLog(...args) {
   if (DEBUG) console.log('[Debug]', ...args);
 }
@@ -57,12 +65,72 @@ let mainWindow = null;
 let sessionTray = null;  // Tray icon for Session usage
 let weeklyTray = null;   // Tray icon for Weekly usage
 let fableTray = null;    // Tray icon for the scoped weekly limit (e.g. Fable)
+let restoreTray = null;  // Generic recovery icon when minimize-to-tray has no stats badge
+const _providerTrays = { codex: null, codexCli: null, gemini: null, geminiCli: null, claudeCli: null };
+let isQuitting = false;
 
 const WIDGET_WIDTH = process.platform === 'darwin' ? 590 : 560;
 const WIDGET_HEIGHT = 155;
+const MIN_WIDGET_WIDTH = 290;
+const WIDE_PRESET_WIDTH = 900;
+const WIDE_COLLAPSED_WIDTH = 780;
+const PRESET_WIDTH_TOLERANCE = 12;
 const HISTORY_RETENTION_DAYS = 8;
 const CHART_DAYS = 7;
 const MAX_HISTORY_SAMPLES = 10000; // Cap total samples to prevent unbounded growth
+const OAUTH_HTTP_TIMEOUT_MS = 15000;
+const historyStore = new JsonlHistoryStore({
+  baseDir: path.join(path.dirname(configPath), 'usage-history-v2'),
+  retentionDays: HISTORY_RETENTION_DAYS,
+  maxSamples: MAX_HISTORY_SAMPLES,
+  logger: (...args) => debugLog(...args)
+});
+
+function currentHistoryScope() {
+  return store.get('organizationId') || 'default';
+}
+
+function getHistorySnapshot() {
+  return historyStore.getCached(currentHistoryScope());
+}
+
+function orderedDisplays() {
+  const primary = screen.getPrimaryDisplay();
+  return [primary, ...screen.getAllDisplays().filter((display) => display.id !== primary.id)];
+}
+
+function recoverWindowBounds(bounds, options = {}) {
+  return clampBoundsToDisplays(bounds, orderedDisplays(), options);
+}
+
+function hasTrayIcon() {
+  const providerTrays = typeof _providerTrays === 'object' ? Object.values(_providerTrays) : [];
+  return [restoreTray, sessionTray, weeklyTray, fableTray, ...providerTrays]
+    .some((tray) => tray && !tray.isDestroyed());
+}
+
+function showMainWindowSmart() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const before = mainWindow.getBounds();
+  const recovered = recoverWindowBounds(before, {
+    fallbackWidth: WIDGET_WIDTH,
+    fallbackHeight: WIDGET_HEIGHT,
+    minWidth: MIN_WIDGET_WIDTH,
+    minHeight: 180
+  });
+  if (before.x !== recovered.x || before.y !== recovered.y
+      || before.width !== recovered.width || before.height !== recovered.height) {
+    debugLog('[Window] Recovering main window to visible bounds');
+    mainWindow.setBounds(recovered);
+    store.set('windowPosition', { x: recovered.x, y: recovered.y });
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 // Extract scoped weekly limits (e.g. Fable) from the `limits` array. The
 // legacy seven_day_<model> fields arrive null for these models, so the
@@ -87,31 +155,54 @@ function getScopedWeeklyLimits(data) {
 // Claude Code stores an OAuth token locally; api.anthropic.com's usage
 // endpoint returns the same shape as the claude.ai one (limits[] included),
 // so the widget can track the CLI account with no extra login.
-function readClaudeCodeToken() {
-  try {
-    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-    if (!fs.existsSync(credPath)) return null;
-    const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-    const oauth = creds.claudeAiOauth;
-    if (!oauth?.accessToken) return null;
-    // Use the token only while it is fresh. Deliberately NO refresh-token flow:
-    // consuming a (potentially rotating) refresh token here could invalidate
-    // the CLI's own login. Claude Code refreshes this file whenever it runs.
-    if (oauth.expiresAt && Date.now() >= oauth.expiresAt) {
-      debugLog('[ClaudeCode] CLI token expired', new Date(oauth.expiresAt).toISOString(), '— skipping (runs of the claude CLI refresh it)');
-      return null;
-    }
-    return oauth.accessToken;
-  } catch (err) {
-    debugLog('[ClaudeCode] Could not read CLI credentials:', err.message);
-    return null;
-  }
+function localCredentialHomes() {
+  return discoverCredentialHomes()
+    // WSL is an unambiguous CLI environment. Prefer it over Windows copies,
+    // which may belong to the desktop app, while preserving Windows fallback.
+    .sort((a, b) => Number(b.kind === 'wsl') - Number(a.kind === 'wsl'));
 }
 
-function fetchClaudeCodeUsage() {
+function localCredentialFiles(...relativeParts) {
+  const files = [];
+  for (const source of localCredentialHomes()) {
+    const filePath = path.join(source.home, ...relativeParts);
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) files.push({ ...source, filePath, mtimeMs: stat.mtimeMs });
+    } catch {}
+  }
+  return files.sort((a, b) => Number(b.kind === 'wsl') - Number(a.kind === 'wsl')
+    || b.mtimeMs - a.mtimeMs);
+}
+
+function readClaudeCodeCredentials() {
+  const candidates = [];
+  for (const source of localCredentialFiles('.claude', '.credentials.json')) {
+    try {
+      const creds = JSON.parse(fs.readFileSync(source.filePath, 'utf-8'));
+      const oauth = creds.claudeAiOauth;
+      if (!oauth?.accessToken) continue;
+      // Use the token only while it is fresh. Deliberately NO refresh-token
+      // flow: consuming a rotating refresh token could invalidate Claude Code.
+      if (oauth.expiresAt && Date.now() >= oauth.expiresAt) {
+        debugLog('[ClaudeCode] CLI token expired for', source.id,
+          new Date(oauth.expiresAt).toISOString(), '— skipping');
+        continue;
+      }
+      candidates.push({ ...source, accessToken: oauth.accessToken });
+    } catch (err) {
+      debugLog('[ClaudeCode] Could not read', source.id, 'credentials:', err.message);
+    }
+  }
+  return candidates;
+}
+
+function readClaudeCodeToken() {
+  return readClaudeCodeCredentials()[0]?.accessToken || null;
+}
+
+function fetchClaudeCodeWithToken(token) {
   return new Promise((resolve) => {
-    const token = readClaudeCodeToken();
-    if (!token) return resolve(null);
     const req = https.request({
       hostname: 'api.anthropic.com',
       path: '/api/oauth/usage',
@@ -140,6 +231,19 @@ function fetchClaudeCodeUsage() {
     req.on('timeout', () => { req.destroy(); resolve(null); });
     req.end();
   });
+}
+
+async function fetchClaudeCodeUsage() {
+  const candidates = readClaudeCodeCredentials();
+  if (!candidates.length) return null;
+  const results = await Promise.all(candidates.map(async (candidate) => ({
+    candidate,
+    data: await fetchClaudeCodeWithToken(candidate.accessToken)
+  })));
+  const selected = results.find((result) => result.data);
+  if (!selected) return null;
+  debugLog('[ClaudeCode] Using local credentials from', selected.candidate.id);
+  return selected.data;
 }
 
 // ---- CLI vs web account comparison (Anthropic) ----
@@ -184,25 +288,34 @@ function detectClaudeCliSameAccount(data) {
 // same usage endpoint the CLI polls. The stored access token is used as-is —
 // never refreshed here — and when it has expired we fall back to the newest
 // rate-limit snapshot embedded in the CLI's own session logs.
-function readCodexAuth() {
-  try {
-    const p = path.join(os.homedir(), '.codex', 'auth.json');
-    if (!fs.existsSync(p)) return null;
-    const auth = JSON.parse(fs.readFileSync(p, 'utf-8'));
-    const accessToken = auth.tokens?.access_token;
-    if (!accessToken) return null;
+function readCodexAuthCandidates() {
+  const candidates = [];
+  for (const source of localCredentialFiles('.codex', 'auth.json')) {
     try {
-      const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
-      if (payload.exp && Date.now() >= payload.exp * 1000) {
-        debugLog('[Codex] Access token expired — will use session snapshot');
-        return null;
-      }
-    } catch {}
-    return { accessToken, accountId: auth.tokens?.account_id || null };
-  } catch (err) {
-    debugLog('[Codex] Could not read auth.json:', err.message);
-    return null;
+      const auth = JSON.parse(fs.readFileSync(source.filePath, 'utf-8'));
+      const accessToken = auth.tokens?.access_token;
+      if (!accessToken) continue;
+      try {
+        const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+          debugLog('[Codex] Access token expired for', source.id, '— will use session snapshot');
+          continue;
+        }
+      } catch {}
+      candidates.push({
+        ...source,
+        accessToken,
+        accountId: auth.tokens?.account_id || null
+      });
+    } catch (err) {
+      debugLog('[Codex] Could not read', source.id, 'auth.json:', err.message);
+    }
   }
+  return candidates;
+}
+
+function readCodexAuth() {
+  return readCodexAuthCandidates()[0] || null;
 }
 
 function codexWindowSuffix(windowSeconds) {
@@ -320,9 +433,9 @@ function fetchCodexWithToken(accessToken, accountId) {
 
 // Fallback: newest rate_limits snapshot from the Codex CLI's session logs
 const CODEX_SNAPSHOT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-function readCodexSessionSnapshot() {
+function readCodexSessionSnapshotFromHome(source) {
   try {
-    const root = path.join(os.homedir(), '.codex', 'sessions');
+    const root = path.join(source.home, '.codex', 'sessions');
     if (!fs.existsSync(root)) return null;
     let dir = root;
     for (let depth = 0; depth < 3; depth++) {
@@ -366,38 +479,70 @@ function readCodexSessionSnapshot() {
             resetsAt: w.resets_at ? new Date(w.resets_at * 1000).toISOString() : null
           });
         }
-        if (limits.length) return { source: 'session', asOf: event.timestamp || null, limits };
+        if (limits.length) {
+          return {
+            data: { source: 'session', asOf: event.timestamp || null, limits },
+            source,
+            mtimeMs: files[0].m
+          };
+        }
       } catch {}
     }
     return null;
   } catch (err) {
-    debugLog('[Codex] Session snapshot read failed:', err.message);
+    debugLog('[Codex] Session snapshot read failed for', source.id, ':', err.message);
     return null;
   }
+}
+
+function readCodexSessionSnapshot() {
+  const snapshots = localCredentialHomes()
+    .map(readCodexSessionSnapshotFromHome)
+    .filter(Boolean)
+    .sort((a, b) => Number(b.source.kind === 'wsl') - Number(a.source.kind === 'wsl')
+      || b.mtimeMs - a.mtimeMs);
+  const selected = snapshots[0];
+  if (!selected) return null;
+  debugLog('[Codex] Using session snapshot from', selected.source.id);
+  return selected.data;
 }
 
 // Primary = the widget's own OpenAI login; CLI creds are fallback + dual source
 async function fetchCodexUsage() {
   const oauth = await getOAuthAccessToken('openai');
-  const primary = oauth
-    ? await fetchCodexWithToken(oauth.accessToken, oauth.accountId)
-    : null;
-
-  const cliAuth = readCodexAuth();
-  const cliData = cliAuth
-    ? await fetchCodexWithToken(cliAuth.accessToken, cliAuth.accountId)
-    : null;
+  const cliCandidates = readCodexAuthCandidates();
+  const [primary, cliResults] = await Promise.all([
+    oauth ? fetchCodexWithToken(oauth.accessToken, oauth.accountId) : Promise.resolve(null),
+    Promise.all(cliCandidates.map(async (candidate) => {
+      const fetched = await fetchCodexWithToken(candidate.accessToken, candidate.accountId);
+      return {
+        candidate,
+        data: fetched && !fetched.accountId && candidate.accountId
+          ? { ...fetched, accountId: candidate.accountId }
+          : fetched
+      };
+    }))
+  ]);
+  const usableCliResults = cliResults.filter((result) => result.data);
 
   if (primary) {
-    const cliSame = !cliData || !cliData.accountId || !primary.accountId
-      || cliData.accountId === primary.accountId;
+    // Prefer a local account that is genuinely different from the widget's
+    // desktop OAuth account. This prevents a Windows desktop auth copy from
+    // masking a distinct WSL CLI login.
+    const selected = usableCliResults.find((result) => result.data.accountId
+      && primary.accountId && result.data.accountId !== primary.accountId);
+    if (selected) debugLog('[Codex] Using local credentials from', selected.candidate.id);
     return {
       ...primary,
       connected: true,
-      cli: cliSame ? null : cliData
+      cli: selected?.data || null
     };
   }
-  if (cliData) return { ...cliData, connected: false, cli: null };
+  const selected = usableCliResults[0];
+  if (selected) {
+    debugLog('[Codex] Using local credentials from', selected.candidate.id);
+    return { ...selected.data, connected: false, cli: null };
+  }
   const snapshot = readCodexSessionSnapshot();
   return snapshot ? { ...snapshot, connected: false, cli: null } : null;
 }
@@ -453,6 +598,17 @@ function getGeminiOAuthClient() {
 }
 let _geminiAccessToken = { token: null, expiresAt: 0 };
 
+function hasGeminiCliCredentials() {
+  try {
+    const credPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+    if (!fs.existsSync(credPath)) return false;
+    const credentials = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+    return !!(credentials.access_token || credentials.refresh_token);
+  } catch {
+    return false;
+  }
+}
+
 function getGeminiAccessToken() {
   return new Promise((resolve) => {
     try {
@@ -505,57 +661,52 @@ function getGeminiAccessToken() {
   });
 }
 
-// One row per quota bucket — Google meters each model VERSION separately
-// (e.g. 2.5 Pro, 2.5 Flash, 2.5 Flash Lite, 3.1 Flash Lite all have their
-// own independent daily pools), so collapsing them loses real information.
-function geminiModelLabel(modelId) {
-  // "gemini-2.5-flash-lite" -> "2.5 Flash Lite (daily)"
-  const parts = String(modelId).replace(/^gemini-/i, '').split('-')
-    .map((p) => /^\d/.test(p) ? p : p.charAt(0).toUpperCase() + p.slice(1));
-  return `${parts.join(' ')} (daily)`;
-}
-
-function normalizeGeminiQuota(json) {
-  const buckets = json?.buckets || [];
-  const limits = [];
-  for (const b of buckets) {
-    if (b.remainingFraction == null || !b.modelId) continue;
-    limits.push({
-      key: 'm_' + String(b.modelId).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-      label: geminiModelLabel(b.modelId),
-      percent: Math.round((1 - b.remainingFraction) * 1000) / 10,
-      resetsAt: b.resetTime || null
-    });
-  }
-  // Pro pools first, then the rest in API order
-  limits.sort((a, b) => (/pro/i.test(b.label) ? 1 : 0) - (/pro/i.test(a.label) ? 1 : 0));
-  return limits.length ? { source: 'live', limits } : null;
-}
-
-function fetchGeminiWithToken(token) {
+// Gemini CLI first resolves the account's Code Assist project, then includes
+// it in retrieveUserQuota. Sending an empty object succeeds but returns only a
+// partial bucket set for some accounts, which can hide newly enabled models.
+function postGeminiCodeAssist(token, method, payload) {
   return new Promise((resolve) => {
-    const body = JSON.stringify({});
+    const body = JSON.stringify(payload);
     const req = https.request({
       hostname: 'cloudcode-pa.googleapis.com',
-      path: '/v1internal:retrieveUserQuota',
+      path: `/v1internal:${method}`,
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      timeout: 10000
+      timeout: 7000
     }, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
         if (res.statusCode !== 200) {
-          debugLog('[Gemini] Quota fetch failed with status', res.statusCode);
+          debugLog(`[Gemini] ${method} failed with status`, res.statusCode);
           return resolve(null);
         }
-        try { resolve(normalizeGeminiQuota(JSON.parse(data))); } catch { resolve(null); }
+        try { resolve(JSON.parse(data)); } catch { resolve(null); }
       });
     });
-    req.on('error', (err) => { debugLog('[Gemini] Quota fetch error:', err.message); resolve(null); });
+    req.on('error', (err) => { debugLog(`[Gemini] ${method} error:`, err.message); resolve(null); });
     req.on('timeout', () => { req.destroy(); resolve(null); });
     req.end(body);
   });
+}
+
+// One row per quota bucket — Google meters each model VERSION separately, so
+// collapsing buckets loses real information. Unknown/future model IDs are
+// retained by normalizeGeminiQuota and appear automatically.
+async function fetchGeminiWithToken(token) {
+  const load = await postGeminiCodeAssist(token, 'loadCodeAssist', {
+    metadata: {
+      ideType: 'IDE_UNSPECIFIED',
+      platform: 'PLATFORM_UNSPECIFIED',
+      pluginType: 'GEMINI'
+    }
+  });
+  const project = typeof load?.cloudaicompanionProject === 'string'
+    ? load.cloudaicompanionProject
+    : null;
+  if (!project) debugLog('[Gemini] Code Assist project unavailable; requesting fallback quota set');
+  const quota = await postGeminiCodeAssist(token, 'retrieveUserQuota', project ? { project } : {});
+  return normalizeGeminiQuota(quota);
 }
 
 // The gemini CLI's login email, from its stored id_token
@@ -638,62 +789,22 @@ function clearOAuthTokens(provider) {
   store.delete(`oauth_${provider}`);
 }
 
-// Wait for the OAuth redirect. Two servers on the SAME port — one on
-// 127.0.0.1, one on ::1 — so both localhost stacks reach us WITHOUT binding a
-// wildcard address (wildcard binds trigger the Windows Firewall prompt;
-// loopback-only binds do not).
-function startOAuthCallbackServer(port, pathName, state) {
-  const http = require('http');
-  return new Promise((resolveListen, rejectListen) => {
-    let settled = false;
-    const servers = [];
-    const emitter = new (require('events').EventEmitter)();
-    const closeAll = () => { for (const s of servers) { try { s.close(); } catch (_) {} } };
+function hasExternalProviderCredentials() {
+  return !!(
+    loadOAuthTokens('openai')
+    || loadOAuthTokens('google')
+    || readCodexAuth()
+    || readCodexSessionSnapshot()
+    || hasGeminiCliCredentials()
+  );
+}
 
-    const handler = (req, res) => {
-      let u;
-      try { u = new URL(req.url, 'http://127.0.0.1'); } catch { res.writeHead(400); res.end(); return; }
-      if (u.pathname !== pathName) { res.writeHead(404); res.end('Not found'); return; }
-      const code = u.searchParams.get('code');
-      const gotState = u.searchParams.get('state');
-      const error = u.searchParams.get('error');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<html><meta charset="utf-8"><body style="font-family:sans-serif;background:#1e1e2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh"><div style="text-align:center"><h2>Burnwatch connected ✓</h2><p>You can close this tab and return to the widget.</p></div></body></html>');
-      setTimeout(closeAll, 500);
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (error) emitter.emit('oauth-result', { error: new Error(`Login refused: ${error}`) });
-      else if (!code || gotState !== state) emitter.emit('oauth-result', { error: new Error('Invalid OAuth callback') });
-      else emitter.emit('oauth-result', { code });
-    };
-
-    const timer = setTimeout(() => {
-      if (!settled) { settled = true; closeAll(); emitter.emit('oauth-result', { error: new Error('Login timed out (5 minutes)') }); }
-    }, 5 * 60 * 1000);
-
-    const v4 = http.createServer(handler);
-    servers.push(v4);
-    v4.on('error', (err) => { clearTimeout(timer); rejectListen(new Error(`Callback port busy: ${err.message}`)); });
-    v4.listen(port, '127.0.0.1', () => {
-      const boundPort = v4.address().port;
-      // Best-effort IPv6 loopback twin on the same port; failure is fine
-      // (the browser falls back to 127.0.0.1)
-      try {
-        const v6 = http.createServer(handler);
-        servers.push(v6);
-        v6.on('error', (err) => debugLog('[OAuth] ::1 twin bind skipped:', err.message));
-        v6.listen(boundPort, '::1');
-      } catch (err) {
-        debugLog('[OAuth] ::1 twin bind failed:', err.message);
-      }
-      debugLog('[OAuth] Callback server listening on', boundPort, '(loopback only)');
-      const codePromise = new Promise((resolve, reject) => {
-        emitter.once('oauth-result', (r) => r.error ? reject(r.error) : resolve(r.code));
-      });
-      resolveListen({ port: boundPort, codePromise });
-    });
-  });
+function hasLocalProviderCredentials() {
+  return !!(
+    readCodexAuth()
+    || readCodexSessionSnapshot()
+    || hasGeminiCliCredentials()
+  );
 }
 
 // Public OAuth client shipped inside the codex CLI binary (verified locally)
@@ -732,8 +843,12 @@ async function runOAuthConnect(provider) {
     throw new Error(`Unknown provider: ${provider}`);
   }
 
-  const { port, codePromise } = await startOAuthCallbackServer(
-    provider === 'openai' ? cfg.redirectPort : 0, cfg.redirectPath, state);
+  const { port, resultPromise, close } = await startOAuthCallbackServer({
+    port: provider === 'openai' ? cfg.redirectPort : 0,
+    pathName: cfg.redirectPath,
+    state,
+    logger: (...args) => debugLog(...args)
+  });
   const redirectUri = `http://localhost:${port}${cfg.redirectPath}`;
 
   const authParams = new URLSearchParams({
@@ -749,39 +864,50 @@ async function runOAuthConnect(provider) {
     authParams.set('access_type', 'offline');
     authParams.set('prompt', 'consent');
   }
-  shell.openExternal(`${cfg.authorizeUrl}?${authParams.toString()}`);
+  try {
+    await shell.openExternal(`${cfg.authorizeUrl}?${authParams.toString()}`);
+  } catch (error) {
+    close();
+    throw error;
+  }
 
-  const code = await codePromise;
+  const callback = await resultPromise;
+  try {
+    const tokenBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: callback.code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: verifier
+    });
+    if (clientSecret) tokenBody.set('client_secret', clientSecret);
+    const resp = await fetch(cfg.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenBody.toString(),
+      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)
+    });
+    const json = await resp.json();
+    if (!json.access_token) throw new Error(`Token exchange failed (${resp.status})`);
 
-  const tokenBody = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    client_id: clientId,
-    code_verifier: verifier
-  });
-  if (clientSecret) tokenBody.set('client_secret', clientSecret);
-  const resp = await fetch(cfg.tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: tokenBody.toString()
-  });
-  const json = await resp.json();
-  if (!json.access_token) throw new Error(`Token exchange failed (${resp.status})`);
-
-  const claims = jwtClaims(json.id_token);
-  const tokens = {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token || null,
-    idToken: json.id_token || null,
-    expiresAt: Date.now() + (json.expires_in || 3600) * 1000,
-    email: claims.email || null,
-    accountId: claims['https://api.openai.com/auth']?.chatgpt_account_id || claims.sub || null
-  };
-  storeOAuthTokens(provider, tokens);
-  _providerCache[provider === 'openai' ? 'codex' : 'gemini'] = undefined; // force refetch
-  debugLog(`[OAuth:${provider}] Connected as`, tokens.email || tokens.accountId);
-  return { email: tokens.email, accountId: tokens.accountId };
+    const claims = jwtClaims(json.id_token);
+    const tokens = {
+      accessToken: json.access_token,
+      refreshToken: json.refresh_token || null,
+      idToken: json.id_token || null,
+      expiresAt: Date.now() + (json.expires_in || 3600) * 1000,
+      email: claims.email || null,
+      accountId: claims['https://api.openai.com/auth']?.chatgpt_account_id || claims.sub || null
+    };
+    storeOAuthTokens(provider, tokens);
+    _providerCache[provider === 'openai' ? 'codex' : 'gemini'] = undefined; // force refetch
+    callback.complete({ ok: true });
+    debugLog(`[OAuth:${provider}] Connected as`, tokens.email || tokens.accountId);
+    return { email: tokens.email, accountId: tokens.accountId };
+  } catch (error) {
+    callback.complete({ ok: false, message: 'The provider token exchange failed. Return to Burnwatch and try again.' });
+    throw error;
+  }
 }
 
 // Fresh widget-owned access token, refreshing (and persisting rotations) as needed
@@ -804,7 +930,8 @@ async function getOAuthAccessToken(provider) {
     const resp = await fetch(cfg.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+      body: body.toString(),
+      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)
     });
     const json = await resp.json();
     if (!json.access_token) {
@@ -845,22 +972,47 @@ ipcMain.handle('oauth-disconnect', async (event, provider) => {
 // The widget refreshes every 30s, but external provider endpoints rate-limit
 // aggressive polling (429s) — cache each provider's result for 5 minutes.
 const PROVIDER_CACHE_MS = 5 * 60 * 1000;
+const PROVIDER_FETCH_TIMEOUT_MS = 16000;
 // Serve the last-good result through transient failures, but only for a bounded
 // window — past this a genuinely-removed provider's rows should disappear
 // instead of lingering forever (until app restart) on a refreshed timestamp.
 const PROVIDER_STALE_MAX_MS = 30 * 60 * 1000;
 const _providerCache = {};
-function cachedProviderFetch(key, fetchFn) {
+
+function resetLocalCredentialCaches() {
+  // A local account switch changes the identity behind these caches. Keep the
+  // Gemini OAuth client discovery (it belongs to the installed CLI), but drop
+  // account-bound access tokens, provider results, account comparisons, and
+  // the cached Windows/WSL home list so newly started distros are discovered.
+  clearCredentialHomeCache();
+  _geminiAccessToken = { token: null, expiresAt: 0 };
+  _ccSameState = { mode: null, candidate: null, streak: 0 };
+  for (const key of Object.keys(_providerCache)) delete _providerCache[key];
+}
+
+function cachedProviderFetch(key, fetchFn, { force = false } = {}) {
   const entry = _providerCache[key];
-  if (entry && Date.now() - entry.at < PROVIDER_CACHE_MS) return Promise.resolve(entry.data);
+  if (!force && entry && Date.now() - entry.at < PROVIDER_CACHE_MS) return Promise.resolve(entry.data);
   const goodAt = entry?.goodAt || 0;
-  const serveStale = (previous) => (previous && Date.now() - goodAt < PROVIDER_STALE_MAX_MS) ? previous : null;
-  return fetchFn().then((data) => {
+  // A manual refresh can represent an account switch. Never show the prior
+  // account's cached values if the newly-read credentials fail.
+  const serveStale = (previous) => (!force && previous && Date.now() - goodAt < PROVIDER_STALE_MAX_MS) ? previous : null;
+  const fetchPromise = Promise.resolve().then(fetchFn);
+  let timeoutId;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = setTimeout(() => {
+      debugLog(`[Provider:${key}] fetch exceeded ${PROVIDER_FETCH_TIMEOUT_MS}ms`);
+      resolve(null);
+    }, PROVIDER_FETCH_TIMEOUT_MS);
+  });
+  return Promise.race([fetchPromise, timeoutPromise]).then((data) => {
+    clearTimeout(timeoutId);
     if (data) { _providerCache[key] = { at: Date.now(), goodAt: Date.now(), data }; return data; }
     const served = serveStale(entry?.data || null);
     _providerCache[key] = { at: Date.now(), goodAt, data: served };
     return served;
   }).catch((err) => {
+    clearTimeout(timeoutId);
     // A provider blowing up must never take the whole fetch down with it
     debugLog(`[Provider:${key}] fetch threw:`, err.message);
     const served = serveStale(entry?.data || null);
@@ -920,11 +1072,12 @@ function computePlanFromSeries(history, pick, { minTotal, sessionAdvice }) {
   if (history.length < 100) return null;
 
   const hourly = new Array(24).fill(0);
+  const maxGapMs = sampleGapLimitMs(store.get('settings.refreshInterval', '300'));
   for (let i = 1; i < history.length; i++) {
     const dt = history[i].timestamp - history[i - 1].timestamp;
-    if (dt <= 0 || dt > 3 * 60 * 1000) continue;
-    const cur = pick(history[i]);
-    const prev = pick(history[i - 1]);
+    if (dt <= 0 || dt > maxGapMs) continue;
+    const cur = finiteOrNull(pick(history[i]));
+    const prev = finiteOrNull(pick(history[i - 1]));
     if (cur == null || prev == null) continue;
     const dv = cur - prev;
     if (dv <= 0) continue;
@@ -974,9 +1127,7 @@ function isProviderFrozen(limits, history, pick) {
 }
 
 function computeFrozenProviders(data) {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const history = store.get(historyKey, []);
+  const history = getHistorySnapshot();
   return {
     anthropic: false,
     openai: isProviderFrozen(data.codex?.limits, history, (e) => e.codex),
@@ -985,10 +1136,8 @@ function computeFrozenProviders(data) {
 }
 
 function computeSessionPlans() {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const history = store.get(historyKey, []).filter((e) => e.timestamp > cutoff);
+  const history = getHistorySnapshot().filter((e) => e.timestamp > cutoff);
   return {
     anthropic: computePlanFromSeries(history, (e) => e.session, { minTotal: 20, sessionAdvice: true }),
     openai: computePlanFromSeries(history, (e) => e.codex, { minTotal: 10, sessionAdvice: false }),
@@ -1008,23 +1157,16 @@ function checkDailyDigest(data) {
   const today = localDateString(now);
   if (store.get('digest.lastShown') === today) return;
 
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const history = store.get(historyKey, []);
+  const history = getHistorySnapshot();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const yStart = dayStart - 24 * 60 * 60 * 1000;
+  const maxGapMs = sampleGapLimitMs(store.get('settings.refreshInterval', '300'));
 
-  const burnOf = (pick) => {
-    let burn = 0;
-    for (let i = 1; i < history.length; i++) {
-      if (history[i].timestamp < yStart || history[i].timestamp >= dayStart) continue;
-      const dt = history[i].timestamp - history[i - 1].timestamp;
-      if (dt <= 0 || dt > 3 * 60 * 1000) continue;
-      const dv = (pick(history[i]) || 0) - (pick(history[i - 1]) || 0);
-      if (dv > 0) burn += dv;
-    }
-    return Math.round(burn);
-  };
+  const burnOf = (pick) => Math.round(positiveBurn(history, pick, {
+    start: yStart,
+    end: dayStart,
+    maxGapMs
+  }));
   const weeklyBurn = burnOf((e) => e.weekly);
   const scopedSlugs = new Set();
   for (const e of history) for (const s of Object.keys(e.scoped || {})) scopedSlugs.add(s);
@@ -1071,13 +1213,9 @@ const FORECAST_WINDOW_MS = 6 * 60 * 60 * 1000;
 const FORECAST_MIN_SPAN_MS = 30 * 60 * 1000;
 const FORECAST_MAX_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
 
-function forecastSeries(samples) {
+function forecastSeries(samples, maxGapMs) {
   if (samples.length < 3) return null;
-  let start = 0;
-  for (let i = 1; i < samples.length; i++) {
-    if (samples[i].v < samples[i - 1].v) start = i;
-  }
-  const win = samples.slice(start);
+  const win = latestContiguousRun(samples, maxGapMs);
   if (win.length < 3) return null;
   const last = win[win.length - 1];
   if (last.v >= 100 || last.t - win[0].t < FORECAST_MIN_SPAN_MS) return null;
@@ -1101,39 +1239,38 @@ function forecastSeries(samples) {
 
 // Projected 100% timestamps for weekly + each scoped series, from stored history
 function computeForecasts() {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
   const cutoff = Date.now() - FORECAST_WINDOW_MS;
-  const recent = store.get(historyKey, []).filter((entry) => entry.timestamp > cutoff);
+  const recent = getHistorySnapshot().filter((entry) => entry.timestamp > cutoff);
+  const maxGapMs = sampleGapLimitMs(store.get('settings.refreshInterval', '300'));
 
   const series = (pick) => recent
-    .map((entry) => ({ t: entry.timestamp, v: pick(entry) }))
+    .map((entry) => ({ t: entry.timestamp, v: finiteOrNull(pick(entry)) }))
     .filter((sample) => sample.v != null);
 
   const forecasts = {
-    session: forecastSeries(series((entry) => entry.session)),
-    weekly: forecastSeries(series((entry) => entry.weekly)),
+    session: forecastSeries(series((entry) => entry.session), maxGapMs),
+    weekly: forecastSeries(series((entry) => entry.weekly), maxGapMs),
     // Anthropic per-model/surface weekly pools (present when the account has them)
-    sonnet: forecastSeries(series((entry) => entry.sonnet)),
-    opus: forecastSeries(series((entry) => entry.opus)),
-    cowork: forecastSeries(series((entry) => entry.cowork)),
-    design: forecastSeries(series((entry) => entry.design)),
-    oauthApps: forecastSeries(series((entry) => entry.oauthApps)),
+    sonnet: forecastSeries(series((entry) => entry.sonnet), maxGapMs),
+    opus: forecastSeries(series((entry) => entry.opus), maxGapMs),
+    cowork: forecastSeries(series((entry) => entry.cowork), maxGapMs),
+    design: forecastSeries(series((entry) => entry.design), maxGapMs),
+    oauthApps: forecastSeries(series((entry) => entry.oauthApps), maxGapMs),
     scoped: {},
     // Cross-provider: same least-squares projection, from the per-provider
     // history series storeUsageHistory already records
-    codex: forecastSeries(series((entry) => entry.codex)),
-    gemini: forecastSeries(series((entry) => entry.gemini)),
-    codexCli: forecastSeries(series((entry) => entry.codexCli)),
-    geminiCli: forecastSeries(series((entry) => entry.geminiCli)),
-    claudeCli: forecastSeries(series((entry) => entry.claudeCli))
+    codex: forecastSeries(series((entry) => entry.codex), maxGapMs),
+    gemini: forecastSeries(series((entry) => entry.gemini), maxGapMs),
+    codexCli: forecastSeries(series((entry) => entry.codexCli), maxGapMs),
+    geminiCli: forecastSeries(series((entry) => entry.geminiCli), maxGapMs),
+    claudeCli: forecastSeries(series((entry) => entry.claudeCli), maxGapMs)
   };
   const slugs = new Set();
   for (const entry of recent) {
     for (const slug of Object.keys(entry.scoped || {})) slugs.add(slug);
   }
   for (const slug of slugs) {
-    forecasts.scoped[slug] = forecastSeries(series((entry) => entry.scoped?.[slug]));
+    forecasts.scoped[slug] = forecastSeries(series((entry) => entry.scoped?.[slug]), maxGapMs);
   }
   return forecasts;
 }
@@ -1146,7 +1283,6 @@ function computeForecasts() {
 // don't blind it, and window resets never poison it.
 const BURN_WINDOW_MS = 10 * 60 * 1000;        // jump measured over this window
 const BURN_MIN_WINDOW_MS = 4 * 60 * 1000;     // need at least this much data
-const BURN_PAIR_MAX_GAP_MS = 3 * 60 * 1000;   // ignore pairs across app-closed gaps
 const BURN_COOLDOWN_MS = 30 * 60 * 1000;      // one alert per series per half hour
 const BURN_MIN_JUMP = 3;                      // pct points per window — absolute floor
 const BURN_FALLBACK_JUMP = 8;                 // floor when too little baseline data
@@ -1162,9 +1298,7 @@ function median(values) {
 function checkBurnAnomalies() {
   if (!store.get('settings.burnAlerts', true)) return;
 
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const history = store.get(historyKey, []);
+  const history = getHistorySnapshot();
   if (history.length < 5) return;
   const now = history[history.length - 1].timestamp;
 
@@ -1172,8 +1306,7 @@ function checkBurnAnomalies() {
   // session" pair gap must track that interval (with a 3-min floor) — a fixed
   // 3-min gap rejected every pair at the 5-min default and left the adaptive
   // median+MAD baseline permanently empty (only the crude 8% floor ever fired).
-  const refreshMs = (parseInt(store.get('settings.refreshInterval', '300'), 10) || 300) * 1000;
-  const pairMaxGapMs = Math.max(BURN_PAIR_MAX_GAP_MS, Math.round(refreshMs * 2.5));
+  const pairMaxGapMs = sampleGapLimitMs(store.get('settings.refreshInterval', '300'));
 
   // Every series names its company; Anthropic's scoped pools (Fable) are
   // called out separately from the all-models weekly pool
@@ -1198,7 +1331,7 @@ function checkBurnAnomalies() {
 
   for (const series of seriesList) {
     const samples = history
-      .map((e) => ({ t: e.timestamp, v: series.pick(e) }))
+      .map((e) => ({ t: e.timestamp, v: finiteOrNull(series.pick(e)) }))
       .filter((s) => s.v != null);
     if (samples.length < 5) continue;
 
@@ -1261,26 +1394,33 @@ function checkBurnAnomalies() {
   }
 }
 
-function storeUsageHistory(data) {
+async function storeUsageHistory(data) {
+  // OpenAI and Google remain valid history sources while Claude is logged out.
+  const providerSamples = [
+    data.codex?.limits?.[0]?.percent,
+    (data.gemini?.limits || []).reduce(
+      (worst, limit) => (worst == null || limit.percent > worst) ? limit.percent : worst, null),
+    data.codex?.cli?.limits?.[0]?.percent,
+    (data.gemini?.cli?.limits || []).reduce(
+      (worst, limit) => (worst == null || limit.percent > worst) ? limit.percent : worst, null)
+  ];
+  const hasProviderSample = providerSamples.some((value) => finiteOrNull(value) != null);
   // Skip write if the session is invalid — a live session always has resets_at timestamps.
   // Absent timestamps mean the API returned empty/zeroed data (dead session, removed device, etc.)
-  if (!data.five_hour?.resets_at && !data.seven_day?.resets_at) {
+  if (!data.five_hour?.resets_at && !data.seven_day?.resets_at && !hasProviderSample) {
     debugLog('[History] Skipping write — no reset timestamps, likely invalid session data');
     return;
   }
 
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-
   const timestamp = Date.now();
-  let history = store.get(historyKey, []);
 
   // Record scoped weekly limits (e.g. Fable) under a slug keyed by display
   // name (same slug the renderer derives) so the chart can plot whatever
   // scopes the API sends without a per-model release.
   const scoped = {};
   for (const limit of getScopedWeeklyLimits(data)) {
-    scoped[limit.slug] = limit.percent;
+    const value = finiteOrNull(limit.percent);
+    if (value != null) scoped[limit.slug] = value;
   }
 
   // External provider samples (single percent each) power their planner hints
@@ -1296,74 +1436,86 @@ function storeUsageHistory(data) {
   const claudeCliPct = (data.claude_code && data.claude_code_same_account === false)
     ? data.claude_code.seven_day?.utilization : null;
 
-  history.push({
+  const entry = {
     timestamp,
-    session: data.five_hour?.utilization || 0,
-    weekly: data.seven_day?.utilization || 0,
-    sonnet: data.seven_day_sonnet?.utilization || 0,
-    opus: data.seven_day_opus?.utilization || 0,
-    cowork: data.seven_day_cowork?.utilization || 0,
-    design: data.seven_day_omelette?.utilization || 0,
-    oauthApps: data.seven_day_oauth_apps?.utilization || 0,
-    extraUsage: data.extra_usage?.utilization || 0,
+    session: finiteOrNull(data.five_hour?.utilization),
+    weekly: finiteOrNull(data.seven_day?.utilization),
+    sonnet: finiteOrNull(data.seven_day_sonnet?.utilization),
+    opus: finiteOrNull(data.seven_day_opus?.utilization),
+    cowork: finiteOrNull(data.seven_day_cowork?.utilization),
+    design: finiteOrNull(data.seven_day_omelette?.utilization),
+    oauthApps: finiteOrNull(data.seven_day_oauth_apps?.utilization),
+    extraUsage: finiteOrNull(data.extra_usage?.utilization),
     ...(Object.keys(scoped).length ? { scoped } : {}),
-    ...(codexPct != null ? { codex: codexPct } : {}),
-    ...(geminiPct != null ? { gemini: geminiPct } : {}),
-    ...(codexCliPct != null ? { codexCli: codexCliPct } : {}),
-    ...(geminiCliPct != null ? { geminiCli: geminiCliPct } : {}),
-    ...(claudeCliPct != null ? { claudeCli: claudeCliPct } : {})
-  });
+    ...(finiteOrNull(codexPct) != null ? { codex: finiteOrNull(codexPct) } : {}),
+    ...(finiteOrNull(geminiPct) != null ? { gemini: finiteOrNull(geminiPct) } : {}),
+    ...(finiteOrNull(codexCliPct) != null ? { codexCli: finiteOrNull(codexCliPct) } : {}),
+    ...(finiteOrNull(geminiCliPct) != null ? { geminiCli: finiteOrNull(geminiCliPct) } : {}),
+    ...(finiteOrNull(claudeCliPct) != null ? { claudeCli: finiteOrNull(claudeCliPct) } : {})
+  };
 
-  // Rotation: apply both time-based and count-based limits
-  const cutoff = timestamp - (HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  history = history.filter((entry) => entry.timestamp > cutoff);
-
-  if (history.length > MAX_HISTORY_SAMPLES) {
-    history = history.slice(history.length - MAX_HISTORY_SAMPLES);
-  }
-
-  store.set(historyKey, history);
+  await historyStore.append(currentHistoryScope(), entry);
 }
 
-// Migrate legacy single-key history to the per-org namespaced key at startup,
-// so get-usage-history reads from the right place before any fetch has run.
-function migrateUsageHistoryKey() {
-  const organizationId = store.get('organizationId');
-  if (!organizationId) return;
-  const historyKey = `usageHistory_${organizationId}`;
-  if (store.has(historyKey)) return;
-  const legacy = store.get('usageHistory', []);
-  if (legacy.length > 0) {
-    store.set(historyKey, legacy);
-    store.delete('usageHistory');
-    debugLog('[History] Migrated legacy usageHistory →', historyKey);
-  }
+async function writeHistoryMigrationBackup(legacy) {
+  const backupPath = path.join(historyStore.baseDir, 'legacy-electron-store-history-backup.json');
+  if (fs.existsSync(backupPath)) return backupPath;
+  await fs.promises.mkdir(historyStore.baseDir, { recursive: true });
+  const temporary = `${backupPath}.tmp`;
+  await fs.promises.writeFile(temporary, JSON.stringify(legacy), { encoding: 'utf8', mode: 0o600 });
+  await fs.promises.rename(temporary, backupPath);
+  return backupPath;
 }
 
-// Prune all per-org history keys at startup. Trims entries older than the retention
-// window and deletes the key entirely if nothing remains — cleans up abandoned accounts.
-function pruneStaleHistoryKeys() {
+async function migrateUsageHistoryStorage() {
+  await historyStore.init();
+  const snapshot = store.store;
+  const legacy = Object.fromEntries(Object.entries(snapshot).filter(([key, value]) =>
+    (key === 'usageHistory' || key.startsWith('usageHistory_')) && Array.isArray(value)));
+  const legacyKeys = Object.keys(legacy);
+
+  if (legacyKeys.length) {
+    const backupPath = await writeHistoryMigrationBackup(legacy);
+    const cutoff = Date.now() - HISTORY_RETENTION_DAYS * DAY_MS;
+    for (const key of legacyKeys) {
+      const scope = key === 'usageHistory' ? 'default' : key.slice('usageHistory_'.length);
+      const expected = dedupeEntries(legacy[key])
+        .filter((entry) => entry.timestamp > cutoff)
+        .slice(-MAX_HISTORY_SAMPLES).length;
+      const migrated = await historyStore.migrate(scope, legacy[key]);
+      if (migrated.length < expected) {
+        throw new Error(`History migration validation failed for ${key}: expected at least ${expected}, got ${migrated.length}`);
+      }
+    }
+
+    const compactedStore = { ...snapshot };
+    for (const key of legacyKeys) delete compactedStore[key];
+    compactedStore.historyMigrationV2 = {
+      completedAt: new Date().toISOString(),
+      backupFile: path.basename(backupPath),
+      migratedKeys: legacyKeys.length
+    };
+    // One final electron-store write removes all large legacy arrays at once.
+    store.store = compactedStore;
+    debugLog('[History] Migrated', legacyKeys.length, 'legacy history key(s) to JSONL storage');
+  }
+
+  await historyStore.read(currentHistoryScope(), { refresh: true });
+}
+
+function pruneStaleBurnAlertCounters() {
   const cutoff = Date.now() - (HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  const allKeys = Object.keys(store.store);
   const dayCutoff = localDateString(new Date(cutoff));
-  for (const key of allKeys) {
-    // Per-day burn-alert counters accumulate forever otherwise — drop any
-    // older than the retention window (key form: burnAlerts_YYYY-MM-DD)
-    if (key.startsWith('burnAlerts_')) {
-      if (key.slice('burnAlerts_'.length) < dayCutoff) store.delete(key);
-      continue;
-    }
-    if (!key.startsWith('usageHistory_') && key !== 'usageHistory') continue;
-    const history = store.get(key, []);
-    const fresh = history.filter((entry) => entry.timestamp > cutoff);
-    if (fresh.length === 0) {
-      store.delete(key);
-      debugLog('[History] Deleted stale key:', key);
-    } else if (fresh.length < history.length) {
-      store.set(key, fresh);
-      debugLog('[History] Pruned', history.length - fresh.length, 'old entries from', key);
+  const snapshot = store.store;
+  const compacted = { ...snapshot };
+  let changed = false;
+  for (const key of Object.keys(compacted)) {
+    if (key.startsWith('burnAlerts_') && key.slice('burnAlerts_'.length) < dayCutoff) {
+      delete compacted[key];
+      changed = true;
     }
   }
+  if (changed) store.store = compacted;
 }
 
 // Set session-level User-Agent to avoid Electron detection
@@ -1403,7 +1555,7 @@ function createMainWindow() {
     maximizable: true,
     // Floor sits where the responsive ladder bottoms out — below this the
     // remaining elements would overlap
-    minWidth: 200,
+    minWidth: MIN_WIDGET_WIDTH,
     minHeight: 180,
     skipTaskbar: false,
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
@@ -1415,12 +1567,36 @@ function createMainWindow() {
   };
 
   if (savedPosition) {
-    windowOptions.x = savedPosition.x;
-    windowOptions.y = savedPosition.y;
+    const recovered = recoverWindowBounds({
+      x: savedPosition.x,
+      y: savedPosition.y,
+      width: WIDGET_WIDTH,
+      height: WIDGET_HEIGHT
+    }, {
+      fallbackWidth: WIDGET_WIDTH,
+      fallbackHeight: WIDGET_HEIGHT,
+      minWidth: MIN_WIDGET_WIDTH,
+      minHeight: 180
+    });
+    windowOptions.x = recovered.x;
+    windowOptions.y = recovered.y;
+    if (savedPosition.x !== recovered.x || savedPosition.y !== recovered.y) {
+      store.set('windowPosition', { x: recovered.x, y: recovered.y });
+    }
   }
 
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.loadFile('src/renderer/index.html');
+
+  if (DEBUG) {
+    mainWindow.webContents.on('console-message', (details) => {
+      debugLog(`[Renderer:${details.level ?? 'log'}]`, details.message,
+        details.sourceId ? `(${details.sourceId}:${details.lineNumber || 0})` : '');
+    });
+  }
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[Renderer] Process exited:', details.reason, details.exitCode);
+  });
 
   // Re-announce a downloaded update once the renderer is actually listening
   mainWindow.webContents.on('did-finish-load', sendUpdateReady);
@@ -1447,6 +1623,16 @@ function createMainWindow() {
     }, 300);
   });
 
+  // One native close gate covers the custom button, Alt+F4, and taskbar
+  // close. Hiding is safe only when a live tray icon can restore the app.
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
+    if (hasTrayIcon()) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -1465,15 +1651,27 @@ function createGraphWindow() {
   if (graphWindow && !graphWindow.isDestroyed()) { graphWindow.focus(); return; }
   const saved = store.get('graphWindowBounds') || {};
   const onTop = store.get('settings.graphAlwaysOnTop', true);
-  graphWindow = new BrowserWindow({
-    width: saved.width || 660,
-    height: saved.height || 400,
+  const recovered = recoverWindowBounds({
     x: saved.x,
     y: saved.y,
+    width: saved.width || 660,
+    height: saved.height || 400
+  }, {
+    fallbackWidth: 660,
+    fallbackHeight: 400,
+    minWidth: 360,
+    minHeight: 240
+  });
+  graphWindow = new BrowserWindow({
+    width: recovered.width,
+    height: recovered.height,
+    x: recovered.x,
+    y: recovered.y,
     backgroundColor: '#16161e',
     alwaysOnTop: onTop,
     minWidth: 360,
     minHeight: 240,
+    autoHideMenuBar: true,
     title: 'Burnwatch — Graph',
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
     webPreferences: {
@@ -1482,6 +1680,7 @@ function createGraphWindow() {
       preload: path.join(__dirname, 'preload.js')
     }
   });
+  graphWindow.removeMenu();
   if (onTop) graphWindow.setAlwaysOnTop(true, 'floating');
   graphWindow.loadFile('src/renderer/graph.html');
 
@@ -2083,10 +2282,19 @@ function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255,
  * macOS and Linux do not have this issue so they just call show() directly.
  */
 function showMainWindowClean() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  showMainWindowSmart();
+}
+
+function isMainWindowShownOnScreen() {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return false;
+  const bounds = mainWindow.getBounds();
+  const recovered = recoverWindowBounds(bounds, {
+    fallbackWidth: WIDGET_WIDTH,
+    fallbackHeight: WIDGET_HEIGHT,
+    minWidth: MIN_WIDGET_WIDTH,
+    minHeight: 180
+  });
+  return bounds.x === recovered.x && bounds.y === recovered.y;
 }
 
 function trayStaticIconPath() {
@@ -2096,13 +2304,8 @@ function trayStaticIconPath() {
 // Show/hide the widget when a stats tray icon is left-clicked
 function attachTrayToggleClick(tray) {
   tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
-        mainWindow.hide();
-      } else {
-        showMainWindowClean();
-      }
-    }
+    if (isMainWindowShownOnScreen()) mainWindow.hide();
+    else showMainWindowSmart();
   });
 }
 
@@ -2110,13 +2313,7 @@ function buildTrayContextMenu() {
   return Menu.buildFromTemplate([
       {
         label: 'Show Widget',
-        click: () => {
-          if (mainWindow) {
-            showMainWindowClean();
-          } else {
-            createMainWindow();
-          }
-        }
+        click: () => showMainWindowSmart()
       },
       {
         label: 'Refresh',
@@ -2156,6 +2353,44 @@ function buildTrayContextMenu() {
         }
       }
   ]);
+}
+
+function hasUsageTrayIcon() {
+  return [sessionTray, weeklyTray, fableTray, ...Object.values(_providerTrays)]
+    .some((tray) => tray && !tray.isDestroyed());
+}
+
+function destroyRestoreTray() {
+  if (!restoreTray || restoreTray.isDestroyed()) {
+    restoreTray = null;
+    return;
+  }
+  try {
+    restoreTray.removeAllListeners();
+    restoreTray.setContextMenu(null);
+    restoreTray.setToolTip('');
+    if (process.platform === 'linux') restoreTray.setImage(nativeImage.createEmpty());
+    restoreTray.destroy();
+  } catch (_) {}
+  restoreTray = null;
+}
+
+function syncRestoreTray() {
+  const needed = store.get('settings.minimizeToTray', false) && !hasUsageTrayIcon();
+  if (!needed) {
+    destroyRestoreTray();
+    return;
+  }
+  if (restoreTray && !restoreTray.isDestroyed()) return;
+  try {
+    restoreTray = new Tray(trayStaticIconPath());
+    restoreTray.setToolTip('Burnwatch');
+    restoreTray.setContextMenu(buildTrayContextMenu());
+    attachTrayToggleClick(restoreTray);
+  } catch (error) {
+    restoreTray = null;
+    console.error('Failed to create restore tray:', error);
+  }
 }
 
 function createTray() {
@@ -2251,7 +2486,8 @@ function syncFableTray(scopedLimit, forecastAt = null) {
 
 function destroyTrayIcons() {
   // Centralized tray cleanup keeps Linux appindicator hosts from showing stale icons.
-  const trays = [sessionTray, weeklyTray, fableTray, ...Object.values(_providerTrays)];
+  const trays = [restoreTray, sessionTray, weeklyTray, fableTray, ...Object.values(_providerTrays)];
+  restoreTray = null;
   sessionTray = null;
   weeklyTray = null;
   fableTray = null;
@@ -2338,8 +2574,6 @@ function formatResetTime(resetsAt, timeFormat, includeDate = false) {
 // ---- External provider tray icons (OpenAI / Google sections) ----
 // Independent of the Anthropic tray setting: each provider section's
 // checkbox controls its own badge.
-const _providerTrays = { codex: null, codexCli: null, gemini: null, geminiCli: null, claudeCli: null };
-
 function syncProviderTray(name, enabled, badge) {
   let tray = _providerTrays[name];
   if (!enabled || !badge) {
@@ -2459,21 +2693,8 @@ function updateTrayIcon(usageData) {
   const showTrayStats = store.get('settings.showTrayStats', false);
   
   if (!showTrayStats) {
-    // Destroy only weeklyTray (and the scoped/Fable tray), keeping sessionTray
-    // alive as a persistent restore icon. Without it, hide() on Windows leaves
-    // no way to restore the window.
-    // Apply the same Linux appindicator cleanup that destroyTrayIcons() uses.
-    if (weeklyTray && !weeklyTray.isDestroyed()) {
-      try {
-        weeklyTray.removeAllListeners();
-        weeklyTray.setContextMenu(null);
-        weeklyTray.setToolTip('');
-        if (process.platform === 'linux') weeklyTray.setImage(nativeImage.createEmpty());
-        weeklyTray.destroy();
-      } catch (_) {}
-      weeklyTray = null;
-    }
-    syncFableTray(null);
+    destroyStatsTrays();
+    syncRestoreTray();
     return;
   }
 
@@ -2486,7 +2707,10 @@ function updateTrayIcon(usageData) {
   const scopedLimit = getScopedWeeklyLimits(usageData)[0] || null;
   syncFableTray(scopedLimit, scopedLimit ? usageData?.forecasts?.scoped?.[scopedLimit.slug] : null);
 
-  if ((!sessionTray || sessionTray.isDestroyed()) && (!weeklyTray || weeklyTray.isDestroyed())) return;
+  if ((!sessionTray || sessionTray.isDestroyed()) && (!weeklyTray || weeklyTray.isDestroyed())) {
+    syncRestoreTray();
+    return;
+  }
 
   // Get threshold settings and time format
   const warnThreshold = store.get('settings.warnThreshold', 75);
@@ -2549,6 +2773,7 @@ function updateTrayIcon(usageData) {
   } catch (error) {
     console.error('Failed to update tray icons:', error);
   }
+  syncRestoreTray();
 }
 
 
@@ -2574,13 +2799,18 @@ ipcMain.handle('get-credentials', () => {
     // Fallback: plain storage (legacy or safeStorage unavailable)
     sessionKey = store.get('sessionKey');
   }
+  const claudeCliAvailable = !!readClaudeCodeToken();
   return {
     sessionKey,
     organizationId: store.get('organizationId'),
     organizations: store.get('organizations', []),
     // A fresh claude CLI login can power the Anthropic section with no
     // claude.ai web login ("via CLI login" fallback)
-    cliFallbackAvailable: !!readClaudeCodeToken()
+    cliFallbackAvailable: claudeCliAvailable,
+    localProviderCredentialsAvailable: claudeCliAvailable || hasLocalProviderCredentials(),
+    // OpenAI/Codex and Google/Gemini credentials remain useful even when the
+    // user deliberately logs out of Claude.
+    providerFallbackAvailable: hasExternalProviderCredentials()
   };
 });
 
@@ -2596,6 +2826,7 @@ ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId, o
   }
   if (organizationId) {
     store.set('organizationId', organizationId);
+    await historyStore.read(organizationId, { refresh: true });
   }
   // Persist the org list so the Teams/Personal selector survives a restart
   // (previously dropped here, so the dropdown only ever appeared right after login)
@@ -2683,7 +2914,8 @@ ipcMain.on('minimize-window', () => {
       mainWindow.minimize();
     } else {
       const minimizeToTray = store.get('settings.minimizeToTray', false);
-      if (minimizeToTray) {
+      if (minimizeToTray) syncRestoreTray();
+      if (minimizeToTray && hasTrayIcon()) {
         mainWindow.hide();
       } else {
         mainWindow.minimize();
@@ -2693,12 +2925,7 @@ ipcMain.on('minimize-window', () => {
 });
 
 ipcMain.on('close-window', () => {
-  const showTrayStats = store.get('settings.showTrayStats', false);
-  if (showTrayStats && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.hide();
-  } else {
-    app.quit();
-  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
 });
 
 // While the window is snapped (Win+Arrow / drag-to-edge) or hand-resized —
@@ -2707,9 +2934,16 @@ ipcMain.on('close-window', () => {
 // (our own size), which re-enables auto-sizing.
 let _expectedWidth = WIDGET_WIDTH;
 let _lastSetHeight = null;
+let _activeWindowPreset = null;
+let _managedPresetWidth = null;
 
 function windowIsUserSized() {
   if (!mainWindow) return false;
+  // A named preset owns its geometry until the user toggles it off. This is
+  // especially important for the tall preset: on shorter displays its clamped
+  // height can happen to resemble the last auto-fit height, which previously
+  // made the renderer re-enter auto-fit and fight every vertical resize.
+  if (_activeWindowPreset !== null) return true;
   if (mainWindow.isMaximized()) return true;
   const [cw, ch] = mainWindow.getContentSize();
   if (Math.abs(cw - _expectedWidth) > 24) return true;
@@ -2719,16 +2953,31 @@ function windowIsUserSized() {
 // Landscape needs a taller floor: below ~340px the three columns and their
 // planners would crush (compact mode exists for smaller footprints)
 ipcMain.on('set-min-height', (event, h) => {
-  if (mainWindow) mainWindow.setMinimumSize(200, Math.max(120, Math.round(h)));
+  if (mainWindow) mainWindow.setMinimumSize(MIN_WIDGET_WIDTH, Math.max(120, Math.round(h)));
 });
 
-ipcMain.on('resize-window', (event, height, force) => {
+ipcMain.on('resize-window', (event, height, force, fitPreset) => {
   if (!mainWindow) return;
+  const setFittedContentSize = (width, requestedHeight) => {
+    const bounds = mainWindow.getBounds();
+    const [, currentContentHeight] = mainWindow.getContentSize();
+    const frameHeight = Math.max(0, bounds.height - currentContentHeight);
+    const workArea = screen.getDisplayMatching(bounds).workArea;
+    const safeHeight = Math.max(80, Math.min(Math.round(requestedHeight), workArea.height - frameHeight));
+    mainWindow.setContentSize(width, safeHeight);
+    const fitted = mainWindow.getBounds();
+    const x = Math.min(Math.max(fitted.x, workArea.x), workArea.x + workArea.width - fitted.width);
+    const y = Math.min(Math.max(fitted.y, workArea.y), workArea.y + workArea.height - fitted.height);
+    if (x !== fitted.x || y !== fitted.y) mainWindow.setPosition(x, y);
+  };
   if (force) {
-    // Explicit fit request (e.g. after a subgroup rolls up in a hand-sized
-    // window): keep the user's width, adopt the content height
+    // Presets, snapped windows, and hand-sized windows own their bounds.
+    // Graph detach/reattach and subgroup reflow may resize the chart, but
+    // must never collapse the BrowserWindow out from under the user.
+    const explicitPresetFit = fitPreset === true && _activeWindowPreset !== null;
+    if (windowIsUserSized() && !explicitPresetFit) return;
     const [cw] = mainWindow.getContentSize();
-    mainWindow.setContentSize(cw, height);
+    setFittedContentSize(cw, height);
     // Record the ACTUAL height after the OS clamps to the minimum, not the
     // requested one — otherwise windowIsUserSized() sees a phantom gap and
     // freezes future auto-fits (e.g. compact mode stuck at the 180px floor)
@@ -2736,9 +2985,29 @@ ipcMain.on('resize-window', (event, height, force) => {
     return;
   }
   if (!windowIsUserSized()) {
-    mainWindow.setContentSize(_expectedWidth, height);
+    setFittedContentSize(_expectedWidth, height);
     _lastSetHeight = mainWindow.getContentSize()[1];
   }
+});
+
+// The wide preset owns its default width until the user deliberately drags
+// the window. When every second-account cluster is hidden, reclaim the unused
+// columns; revealing one restores the normal preset width. A mismatched
+// current width means the user resized it, so stop managing width until the
+// wide preset is explicitly chosen again.
+ipcMain.on('fit-landscape-width', (event, expanded) => {
+  if (!mainWindow || _activeWindowPreset !== 'wide' || _managedPresetWidth == null) return;
+  const bounds = mainWindow.getBounds();
+  if (Math.abs(bounds.width - _managedPresetWidth) > PRESET_WIDTH_TOLERANCE) {
+    _managedPresetWidth = null;
+    return;
+  }
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const requested = expanded ? WIDE_PRESET_WIDTH : WIDE_COLLAPSED_WIDTH;
+  const width = Math.min(requested, workArea.width);
+  const x = Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - width);
+  mainWindow.setBounds({ x, y: bounds.y, width, height: bounds.height });
+  _managedPresetWidth = mainWindow.getBounds().width;
 });
 
 // Per-account tracking toggles, applied AFTER the (cached) provider fetch so
@@ -2803,10 +3072,8 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
-ipcMain.handle('get-usage-history', () => {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const history = store.get(historyKey, []);
+ipcMain.handle('get-usage-history', async () => {
+  const history = await historyStore.read(currentHistoryScope());
   const cutoff = Date.now() - (CHART_DAYS * 24 * 60 * 60 * 1000);
   return history
     .filter((entry) => entry.timestamp > cutoff)
@@ -2816,9 +3083,7 @@ ipcMain.handle('get-usage-history', () => {
 // Export the usage history to a CSV or JSON file the user chooses. This is a
 // user-initiated local file save (dialog), never a network upload.
 ipcMain.handle('export-history', async (event, format) => {
-  const organizationId = store.get('organizationId');
-  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
-  const history = (store.get(historyKey, []) || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  const history = (await historyStore.read(currentHistoryScope())).slice().sort((a, b) => a.timestamp - b.timestamp);
   if (!history.length) return { ok: false, error: 'No usage history recorded yet.' };
 
   const stamp = new Date(history[history.length - 1].timestamp);
@@ -2866,6 +3131,8 @@ ipcMain.on('show-notification', (event, { title, body }) => {
 // Compact: 290px wide, normal: 530px wide. Height stays managed by renderer.
 ipcMain.on('set-compact-mode', (event, compact) => {
   if (mainWindow) {
+    _activeWindowPreset = null;
+    _managedPresetWidth = null;
     const bounds = mainWindow.getBounds();
     const width = compact ? 290 : WIDGET_WIDTH;
     _expectedWidth = width;
@@ -2873,7 +3140,7 @@ ipcMain.on('set-compact-mode', (event, compact) => {
     // reachable (otherwise the 180px portrait minimum clamps it and leaves
     // empty space); restore the normal floor on exit. The renderer's
     // updateCompactBars then fits the exact pool count.
-    mainWindow.setMinimumSize(200, compact ? 80 : 180);
+    mainWindow.setMinimumSize(MIN_WIDGET_WIDTH, compact ? 80 : 180);
     // Compact view grows by one slim row per scoped weekly limit (e.g. Fable)
     const scopedCount = compact
       ? getScopedWeeklyLimits(store.get('latestUsageData') || {}).length
@@ -2897,14 +3164,17 @@ ipcMain.on('apply-window-preset', (event, preset) => {
     // Return to the default auto-sized widget: restore the size trackers so
     // windowIsUserSized() reports false and the renderer resumes auto-height.
     _expectedWidth = WIDGET_WIDTH;
+    _activeWindowPreset = null;
+    _managedPresetWidth = null;
     mainWindow.setBounds({ x: b.x, y: b.y, width: WIDGET_WIDTH, height: WIDGET_HEIGHT });
     _lastSetHeight = mainWindow.getContentSize()[1];
     return;
   }
   let width, height;
-  if (preset === 'wide') { width = 900; height = 600; }
+  if (preset === 'wide') { width = WIDE_PRESET_WIDTH; height = 600; }
   else if (preset === 'tall') { width = WIDGET_WIDTH; height = 1150; }
   else return;
+  _activeWindowPreset = preset;
   // Clamp to the current display's work area so a tall window can't run off
   // the bottom of the screen, and keep it fully on-screen.
   const wa = screen.getDisplayMatching(b).workArea;
@@ -2913,6 +3183,7 @@ ipcMain.on('apply-window-preset', (event, preset) => {
   const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - width);
   const y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - height);
   mainWindow.setBounds({ x, y, width, height });
+  _managedPresetWidth = preset === 'wide' ? mainWindow.getBounds().width : null;
 });
 
 // ---- Detachable graph window IPC ----
@@ -2961,7 +3232,8 @@ ipcMain.handle('get-settings', () => {
     sectionCollapsed: store.get('settings.sectionCollapsed', {}),
     subgroupHidden: store.get('settings.subgroupHidden', {}),
     pizazz: store.get('settings.pizazz', true),
-    hiddenRows: store.get('settings.hiddenRows', {})
+    hiddenRows: store.get('settings.hiddenRows', {}),
+    chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
 });
 
@@ -3006,6 +3278,9 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.subgroupHidden !== undefined) store.set('settings.subgroupHidden', settings.subgroupHidden || {});
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
+  if (settings.chartHiddenSeries !== undefined) {
+    store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));
+  }
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -3028,6 +3303,12 @@ ipcMain.handle('save-settings', (event, settings) => {
     }
     mainWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   }
+  if (graphWindow && !graphWindow.isDestroyed()) {
+    graphWindow.webContents.send('graph-settings-updated');
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('graph-settings-updated');
+  }
 
   if (!settings.showTrayStats) {
     // Turn off ONLY the Anthropic stats trays; OpenAI/Google badges follow
@@ -3044,6 +3325,7 @@ ipcMain.handle('save-settings', (event, settings) => {
       createTray();
     }
   }
+  syncRestoreTray();
 
   return true;
 });
@@ -3266,6 +3548,9 @@ function isNewerVersion(remote, local) {
 }
 
 ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
+  options = sanitizeFetchOptions(options);
+  if (options.refreshLocalCredentials === true) resetLocalCredentialCaches();
+  const providerFetchOptions = { force: options.forceProviders === true };
   // Use the same credential retrieval logic as get-credentials
   let sessionKey = null;
   if (safeStorage.isEncryptionAvailable()) {
@@ -3288,29 +3573,33 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     // credentials can power the section — same pattern as OpenAI/Google
     // ("via CLI login"). Extra Usage / credits need the web login and are
     // simply absent in this mode.
-    const codexPromiseF = (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
-      ? cachedProviderFetch('codex', fetchCodexUsage) : Promise.resolve(null);
-    const geminiPromiseF = (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
-      ? cachedProviderFetch('gemini', fetchGeminiUsage) : Promise.resolve(null);
-    const cc = readClaudeCodeToken()
-      ? await cachedProviderFetch('claude_code', fetchClaudeCodeUsage) : null;
-    if (!cc || !(cc.five_hour?.resets_at || cc.seven_day?.resets_at)) {
+    const [cc, codexF, geminiF] = await Promise.all([
+      readClaudeCodeToken()
+        ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage, providerFetchOptions)
+        : Promise.resolve(null),
+      (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
+        ? cachedProviderFetch('codex', fetchCodexUsage, providerFetchOptions)
+        : Promise.resolve(null),
+      (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
+        ? cachedProviderFetch('gemini', fetchGeminiUsage, providerFetchOptions)
+        : Promise.resolve(null)
+    ]);
+    const hasClaudeUsage = !!(cc && (cc.five_hour?.resets_at || cc.seven_day?.resets_at));
+    if (!hasClaudeUsage && !codexF && !geminiF) {
       throw new Error('Missing credentials');
     }
     const data = {
-      five_hour: cc.five_hour,
-      seven_day: cc.seven_day,
-      limits: cc.limits || [],
-      anthropic_source: 'cli',
-      claude_code_same_account: true // the CLI IS the primary source here
+      five_hour: hasClaudeUsage ? cc.five_hour : null,
+      seven_day: hasClaudeUsage ? cc.seven_day : null,
+      limits: hasClaudeUsage ? (cc.limits || []) : [],
+      anthropic_source: hasClaudeUsage ? 'cli' : 'none',
+      claude_code_same_account: hasClaudeUsage
     };
-    const codexF = await codexPromiseF;
     if (codexF) data.codex = codexF;
-    const geminiF = await geminiPromiseF;
     if (geminiF) data.gemini = geminiF;
     applyAccountToggles(data);
 
-    storeUsageHistory(data); // no organizationId → legacy 'usageHistory' key
+    await storeUsageHistory(data); // no organizationId → default history scope
     data.forecasts = computeForecasts();
     data.sessionPlans = computeSessionPlans();
     data.frozenProviders = computeFrozenProviders(data);
@@ -3325,13 +3614,13 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   // Kick off the Claude Code (CLI) and Codex account fetches concurrently
   // with the claude.ai one; each resolves to null on any failure.
   const claudeCodePromise = store.get('settings.showClaudeCode', true)
-    ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage)
+    ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage, providerFetchOptions)
     : Promise.resolve(null);
   const codexPromise = (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
-    ? cachedProviderFetch('codex', fetchCodexUsage)
+    ? cachedProviderFetch('codex', fetchCodexUsage, providerFetchOptions)
     : Promise.resolve(null);
   const geminiPromise = (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
-    ? cachedProviderFetch('gemini', fetchGeminiUsage)
+    ? cachedProviderFetch('gemini', fetchGeminiUsage, providerFetchOptions)
     : Promise.resolve(null);
 
   // Ensure cookie is set
@@ -3341,71 +3630,53 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   // or if compact mode is disabled (normal mode). This reduces API calls when the
   // user won't see the extra usage data anyway.
   // If forceExtended is passed (e.g., when user clicks expand), use that instead of saved setting
-  const expandedOpen = options.forceExtended !== undefined ? options.forceExtended : store.get('settings.expandedOpen', true);
-  const compactMode = store.get('settings.compactMode', false);
+  const expandedOpen = typeof options.forceExtended === 'boolean'
+    ? options.forceExtended
+    : store.get('settings.expandedOpen', true);
   const shouldFetchExtended = expandedOpen;
 
   const usageUrl = `https://claude.ai/api/organizations/${organizationId}/usage`;
   const overageUrl = `https://claude.ai/api/organizations/${organizationId}/overage_spend_limit`;
   const prepaidUrl = `https://claude.ai/api/organizations/${organizationId}/prepaid/credits`;
 
-  // Build URL array based on UI state
-  const urls = [usageUrl];
-  if (shouldFetchExtended) {
-    urls.push(overageUrl, prepaidUrl);
-    debugLog('[Conditional Polling] Fetching extended data (overage + prepaid) - panel is visible');
-  } else {
-    debugLog('[Conditional Polling] Skipping extended data - panel not visible');
-  }
-
-  // Fetch endpoints sequentially using a single reused BrowserWindow.
-  // This reduces memory overhead compared to creating 3 separate windows.
-  // Usage is always required; overage and prepaid are conditional based on UI state.
-  let usageResult, overageResult, prepaidResult;
-  
+  // Fetch mandatory usage by itself so optional credits endpoints can never
+  // suppress valid usage data or enter the credential-expiry path.
+  let data;
   try {
-    const results = await fetchMultipleViaWindow(urls);
-    
-    // Always have usage result (first in array)
-    usageResult = { status: 'fulfilled', value: results[0] };
-    
-    // Conditionally map overage/prepaid results
-    if (shouldFetchExtended) {
-      overageResult = { status: 'fulfilled', value: results[1] };
-      prepaidResult = { status: 'fulfilled', value: results[2] };
-    } else {
-      // Mark as skipped (not an error, just not fetched)
-      overageResult = { status: 'skipped', reason: 'UI panel not visible' };
-      prepaidResult = { status: 'skipped', reason: 'UI panel not visible' };
-    }
+    data = await fetchViaWindow(usageUrl);
   } catch (error) {
-    // If any fetch fails, determine which one and set appropriate result statuses
-    // For now, if the batch fails, treat usage as failed (required endpoint)
-    usageResult = { status: 'rejected', reason: error };
-    overageResult = { status: 'rejected', reason: error };
-    prepaidResult = { status: 'rejected', reason: error };
-  }
-
-  // Usage endpoint is mandatory
-  if (usageResult.status === 'rejected') {
-    const error = usageResult.reason;
     debugLog('API request failed:', error.message);
-    const isBlocked = error.message.startsWith('CloudflareBlocked')
-      || error.message.startsWith('CloudflareChallenge')
-      || error.message.startsWith('UnexpectedHTML');
-    if (isBlocked) {
+    if (isExplicitAuthFailure(error)) {
       store.delete('sessionKey');
-      store.delete('sessionKey_encrypted'); // was left behind, resurrecting dead sessions
+      store.delete('sessionKey_encrypted');
       store.delete('organizationId');
-      if (mainWindow) {
-        mainWindow.webContents.send('session-expired');
-      }
+      if (mainWindow) mainWindow.webContents.send('session-expired');
       throw new Error('SessionExpired');
     }
+    // Cloudflare, HTML, timeouts, and network failures are transient. Keep
+    // credentials so the next scheduled refresh can recover automatically.
     throw error;
   }
 
-  const data = usageResult.value;
+  if (isExplicitAuthFailure(data)) {
+    store.delete('sessionKey');
+    store.delete('sessionKey_encrypted');
+    store.delete('organizationId');
+    if (mainWindow) mainWindow.webContents.send('session-expired');
+    throw new Error('SessionExpired');
+  }
+
+  let overageResult = { status: 'skipped', reason: 'UI panel not visible' };
+  let prepaidResult = { status: 'skipped', reason: 'UI panel not visible' };
+  if (shouldFetchExtended) {
+    debugLog('[Conditional Polling] Fetching extended data (overage + prepaid) - panel is visible');
+    [overageResult, prepaidResult] = await Promise.allSettled([
+      fetchViaWindow(overageUrl, { timeoutMs: 10000 }),
+      fetchViaWindow(prepaidUrl, { timeoutMs: 10000 })
+    ]);
+  } else {
+    debugLog('[Conditional Polling] Skipping extended data - panel not visible');
+  }
 
   // Merge overage spending data into data.extra_usage
   if (overageResult.status === 'fulfilled' && overageResult.value) {
@@ -3462,7 +3733,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (gemini) data.gemini = gemini;
   applyAccountToggles(data);
 
-  storeUsageHistory(data);
+  await storeUsageHistory(data);
 
   // Burn-rate forecasts, anomaly check, planner, digest — after the new sample lands
   data.forecasts = computeForecasts();
@@ -3517,8 +3788,8 @@ app.whenReady().then(async () => {
     await setSessionCookie(sessionKey);
   }
 
-  migrateUsageHistoryKey();
-  pruneStaleHistoryKeys();
+  await migrateUsageHistoryStorage();
+  pruneStaleBurnAlertCounters();
 
   createMainWindow();
   // Avoid creating temporary tray icons during startup when tray stats are disabled.
@@ -3537,6 +3808,7 @@ app.whenReady().then(async () => {
     }
     mainWindow.setAlwaysOnTop(alwaysOnTop, 'floating');
   }
+  syncRestoreTray();
 
   // Periodic always-on-top re-assertion to recover from z-order disruptions
   // (hidden window spawns, window manager shortcuts, alt-tab, etc.)
@@ -3557,18 +3829,16 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    // Keep running in tray
+    if (!hasTrayIcon()) app.quit();
   }
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.on('activate', () => {
-  if (mainWindow === null) {
-    createMainWindow();
-  } else {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  showMainWindowSmart();
 });
 
 // Prevent multiple instances
@@ -3577,9 +3847,6 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    showMainWindowSmart();
   });
 }
