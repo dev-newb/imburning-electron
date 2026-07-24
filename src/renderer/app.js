@@ -412,6 +412,9 @@ function setupEventListeners() {
             intrinsic: !_graphIsInline(),
             userAction: true
         });
+        // Turning the graph on inside the wide preset needs the taller,
+        // graph-aware fit so the chart isn't clipped.
+        _fitWidePresetWithGraph();
         _saveViewState();
     });
 
@@ -456,6 +459,7 @@ function setupEventListeners() {
             elements.wideBtn.classList.toggle('active', goWide);
             if (elements.tallBtn) elements.tallBtn.classList.remove('active');
             _fitPresetIfGraphHidden();
+            _fitWidePresetWithGraph();
             if (goWide) setTimeout(syncLandscapeCliWidth, 180);
         });
     }
@@ -1392,6 +1396,33 @@ function _fitPresetIfGraphHidden() {
             if (_activePreset === null || _graphIsInline()) return;
             syncGraphLayoutState();
             _forceFitHeight({ fitPreset: true, intrinsic: true });
+        }, delay);
+    }
+}
+
+// Wide preset with the graph shown: the fixed 600px preset can't fit the
+// three columns AND the whole chart, so the chart clips at the bottom. Size
+// the window to the columns' natural height plus a moderate graph band — the
+// full chart shows at a comfortable size without an oversized window. The
+// band is a constant (not the live graph height, which fills 1fr and would
+// feed back on itself).
+const WIDE_GRAPH_BAND = 210;
+function _fitWidePresetWithGraph() {
+    if (_activePreset !== 'wide' || !_graphIsInline()) return;
+    for (const delay of [200, 520]) {
+        setTimeout(() => {
+            if (_activePreset !== 'wide' || !_graphIsInline()) return;
+            const mcTop = elements.mainContent.getBoundingClientRect().top;
+            let colBottom = 0;
+            for (const id of ['sectionAnthropic', 'sectionOpenai', 'sectionGoogle']) {
+                const s = document.getElementById(id);
+                if (s && getComputedStyle(s).display !== 'none') {
+                    colBottom = Math.max(colBottom, s.getBoundingClientRect().bottom - mcTop);
+                }
+            }
+            if (colBottom < 40) return;
+            const target = _chromeHeight() + Math.ceil(colBottom) + WIDE_GRAPH_BAND + 12;
+            window.electronAPI.resizeWindow(target, true, true);
         }, delay);
     }
 }
