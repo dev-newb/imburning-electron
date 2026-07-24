@@ -307,8 +307,9 @@ async function init() {
         elements.settingsVersionLabel.textContent = `Application Version: v${version}`;
     }
     setTimeout(checkForUpdate, 2000);
-    // Also check once every 24 hours for users who never close the app
-    setInterval(checkForUpdate, 24 * 60 * 60 * 1000);
+    // Re-check every 3 hours (was 24h) so a missed/failed check heals within
+    // hours rather than a day.
+    setInterval(checkForUpdate, 3 * 60 * 60 * 1000);
 
     // Startup restore complete — allow _saveViewState to persist changes
     appInitializing = false;
@@ -4168,9 +4169,25 @@ function applyFontColor(settings) {
 }
 
 // Update check
+let _updateCheckRetries = 0;
+let _lastUpdateCheckAt = 0;
 async function checkForUpdate() {
+    _lastUpdateCheckAt = Date.now();
     try {
         const result = await window.electronAPI.checkForUpdate();
+        // A failed check (no network yet, GitHub rate-limit/5xx) must not be
+        // mistaken for "up to date" — retry with backoff so the banner still
+        // appears once the check succeeds, instead of waiting for the next
+        // scheduled poll. (This is why a Mac/Windows user could sit on an old
+        // version and never see the notice.)
+        if (result.error) {
+            if (_updateCheckRetries < 5) {
+                _updateCheckRetries++;
+                setTimeout(checkForUpdate, _updateCheckRetries * 20000);
+            }
+            return;
+        }
+        _updateCheckRetries = 0;
         if (!result.hasUpdate) return;
 
         const version = result.version;
@@ -4196,6 +4213,10 @@ async function checkForUpdate() {
 // while minimized, so any resize during that state was skipped)
 window.addEventListener('focus', () => {
     if (!isCompactMode && elements.mainContent.style.display !== 'none') resizeWidget();
+    // Re-check for a new version when the user comes back to the widget, at
+    // most every 30 min — this is the reliable moment the update banner shows
+    // even if the app has been open (or was offline) for a while.
+    if (Date.now() - _lastUpdateCheckAt > 30 * 60 * 1000) checkForUpdate();
 });
 
 // Start the application. A renderer initialization error must never leave the

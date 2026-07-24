@@ -3719,6 +3719,13 @@ ipcMain.handle('check-for-update', () => {
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
         try {
+          // Non-200 (rate limit 403, transient 5xx, etc.) is a FAILED check,
+          // not "up to date" — flag it so the renderer can retry rather than
+          // silently give up until the next scheduled poll.
+          if (res.statusCode !== 200) {
+            resolve({ hasUpdate: false, version: null, error: true });
+            return;
+          }
           const data = JSON.parse(body);
           const tag = (data.tag_name || '').replace(/^v/, '');
           const current = app.getVersion();
@@ -3728,13 +3735,13 @@ ipcMain.handle('check-for-update', () => {
             resolve({ hasUpdate: false, version: null });
           }
         } catch {
-          resolve({ hasUpdate: false, version: null });
+          resolve({ hasUpdate: false, version: null, error: true });
         }
       });
     });
 
-    req.on('error', () => resolve({ hasUpdate: false, version: null }));
-    req.on('timeout', () => { req.destroy(); resolve({ hasUpdate: false, version: null }); });
+    req.on('error', () => resolve({ hasUpdate: false, version: null, error: true }));
+    req.on('timeout', () => { req.destroy(); resolve({ hasUpdate: false, version: null, error: true }); });
     req.end();
   });
 });
