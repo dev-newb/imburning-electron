@@ -3626,10 +3626,29 @@ function renderChart(history) {
             }
         }
     });
+
+    explainProjectionState(projections.length);
 }
 
 function formatTimestampTick(timestamp, spanMs, timeFormat) {
     return chartUtils.formatTimestampTick(timestamp, spanMs, timeFormat);
+}
+
+// An empty trance must explain itself: projections need a recent stretch of
+// RISING usage, and a login change orphans the learned history until enough
+// fresh samples accumulate. Without this hint, "no dotted lines" reads as
+// "projections are broken".
+function explainProjectionState(projectionCount) {
+    if (!elements.psychicBtn || !projectionsVisible) return;
+    const idle = 'Forecast projections: ON — nothing to project yet. Lines appear after ~30 min of rising usage (login changes reset the learning).';
+    elements.psychicBtn.title = projectionCount > 0
+        ? 'Forecast projections: ON — the psychic sees your future burn'
+        : idle;
+    if (elements.usageChart) {
+        elements.usageChart.title = projectionCount > 0
+            ? ''
+            : 'No projections yet — they appear after ~30 minutes of rising usage';
+    }
 }
 
 // Add spinning animation for refresh button

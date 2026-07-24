@@ -265,6 +265,10 @@
                 }
             }
         });
+        // An empty trance explains itself (matches the inline chart's hint)
+        canvas.title = (settings.projectionsOn !== false && !hadProjection)
+            ? 'No projections yet — they appear after ~30 minutes of rising usage'
+            : '';
     }
 
     let lastHistory = null, lastLatest = null, lastSettings = null;
