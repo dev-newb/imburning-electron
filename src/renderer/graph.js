@@ -279,8 +279,36 @@
             ]);
             lastHistory = history; lastLatest = latest; lastSettings = settings;
             await applyTheme(settings);
+            applyPsychicState(settings.projectionsOn !== false);
             build(history, latest, settings);
         } catch (err) { /* window may be closing */ }
+    }
+
+    // Forecast-projection toggle (the psychic) — mirrors the inline graph's
+    // button and shares the same settings.projectionsOn, so toggling here or
+    // in the main window keeps both in sync.
+    const psychic = document.getElementById('psychicBtn');
+    const psychicImg = document.getElementById('psychicImg');
+    function applyPsychicState(on) {
+        if (!psychic) return;
+        psychic.classList.toggle('on', on);
+        psychicImg.src = on ? '../../assets/psychic-on.png' : '../../assets/psychic-idle.png';
+        psychic.title = on
+            ? 'Forecast projections: ON — the psychic sees your future burn'
+            : 'Forecast projections: OFF — the psychic awaits your command';
+    }
+    if (psychic) {
+        psychic.addEventListener('click', async () => {
+            const next = !(lastSettings ? lastSettings.projectionsOn !== false : true);
+            applyPsychicState(next);
+            try {
+                const s = await api.getSettings();
+                s.projectionsOn = next;
+                await api.saveSettings(s);
+                lastSettings = s;
+            } catch (e) { /* ignore */ }
+            if (lastHistory) build(lastHistory, lastLatest, lastSettings || {});
+        });
     }
 
     // Always-on-top pin (persisted in main via settings.graphAlwaysOnTop).

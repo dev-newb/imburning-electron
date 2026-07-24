@@ -50,6 +50,25 @@
         body.light .pin-btn.on { color: #0a8bb0; border-color: rgba(10, 139, 176, .5); background: rgba(53, 224, 255, .12); }
         .gwrap { flex: 1; position: relative; padding: 8px 10px 10px; min-height: 0; }
         canvas { position: absolute; inset: 8px 10px 10px; }
+        /* Forecast-projection toggle — same sprite and corner as the inline graph */
+        .psychic-btn {
+            position: absolute;
+            bottom: 8px;
+            right: 12px;
+            z-index: 5;
+            width: 26px;
+            height: 26px;
+            padding: 1px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            opacity: 0.9;
+            transition: opacity .15s, background .15s, filter .15s;
+        }
+        .psychic-btn img { width: 24px; height: 24px; display: block; image-rendering: pixelated; }
+        .psychic-btn:hover { opacity: 1; background: rgba(139, 92, 246, 0.15); }
+        .psychic-btn.on { filter: drop-shadow(0 0 5px rgba(53, 224, 255, 0.55)); }
         .gempty {
             position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
@@ -72,6 +91,9 @@
     <div class="gwrap">
         <canvas id="usageChart" role="img" aria-label="Usage history chart"></canvas>
         <div class="gempty" id="gEmpty" style="display:none;">No usage history yet — the graph fills in as data is collected.</div>
+        <button class="psychic-btn" id="psychicBtn" title="Forecast projections">
+            <img id="psychicImg" src="../../assets/psychic-idle.png" alt="Forecast projections toggle">
+        </button>
     </div>
     <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
     <script src="chart-utils.js"></script>
