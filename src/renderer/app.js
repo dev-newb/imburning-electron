@@ -1451,7 +1451,9 @@ function applyLabelMode(effWidth) {
         const full = (el.dataset.abbr || el.textContent || '').replace(/\(1D\)/, '(daily)');
         if (mode === 'code') el.title = tip ? `${full} — ${tip}` : full;
         else if (mode === 'abbr') el.title = tip;
-        else el.title = '';
+        // Full mode: no tooltip unless the name is ellipsis-truncated, in
+        // which case the hover carries the complete label.
+        else el.title = (el.scrollWidth > el.clientWidth + 1) ? full : '';
     });
 }
 

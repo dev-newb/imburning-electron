@@ -386,6 +386,11 @@ body.theme-light .graph-btn.active {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     white-space: nowrap;
+    /* Long model names (Gemini previews) truncate with an ellipsis instead
+       of overrunning into the bars; the full name stays in the tooltip. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .usage-percentage {

@@ -11,7 +11,9 @@ const GEMINI_MODEL_PRIORITY = new Map([
 function geminiModelLabel(modelId) {
   const parts = String(modelId).replace(/^gemini-/i, '').split('-')
     .map((part) => /^\d/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1));
-  return `${parts.join(' ')} (daily)`;
+  // "(1D)" not "(daily)" — Google meters many model versions at once and the
+  // long suffix crowded labels into the bars (owner-requested).
+  return `${parts.join(' ')} (1D)`;
 }
 
 function geminiModelPriority(modelId) {

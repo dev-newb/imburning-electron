@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const { geminiModelLabel, normalizeGeminiQuota } = require('../src/provider-models');
 
 test('Gemini 3.6 Flash and 3.5 Flash-Lite receive stable display labels', () => {
-  assert.equal(geminiModelLabel('gemini-3.6-flash'), '3.6 Flash (daily)');
-  assert.equal(geminiModelLabel('gemini-3.5-flash-lite'), '3.5 Flash Lite (daily)');
+  assert.equal(geminiModelLabel('gemini-3.6-flash'), '3.6 Flash (1D)');
+  assert.equal(geminiModelLabel('gemini-3.5-flash-lite'), '3.5 Flash Lite (1D)');
 });
 
 test('Gemini rows order Pro first, then current Flash models, keeping future buckets', () => {
