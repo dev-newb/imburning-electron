@@ -1709,10 +1709,36 @@ const _PXCOLS = { deep: '#e8590c', mid: '#ff922b', bright: '#ffd43b', core: '#ff
 const _rnd = (a, b) => a + Math.random() * (b - a);
 const _pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+// Derive a 4-tone flame palette (deep/mid/bright/core) from any base colour —
+// this is how the burn-alert fire wears each bar's own colour.
+const _paletteCache = new Map();
+function _mixHex(hex, target, f) {
+    const p = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const m = /^#?[0-9a-f]{6}$/i.test(hex) ? (hex[0] === '#' ? hex : '#' + hex) : '#ff922b';
+    const [r1, g1, b1] = p(m);
+    const [r2, g2, b2] = p(target);
+    const c = (a, b2v) => Math.round(a + (b2v - a) * f).toString(16).padStart(2, '0');
+    return '#' + c(r1, r2) + c(g1, g2) + c(b1, b2);
+}
+function _firePalette(base) {
+    const key = String(base || '').trim() || '#ff922b';
+    if (!_paletteCache.has(key)) {
+        _paletteCache.set(key, {
+            deep: _mixHex(key, '#000000', 0.3),
+            mid: key.startsWith('#') ? key : '#ff922b',
+            bright: _mixHex(key, '#ffffff', 0.45),
+            core: _mixHex(key, '#ffffff', 0.78)
+        });
+    }
+    return _paletteCache.get(key);
+}
+
 // Chunky flame sprite out of 2px cells (box-shadow art, robot-logo palette).
-// `tall` spawns an occasional taller lick near the front for variety.
-function _spawnPixelFlame(layer, x, lifeMs, tall) {
+// `tall` spawns an occasional taller lick near the front for variety;
+// `palette` recolours the whole sprite (burn-alert fire wears the bar's hue).
+function _spawnPixelFlame(layer, x, lifeMs, tall, palette) {
     if (layer.childElementCount > 110) return; // bounded — never floods the DOM
+    const P = palette || _PXCOLS;
     const cells = [];
     const rows = Math.floor(tall ? _rnd(7, 11) : _rnd(4, 7));
     for (let r = 0; r < rows; r++) {
@@ -1721,9 +1747,9 @@ function _spawnPixelFlame(layer, x, lifeMs, tall) {
             if (r === rows - 1 && edge) continue;
             if (r === rows - 1 && Math.random() < 0.4) continue;
             if (edge && Math.random() < 0.25) continue;
-            const col = r >= rows - 2 ? (Math.random() < 0.5 ? _PXCOLS.mid : _PXCOLS.bright)
-                : edge ? (Math.random() < 0.5 ? _PXCOLS.deep : _PXCOLS.mid)
-                    : (Math.random() < 0.45 ? _PXCOLS.core : _PXCOLS.bright);
+            const col = r >= rows - 2 ? (Math.random() < 0.5 ? P.mid : P.bright)
+                : edge ? (Math.random() < 0.5 ? P.deep : P.mid)
+                    : (Math.random() < 0.45 ? P.core : P.bright);
             cells.push(`${c * 2}px ${-r * 2}px 0 0 ${col}`);
         }
     }
@@ -1828,6 +1854,58 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
     }
     requestAnimationFrame(frame);
 }
+
+// ---- Ambient fire loop: burning bars + reset orbs wear LIVE pixel fire ----
+// One shared scheduler drives every currently-burning element with the same
+// flame engine the subheading burns use, recoloured per element. Each element
+// gets its own spawn cadence; the loop idles to a slow poll when nothing
+// burns, the tab is hidden, or the clown is jailed.
+let _ambientFireTimer = null;
+function _scheduleAmbientFire(delayMs) {
+    if (_ambientFireTimer) return;
+    _ambientFireTimer = setTimeout(() => {
+        _ambientFireTimer = null;
+        requestAnimationFrame(_ambientFireFrame);
+    }, delayMs);
+}
+
+function _tickElementFire(el, now, minGapMs, isOrb) {
+    let layer = el.__fireLayer;
+    if (!layer || layer.parentNode !== el) {
+        layer = document.createElement('div');
+        layer.className = 'fx ambient-fire';
+        el.appendChild(layer);
+        el.__fireLayer = layer;
+        layer.__lastSpawn = 0;
+    }
+    if (now - layer.__lastSpawn < minGapMs * (0.7 + Math.random() * 0.8)) return;
+    layer.__lastSpawn = now;
+    const width = Math.max(4, el.offsetWidth - 4);
+    const palette = _firePalette(getComputedStyle(el).getPropertyValue('--fire-col') || '#ff922b');
+    if (isOrb) {
+        _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), false, palette);
+    } else {
+        _spawnPixelFlame(layer, _rnd(0, width), _rnd(240, 460), Math.random() < 0.1, palette);
+        if (Math.random() < 0.1) _spawnPixelSmoke(layer, _rnd(0, width));
+    }
+}
+
+function _ambientFireFrame(now) {
+    if (document.hidden || document.body.classList.contains('no-pizazz')) {
+        _scheduleAmbientFire(500);
+        return;
+    }
+    const bars = document.querySelectorAll('.progress-fill.on-fire, .compact-bar-fill.on-fire');
+    const orbs = document.querySelectorAll('.reset-dot');
+    for (const el of bars) _tickElementFire(el, now, 60, false);
+    for (const el of orbs) _tickElementFire(el, now, 300, true);
+    if (bars.length || orbs.length) {
+        requestAnimationFrame(_ambientFireFrame);
+    } else {
+        _scheduleAmbientFire(600);
+    }
+}
+_scheduleAmbientFire(900); // starts idling at module load, wakes when fire exists
 
 // ---- Vertical squeeze classes ----
 // Applied ONLY while the user has hand-sized/snapped the window (main tells
@@ -2492,6 +2570,10 @@ function updateUI(data) {
         if (on) {
             const col = pct >= dangerThreshold ? '#ef4444' : pct >= warnThreshold ? '#f59e0b' : baseColor;
             el.style.setProperty('--fire-col', col);
+        } else if (el.__fireLayer) {
+            // Structural bars persist across renders — clear their flames
+            el.__fireLayer.remove();
+            el.__fireLayer = null;
         }
     };
     structuralFire(elements.sessionProgress, _burningRowKeys.has('STRUCT_SESSION'), data.five_hour?.utilization || 0, '#d97757');

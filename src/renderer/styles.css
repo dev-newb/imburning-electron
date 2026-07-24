@@ -2880,63 +2880,26 @@ body.theme-light {
     overflow: visible;
 }
 
-/* Flames along the WHOLE burning bar: two drifting tongue layers (tiled
-   radial gradients) swaying at different speeds — fluid, not steppy. The
-   drift loops one tile width so it's seamless. */
-@keyframes flameDrift {
-    from { background-position-x: 0; }
-    to { background-position-x: 9px; }
-}
-
-@keyframes flameDriftBack {
-    from { background-position-x: 14px; }
-    to { background-position-x: 0; }
-}
-
+/* The bars burn with LIVE pixel fire: the ambient fire loop in app.js spawns
+   the same 2px-cell flame sprites the subheading burns use — recoloured to
+   each bar via --fire-col — continuously along the whole fill. CSS keeps only
+   the heat-glow underlay (above) and hosts the spawned layers below. */
 @keyframes flameLick {
     0%   { transform: scaleY(0.72) skewX(-3deg); }
     50%  { transform: scaleY(1.12) skewX(2deg); }
     100% { transform: scaleY(0.9) skewX(-1.5deg); }
 }
 
-.progress-fill.on-fire::before,
-.progress-fill.on-fire::after,
-.compact-bar-fill.on-fire::before,
-.compact-bar-fill.on-fire::after {
-    content: '';
+.ambient-fire {
     position: absolute;
-    left: 1px;
-    right: 1px;
-    bottom: calc(100% - 2px);
+    inset: 0;
+    overflow: visible;
     pointer-events: none;
-    transform-origin: 50% 100%;
-    background-repeat: repeat-x;
+    z-index: 5;
 }
 
-/* inner tongues — bright cores, quick sway */
-.progress-fill.on-fire::before,
-.compact-bar-fill.on-fire::before {
-    height: 9px;
-    background-image: radial-gradient(3px 8px at 4.5px 100%,
-        color-mix(in srgb, var(--fire-col, #ff922b) 55%, #ffffff) 0%,
-        color-mix(in srgb, var(--fire-col, #ff922b) 90%, #ffffff) 34%,
-        color-mix(in srgb, var(--fire-col, #ff922b) 65%, transparent) 58%,
-        transparent 76%);
-    background-size: 9px 100%;
-    animation: flameDrift 1.4s linear infinite, flameLick 0.85s ease-in-out infinite alternate;
-}
-
-/* outer tongues — taller, softer, counter-drifting */
-.progress-fill.on-fire::after,
-.compact-bar-fill.on-fire::after {
-    height: 13px;
-    opacity: 0.7;
-    background-image: radial-gradient(4.5px 12px at 7px 100%,
-        var(--fire-col, #ff922b) 0%,
-        color-mix(in srgb, var(--fire-col, #ff922b) 55%, transparent) 46%,
-        transparent 70%);
-    background-size: 14px 100%;
-    animation: flameDriftBack 2.1s linear infinite, flameLick 1.15s ease-in-out infinite alternate-reverse;
+.compact-bar-fill {
+    position: relative;
 }
 
 /* Codex banked-reset orbs idle with a faint flame in their own colour.

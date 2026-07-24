@@ -207,9 +207,13 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.match(app, /function computeBurningRowKeys\(data\)/);
   assert.match(app, /_burningRowKeys = computeBurningRowKeys\(data\);/);
   assert.match(app, /--fire-col/);
-  // CSS: flames on full and compact bars, ambient flame on the reset orbs
+  // CSS: heat underlay on full and compact bars, halo on the reset orbs,
+  // and the live pixel-fire loop that actually burns them
   assert.match(css, /\.progress-fill\.on-fire,\s*\.compact-bar-fill\.on-fire/);
   assert.match(css, /\.reset-dot::after/);
+  assert.match(css, /\.ambient-fire/);
+  assert.match(app, /function _tickElementFire/);
+  assert.match(app, /_spawnPixelFlame\(layer, _rnd\(0, width\), _rnd\(240, 460\), Math\.random\(\) < 0\.1, palette\)/);
 });
 
 test('no-pizazz keeps functional spinners alive and reaches the detached graph', () => {
