@@ -124,8 +124,12 @@ test('hidden charts collapse preset height without surrendering manual resize', 
   assert.match(app, /classList\.toggle\('graph-off', !_graphIsInline\(\)\)/);
   assert.match(app, /_forceFitHeight\(\{ fitPreset: true, intrinsic: true \}\)/);
   assert.match(css, /body\.landscape\.graph-off:not\(\.compact-mode\) \.content\s*\{[\s\S]*grid-template-rows: auto;/);
-  assert.match(preload, /resizeWindow: \(height, force, fitPreset\)/);
+  assert.match(preload, /resizeWindow: \(height, force, fitPreset, userAction\)/);
   assert.match(main, /explicitPresetFit = fitPreset === true && _activeWindowPreset !== null/);
+  // Direct user actions (graph toggle, burn, hide) may adopt the new content
+  // height even in a hand-sized window; background refits never may.
+  assert.match(main, /const explicitUserAction = userAction === true;/);
+  assert.match(main, /if \(windowIsUserSized\(\) && !explicitPresetFit && !explicitUserAction\) return;/);
 });
 
 test('ultra-wide provider columns restore full dual-account rows', () => {
@@ -158,4 +162,44 @@ test('diagnostic launch avoids the Electron-reserved debug flag', () => {
   const source = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
   assert.match(source, /process\.argv\.includes\('--burnwatch-debug'\)/);
   assert.doesNotMatch(source, /process\.argv\.includes\('--debug'\)/);
+});
+
+test('the session key never crosses into the renderer', () => {
+  const preload = fs.readFileSync(path.join(repoDir, 'preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
+  // The old key-carrying IPC surface is gone; login state is all that crosses.
+  assert.doesNotMatch(preload, /save-credentials|validate-session-key|detect-session-key/);
+  assert.match(preload, /anthropicLogin: \(\) => ipcRenderer\.invoke\('anthropic-login'\)/);
+  assert.match(main, /loggedIn: !!readStoredSessionKey\(\)/);
+  // Diagnostics never print any part of the key or OAuth account identity.
+  assert.doesNotMatch(main, /sessionKey\.substring/);
+  assert.doesNotMatch(main, /Connected as`, tokens\.email/);
+});
+
+test('sort-by-usage is whitelisted on both sides and wired in the renderer', () => {
+  const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+  assert.match(main, /sortByUsage: store\.get\('settings\.sortByUsage', false\)/);
+  assert.match(main, /store\.set\('settings\.sortByUsage', settings\.sortByUsage === true\)/);
+  assert.match(app, /function _sortRowsByUsage\(\)/);
+  assert.match(html, /id="sortByUsageToggle"/);
+});
+
+test('the compact chevron ghost is fully gone (markup, styles, wiring)', () => {
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  for (const source of [app, html, css]) {
+    assert.doesNotMatch(source, /compact-(collapse|expand)-btn|compactCollapseBtn|compactExpandBtn/);
+  }
+});
+
+test('no-pizazz keeps functional spinners alive and reaches the detached graph', () => {
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  const graphHtml = fs.readFileSync(path.join(rendererDir, 'graph.html'), 'utf8');
+  const graphJs = fs.readFileSync(path.join(rendererDir, 'graph.js'), 'utf8');
+  assert.match(css, /body\.no-pizazz \.spinner \{\s*animation: spin 1s linear infinite !important;/);
+  assert.match(graphHtml, /body\.no-pizazz \*/);
+  assert.match(graphJs, /classList\.toggle\('no-pizazz', pizazzOff\)/);
 });

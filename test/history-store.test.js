@@ -50,6 +50,32 @@ test('migration is idempotent and capped to newest retained samples', async (t) 
   assert.deepEqual(await store.read('org-a', { refresh: true }), legacy.slice(-3));
 });
 
+test('retention prune removes expired day files off the append path', async (t) => {
+  const now = Date.UTC(2026, 6, 20, 12);
+  const { root, store } = await temporaryStore(t, { now: () => now, retentionDays: 8 });
+  await store.append('org-a', { timestamp: now - 9 * DAY_MS, weekly: 1 }); // expired day file
+  await store.append('org-a', { timestamp: now, weekly: 2 });
+  const dir = path.join(root, scopeDirectoryName('org-a'));
+  // Appends no longer prune inline — both files still exist
+  assert.equal((await fs.readdir(dir)).length, 2);
+  await store.pruneExpiredFiles('org-a');
+  const remaining = await fs.readdir(dir);
+  assert.deepEqual(remaining, ['2026-07-20.jsonl']);
+  assert.deepEqual(await store.read('org-a', { refresh: true }), [{ timestamp: now, weekly: 2 }]);
+});
+
+test('same-timestamp entries with different content both survive dedupe', async (t) => {
+  const now = Date.UTC(2026, 6, 20, 12);
+  const { store } = await temporaryStore(t, { now: () => now });
+  await store.append('org-a', { timestamp: now, weekly: 1 });
+  await store.append('org-a', { timestamp: now, weekly: 2 });
+  await store.append('org-a', { timestamp: now, weekly: 1 }); // exact duplicate — collapsed
+  assert.deepEqual(await store.read('org-a', { refresh: true }), [
+    { timestamp: now, weekly: 1 },
+    { timestamp: now, weekly: 2 }
+  ]);
+});
+
 test('organization scopes remain isolated', async (t) => {
   const now = Date.UTC(2026, 6, 20, 12);
   const { store } = await temporaryStore(t, { now: () => now });

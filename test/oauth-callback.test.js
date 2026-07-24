@@ -43,3 +43,25 @@ test('provider rejection produces a failure page and rejects the flow', async ()
   assert.equal(response.status, 400);
   assert.match(response.body, /not connected/);
 });
+
+test('login times out and rejects when nobody completes the flow', async () => {
+  const callback = await startOAuthCallbackServer({ port: 0, pathName: '/callback', state: 'expected', timeoutMs: 60 });
+  await assert.rejects(callback.resultPromise, /timed out/);
+});
+
+test('a busy port rejects the listen instead of hanging the flow', async () => {
+  const first = await startOAuthCallbackServer({ port: 0, pathName: '/callback', state: 'a', timeoutMs: 200 });
+  await assert.rejects(
+    startOAuthCallbackServer({ port: first.port, pathName: '/callback', state: 'b', timeoutMs: 200 }),
+    /port busy/i
+  );
+  first.close();
+});
+
+test('a callback without an authorization code fails the flow explicitly', async () => {
+  const callback = await startOAuthCallbackServer({ port: 0, pathName: '/callback', state: 'expected', timeoutMs: 5000 });
+  const bad = request(callback.port, '/callback?state=expected');
+  await assert.rejects(callback.resultPromise, /missing authorization code/);
+  const response = await bad.responsePromise;
+  assert.equal(response.status, 400);
+});

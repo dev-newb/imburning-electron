@@ -18,6 +18,26 @@ test('finiteOrNull preserves real zero and rejects unavailable values', () => {
   assert.equal(finiteOrNull(Infinity), null);
 });
 
+test('latestContiguousRun drops invalid samples before finding the run', () => {
+  assert.deepEqual(latestContiguousRun([
+    { t: 1000, v: 5 },
+    null,
+    { t: NaN, v: 9 },
+    { t: 61000, v: 'not-a-number' },
+    { t: 121000, v: 7 }
+  ], 300000), [
+    { t: 1000, v: 5 },
+    { t: 121000, v: 7 }
+  ]);
+});
+
+test('explicit auth failure recognizes string statuses and the statusCode field', () => {
+  assert.equal(isExplicitAuthFailure({ status: '401' }), true);
+  assert.equal(isExplicitAuthFailure({ statusCode: 403 }), true);
+  assert.equal(isExplicitAuthFailure({ status: 500 }), false);
+  assert.equal(isExplicitAuthFailure(null), false);
+});
+
 test('sample gap follows the configured refresh interval', () => {
   assert.equal(sampleGapLimitMs('30'), 180000);
   assert.equal(sampleGapLimitMs('300'), 750000);

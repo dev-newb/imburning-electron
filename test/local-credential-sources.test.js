@@ -44,3 +44,19 @@ test('credential discovery includes Windows and every usable WSL home', () => {
   ]);
   assert.equal(calls.length, 3);
 });
+
+test('utility distros (docker-desktop and friends) are never probed or offered', () => {
+  const probed = [];
+  const spawnSyncImpl = (_command, args) => {
+    if (args[0] === '--list') {
+      return { status: 0, stdout: Buffer.from('docker-desktop\r\nUbuntu\r\ndocker-desktop-data\r\n', 'utf16le') };
+    }
+    probed.push(args[1]);
+    if (args[1] === 'Ubuntu') return { status: 0, stdout: '/home/sahar\n' };
+    return { status: 1, stdout: '' };
+  };
+  const homes = discoverCredentialHomes({ force: true, homedir: 'C:\\U', platform: 'win32', spawnSyncImpl });
+  // Probing a utility distro would cold-boot its VM — it must never happen
+  assert.deepEqual(probed, ['Ubuntu']);
+  assert.deepEqual(homes.map((home) => home.id), ['windows', 'wsl:Ubuntu']);
+});
