@@ -1,4 +1,4 @@
-/* Local font — Libre Baskerville (bundled, no external dependency) */
+/* Local font â€” Libre Baskerville (bundled, no external dependency) */
 @font-face {
     font-family: 'Libre Baskerville';
     font-style: normal;
@@ -17,14 +17,26 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+/* Mouse clicks stay outline-free; keyboard focus gets a visible ring */
+*:focus {
     outline: none;
-    /* Remove default focus outline */
+}
+
+*:focus-visible {
+    outline: 2px solid rgba(139, 92, 246, 0.85);
+    outline-offset: 1px;
+}
+
+body.theme-light *:focus-visible {
+    outline-color: rgba(109, 62, 216, 0.85);
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     overflow: hidden;
-    /* The window is opaque now (needed for Windows Snap) — body matches the
+    /* The window is opaque now (needed for Windows Snap) â€” body matches the
        widget gradient's base so snapped/stretched edges blend in */
     background: #1e1e2e;
     -webkit-app-region: no-drag;
@@ -38,7 +50,7 @@ html { background: #1e1e2e; }
 body.theme-light:root, html:has(body.theme-light) { background: #e8e8f0; }
 
 /* When snapped to a half/quarter screen the window is far wider than the
-   widget — keep the rows readable by capping and centering the content */
+   widget â€” keep the rows readable by capping and centering the content */
 .content, .compact-content { max-width: 600px; width: 100%; margin: 0 auto; }
 
 #app {
@@ -94,14 +106,8 @@ body.theme-light:root, html:has(body.theme-light) { background: #e8e8f0; }
     image-rendering: pixelated;
 }
 
-.controls {
-    -webkit-app-region: no-drag;
-    display: flex;
-    gap: 8px;
-    margin-right: -10px;
-}
 
-/* Window-caption buttons in the title bar (right corner): wide · tall · close,
+/* Window-caption buttons in the title bar (right corner): wide Â· tall Â· close,
    Windows-style tight spacing (flush, no gap). */
 .title-caption {
     -webkit-app-region: no-drag;
@@ -156,10 +162,6 @@ body.theme-light .caption-close:hover { background: #e81123; color: #fff; }
     display: block;
 }
 
-.close-btn:hover {
-    background: #e74c3c;
-    color: white;
-}
 
 /* Loading State */
 .loading-container {
@@ -182,230 +184,6 @@ body.theme-light .caption-close:hover { background: #e81123; color: #fff; }
     to {
         transform: rotate(360deg);
     }
-}
-
-/* Login State */
-.login-container {
-    padding: 0 16px;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.login-content {
-    width: 100%;
-}
-
-/* Step 1: Auto-detect */
-.login-step1 {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-}
-
-.step-icon svg {
-    color: #8b5cf6;
-    flex-shrink: 0;
-}
-
-.step-text {
-    flex: 1;
-}
-
-.step-text h3 {
-    color: #e0e0e0;
-    font-size: 14px;
-    margin-bottom: 2px;
-}
-
-.step-text p {
-    color: #a0a0a0;
-    font-size: 11px;
-    margin: 0;
-}
-
-.step-hint {
-    color: #707070;
-    font-size: 9px;
-    margin-top: 2px;
-    font-style: italic;
-}
-
-.step-error {
-    color: #ef4444;
-    font-size: 9px;
-    margin-top: 2px;
-    min-height: 0;
-    word-break: break-word;
-}
-
-.auto-detect-btn {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-    color: white;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.auto-detect-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-}
-
-.auto-detect-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.open-browser-link {
-    color: #a78bfa;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.open-browser-link:hover {
-    color: #c4b5fd;
-    text-decoration: underline;
-}
-
-.next-step-btn {
-    background: none;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #a0a0a0;
-    padding: 8px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.next-step-btn:hover {
-    border-color: rgba(255, 255, 255, 0.3);
-    color: #e0e0e0;
-}
-
-/* Step 2: Paste Session Key */
-.session-key-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-}
-
-.session-key-header h3 {
-    color: #e0e0e0;
-    font-size: 13px;
-    margin-bottom: 3px;
-}
-
-.session-key-header p {
-    color: #707070;
-    font-size: 10px;
-    margin-bottom: 0;
-}
-
-.session-key-header code {
-    background: rgba(139, 92, 246, 0.2);
-    color: #a78bfa;
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 10px;
-}
-
-.session-key-input-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.session-key-input-row input {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #e0e0e0;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-family: monospace;
-    transition: border-color 0.2s;
-}
-
-.session-key-input-row input:focus {
-    border-color: #8b5cf6;
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.session-key-input-row input::placeholder {
-    color: #505050;
-}
-
-.connect-btn {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-    color: white;
-    border: none;
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.connect-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-}
-
-.connect-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.session-key-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.session-key-error {
-    color: #ef4444;
-    font-size: 9px;
-    min-height: 14px;
-    max-height: 40px;
-    overflow-y: auto;
-    margin: 0;
-    flex: 1;
-    word-break: break-all;
-    font-family: monospace;
-}
-
-.back-step-btn {
-    background: none;
-    border: none;
-    color: #707070;
-    font-size: 10px;
-    cursor: pointer;
-    padding: 2px 4px;
-    transition: color 0.2s;
-    flex-shrink: 0;
-}
-
-.back-step-btn:hover {
-    color: #a0a0a0;
 }
 
 /* No Usage State */
@@ -450,48 +228,6 @@ body.theme-light .caption-close:hover { background: #e81123; color: #fff; }
     margin-bottom: 0;
 }
 
-/* Auto-Login Attempt State */
-.auto-login-container {
-    padding: 0 16px;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.auto-login-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    text-align: left;
-    width: 100%;
-}
-
-.auto-login-content .spinner {
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
-    margin: 0;
-}
-
-.auto-login-text-group {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.auto-login-content h3 {
-    color: #e0e0e0;
-    font-size: 14px;
-    margin-bottom: 2px;
-}
-
-.auto-login-content p {
-    color: #a0a0a0;
-    font-size: 11px;
-    margin-bottom: 0;
-}
-
 /* Main Content */
 .content {
     padding: 16px 20px;
@@ -525,7 +261,7 @@ body.theme-light .caption-close:hover { background: #e81123; color: #fff; }
 
 /* Expandable Section */
 .expand-section {
-    /* No divider or extra gap inside a provider section — the section's own
+    /* No divider or extra gap inside a provider section â€” the section's own
        bottom rule is the only separator, spacing matches OpenAI/Google */
     margin-top: 2px;
 }
@@ -597,9 +333,6 @@ body.theme-light .graph-btn.active {
     text-align: center;
 }
 
-.col-header-right {
-    text-align: right;
-}
 
 /* Bar + percentage grouped */
 .usage-bar-group {
@@ -614,12 +347,6 @@ body.theme-light .graph-btn.active {
 }
 
 /* Circle + time grouped */
-.usage-timer-group {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
 
 /* Resets At column */
 .resets-at-text {
@@ -687,20 +414,24 @@ body.theme-light .graph-btn.active {
     min-width: 80px;
 }
 
+/* Anthropic rows wear the clay palette (session = base, weekly darker).
+   Defined ONCE here — the old purple/blue gradients used to sit in this spot
+   and get silently re-skinned 1900 lines later, leaving a stale purple glow
+   under the clay bar. */
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);
+    background: linear-gradient(90deg, #e59b78 0%, #d97757 100%);
     border-radius: 3px;
     transition: width 0.6s ease;
     position: relative;
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
 }
 
-/* Shimmer removed */
-
 .progress-fill.weekly {
-    background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    background: linear-gradient(90deg, #d97757 0%, #b85c3c 100%);
+}
+
+.progress-fill.cc {
+    background: linear-gradient(90deg, #d9a18a 0%, #c8846a 100%);
 }
 
 .progress-fill.extra {
@@ -760,7 +491,7 @@ body.theme-light .graph-btn.active {
 }
 
 
-/* Circle only — centered in its column */
+/* Circle only â€” centered in its column */
 .usage-elapsed-group {
     display: flex;
     align-items: center;
@@ -882,18 +613,20 @@ body.theme-light .graph-btn.active {
     border: 1px solid rgba(160, 160, 160, 0.3);
 }
 
-/* Settings Overlay */
+/* Settings Overlay — single definition (was two conflicting blocks whose
+   winner depended on source order; these are the values that actually won) */
 .settings-overlay {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
-    z-index: 1000;
+    background: linear-gradient(135deg, #1a1a2e 0%, #252535 100%);
     display: flex;
-    align-items: stretch;
     flex-direction: column;
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 10;
 }
 
 .settings-content {
@@ -901,20 +634,6 @@ body.theme-light .graph-btn.active {
     flex-direction: column;
     height: 100%;
     padding: 0;
-}
-
-.settings-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(135deg, #1a1a2e 0%, #252535 100%);
-    display: flex;
-    flex-direction: column;
-    border-radius: 10px;
-    overflow: hidden;
-    z-index: 10;
 }
 
 .settings-header {
@@ -954,17 +673,6 @@ body.theme-light .graph-btn.active {
     color: #c4b5fd;
 }
 
-.settings-disclaimer {
-    color: #c0c0d0;
-    font-size: 9px;
-    text-align: center;
-    padding: 5px 14px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-}
-
-body.theme-light .settings-disclaimer {
-    color: #808090;
-}
 
 .settings-rows {
     flex: 1;
@@ -975,17 +683,6 @@ body.theme-light .settings-disclaimer {
     gap: 10px;
 }
 
-.settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-}
-
-.settings-row .settings-row-label {
-    width: 70px;
-    flex-shrink: 0;
-}
 
 /* Two-column toggle row */
 .settings-row-2col {
@@ -994,9 +691,6 @@ body.theme-light .settings-disclaimer {
     gap: 8px;
 }
 
-.settings-row-2col.tray-colors-row {
-    grid-template-columns: 1fr 1fr 1fr;
-}
 
 .tray-color-pair {
     display: inline-flex;
@@ -1014,7 +708,7 @@ body.theme-light .settings-disclaimer {
     cursor: pointer;
 }
 
-/* Provider sections (Anthropic / OpenAI / Google) — one line-height of
+/* Provider sections (Anthropic / OpenAI / Google) â€” one line-height of
    breathing room between companies, closed by a faint rule */
 .provider-section {
     margin-top: 2px;
@@ -1056,7 +750,7 @@ body.theme-light .provider-section {
     transition: filter 0.15s ease;
 }
 
-/* Anthropic — bookish serif in their clay/terracotta, letterpress warmth */
+/* Anthropic â€” bookish serif in their clay/terracotta, letterpress warmth */
 .brand-anthropic {
     font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
     font-weight: 600;
@@ -1065,7 +759,7 @@ body.theme-light .provider-section {
     text-shadow: 0 0 12px rgba(217, 119, 87, 0.35);
 }
 
-/* OpenAI — clean geometric sans with a teal sheen sweeping through */
+/* OpenAI â€” clean geometric sans with a teal sheen sweeping through */
 .brand-openai {
     font-weight: 700;
     letter-spacing: 0.2px;
@@ -1082,7 +776,7 @@ body.theme-light .provider-section {
     50% { background-position: 100% 0; }
 }
 
-/* Google — the classic four-colour wordmark, product-sans-ish */
+/* Google â€” the classic four-colour wordmark, product-sans-ish */
 .brand-google {
     font-family: 'Product Sans', Futura, 'Century Gothic', 'Segoe UI', sans-serif;
     font-weight: 700;
@@ -1165,11 +859,6 @@ body.theme-light .provider-section {
     align-self: center;
 }
 
-.section-chip.dual {
-    color: #fbbf24;
-    background: rgba(245, 158, 11, 0.14);
-    border: 1px solid rgba(245, 158, 11, 0.4);
-}
 
 .section-chip.cli {
     color: #9090a0;
@@ -1275,7 +964,7 @@ body.theme-light .section-eye.on {
     color: #7c5ce0;
 }
 
-/* Frozen provider — the logo sits encased in a block of real ice:
+/* Frozen provider â€” the logo sits encased in a block of real ice:
    irregular melt-rounded edges, frost patches, a travelling sheen,
    and jagged icicles hanging off the bottom */
 .section-header.frozen .section-name {
@@ -1303,7 +992,7 @@ body.theme-light .section-eye.on {
 
 /* Travelling gloss sheen across the cube face + a frost flake in the corner */
 .section-header.frozen .section-name::before {
-    content: '❄';
+    content: 'â„';
     position: absolute;
     inset: 0;
     border-radius: inherit;
@@ -1361,7 +1050,7 @@ body.theme-light .section-header.frozen .section-name {
         0 0 10px rgba(130, 195, 255, 0.35);
 }
 
-/* The psychic — toggles the graph's forecast projection lines */
+/* The psychic â€” toggles the graph's forecast projection lines */
 .graph-section {
     position: relative;
 }
@@ -1399,7 +1088,7 @@ body.theme-light .section-header.frozen .section-name {
     filter: drop-shadow(0 0 5px rgba(53, 224, 255, 0.55));
 }
 
-/* Ring-reset sparkle — a wand-tap of gold when an elapsed circle completes */
+/* Ring-reset sparkle â€” a wand-tap of gold when an elapsed circle completes */
 .sparkle-burst {
     position: absolute;
     inset: 0;
@@ -1425,7 +1114,7 @@ body.theme-light .section-header.frozen .section-name {
     100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.25) rotate(180deg); opacity: 0; }
 }
 
-/* Session planner hint under the pinned rows — wraps onto extra lines,
+/* Session planner hint under the pinned rows â€” wraps onto extra lines,
    never ellipsed */
 .plan-note {
     font-size: 10px;
@@ -1455,7 +1144,7 @@ body.theme-light .section-header.frozen .section-name {
     opacity: 0.55;
 }
 
-/* Codex limit-reset dots — magic teal orbs, spread edge to edge */
+/* Codex limit-reset dots â€” magic teal orbs, spread edge to edge */
 .reset-dots {
     flex: 1;
     display: flex;
@@ -1493,7 +1182,7 @@ body.theme-light .section-header.frozen .section-name {
     font-size: 10px;
 }
 
-/* Custom font colour (Settings) — overrides the data-text colours of both
+/* Custom font colour (Settings) â€” overrides the data-text colours of both
    themes; chrome (buttons, banner, settings) keeps its theme colours */
 body.custom-font .usage-label,
 body.custom-font .expand-section .usage-label,
@@ -1504,7 +1193,12 @@ body.custom-font .col-header,
 body.custom-font .compact-label,
 body.custom-font .compact-pct,
 body.custom-font .plan-note,
-body.custom-font .title span {
+body.custom-font .title span,
+body.custom-font .dual-label,
+body.custom-font .dual-pct,
+body.custom-font .dual-special-value,
+body.custom-font .dual-head span,
+body.custom-font .credits-approx {
     color: var(--custom-font) !important;
 }
 
@@ -1754,17 +1448,7 @@ body.theme-light .threshold-input:focus {
     font-size: 14px;
 }
 
-.footer {
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
 
-.last-update {
-    color: #666;
-    font-size: 11px;
-    display: block;
-    text-align: center;
-}
 
 /* Scrollbar (if needed) */
 ::-webkit-scrollbar {
@@ -1784,15 +1468,7 @@ body.theme-light .threshold-input:focus {
     background: rgba(255, 255, 255, 0.2);
 }
 
-/* Warning states */
-.progress-fill.warning {
-    background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
-}
-
-.progress-fill.danger {
-    background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
-}
-
+/* Warning states (bar variants live with the other .progress-fill rules) */
 .timer-progress.warning {
     stroke: #f59e0b;
 }
@@ -1835,6 +1511,46 @@ body.theme-light .timer-bg {
     stroke: rgba(0, 0, 0, 0.1);
 }
 
+/* Light-theme coverage that used to be missing (dark-only artifacts) */
+body.theme-light .toggle-switch input:not(:checked) + .toggle-slider {
+    background: rgba(0, 0, 0, 0.18);
+}
+
+body.theme-light .resets-at-text {
+    color: #4a4a66;
+}
+
+body.theme-light .no-usage-content h3 {
+    color: #1a1a2e;
+}
+
+body.theme-light .loading-container {
+    color: #606080;
+}
+
+body.theme-light .spinner {
+    border-color: rgba(0, 0, 0, 0.08);
+    border-top-color: #8b5cf6;
+}
+
+body.theme-light ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+body.theme-light ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.28);
+}
+
+body.theme-light .graph-popout-btn {
+    background: rgba(240, 240, 248, 0.75);
+    color: #505070;
+}
+
+/* Unencrypted-storage warning in Settings */
+.plain-storage-warning {
+    color: #d99a2b;
+}
+
 body.theme-light .control-btn {
     background: rgba(0, 0, 0, 0.06);
     color: #505070;
@@ -1870,15 +1586,12 @@ body.theme-light .theme-btn.active {
     color: #7c3aed;
 }
 
-body.theme-light .expand-section {
-    border-top-color: rgba(0,0,0,0.08);
-}
 
 body.theme-light .expand-arrow {
     color: #909090;
 }
 
-/* ── Update Banner ─────────────────────────────────────────── */
+/* â”€â”€ Update Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .update-banner {
     display: flex;
     align-items: center;
@@ -1918,7 +1631,28 @@ body.theme-light .expand-arrow {
     opacity: 1;
 }
 
-/* ── Settings version row ──────────────────────────────────── */
+/* â”€â”€ Stale-session notice (non-destructive degraded-fetch banner) â”€â”€ */
+.stale-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2a1f00;
+    padding: 4px 10px;
+    gap: 6px;
+    -webkit-app-region: no-drag;
+}
+
+.stale-banner-text {
+    font-size: 11px;
+    color: #f0c674;
+    text-align: center;
+    font-family: inherit;
+}
+
+body.theme-light .stale-banner { background: #fdf3d7; }
+body.theme-light .stale-banner-text { color: #8a6d1a; }
+
+/* â”€â”€ Settings version row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .settings-version-label {
     font-size: 11px;
     color: #9090b0;
@@ -1953,7 +1687,7 @@ body.theme-light .settings-update-link {
     color: #4a7a00;
 }
 
-/* ── Settings select dropdowns ─────────────────────────────── */
+/* â”€â”€ Settings select dropdowns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .settings-select {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.15);
@@ -1986,34 +1720,11 @@ body.theme-light .settings-select option {
     color: #303050;
 }
 
-/* ── Compact Mode ──────────────────────────────────────────── */
+/* â”€â”€ Compact Mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* Reduce title font size in compact mode to prevent wrapping */
 body.compact-mode .title {
     font-size: 14px;
-}
-
-/* Collapse chevron — fixed position in content area, does not move when rows expand */
-.compact-collapse-btn {
-    position: absolute;
-    left: 2px;
-    top: 40px;  /* fixed offset within .content: centers on the two main rows */
-    width: 18px;
-    height: 36px;
-    background: none;
-    border: none;
-    color: #505050;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-    padding: 0;
-    z-index: 5;
-}
-
-.compact-collapse-btn:hover {
-    color: #a0a0a0;
 }
 
 /* Compact content container */
@@ -2023,30 +1734,6 @@ body.compact-mode .title {
     align-items: center;
     padding: 6px 22px;
     flex: 1;
-}
-
-/* Expand chevron — right edge of compact view */
-.compact-expand-btn {
-    position: absolute;
-    right: 2px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 36px;
-    background: none;
-    border: none;
-    color: #505050;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-    padding: 0;
-    z-index: 5;
-}
-
-.compact-expand-btn:hover {
-    color: #a0a0a0;
 }
 
 /* Compact rows */
@@ -2095,7 +1782,8 @@ body.compact-mode .title {
 
 .compact-bar-bg {
     position: relative;
-    height: 14px;
+    /* height comes from .compact-row .compact-bar-bg's clamp() — a fixed
+       height here was unreachable and misleading */
     width: 100%;
     background: rgba(255,255,255,0.08);
     border-radius: 4px;
@@ -2153,16 +1841,6 @@ body.compact-mode .title {
 }
 
 /* Light theme compact */
-body.theme-light .compact-collapse-btn,
-body.theme-light .compact-expand-btn {
-    color: #b0b0c0;
-}
-
-body.theme-light .compact-collapse-btn:hover,
-body.theme-light .compact-expand-btn:hover {
-    color: #606080;
-}
-
 body.theme-light .compact-label {
     color: #606080;
 }
@@ -2174,17 +1852,6 @@ body.theme-light .compact-bar-bg {
 body.theme-light .compact-pct {
     color: rgba(0,0,0,0.75);
     text-shadow: none;
-}
-
-/* Pulse animation when usage hits 100% */
-@keyframes pulse-danger {
-    0%   { opacity: 1; }
-    50%  { opacity: 0.35; }
-    100% { opacity: 1; }
-}
-
-.progress-fill.pulse {
-    animation: pulse-danger 1.2s ease-in-out infinite;
 }
 
 /* ---- Desktop / CLI subgroups with burnable subheadings ---- */
@@ -2238,10 +1905,18 @@ body.theme-light .subheading { color: #8a8aa0; }
 
 @keyframes charLetter {
     0% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
-    35% {
+    30% {
+        /* ignition pop: the letter flares white-hot and swells for a beat */
+        color: #ffd9a0;
+        opacity: 1;
+        transform: scale(1.06);
+        text-shadow: 0 0 8px rgba(255, 140, 24, 1), 0 0 3px rgba(255, 236, 160, 1);
+    }
+    46% {
         color: #ffb257;
         opacity: 1;
-        text-shadow: 0 0 6px rgba(255, 120, 20, 0.9), 0 0 2px rgba(255, 220, 120, 0.9);
+        transform: scale(0.99);
+        text-shadow: 0 0 5px rgba(255, 120, 20, 0.8), 0 0 2px rgba(255, 220, 120, 0.8);
     }
     100% {
         color: var(--char-col, #1e1712);
@@ -2253,7 +1928,8 @@ body.theme-light .subheading { color: #8a8aa0; }
 
 @keyframes healLetter {
     0% { color: var(--char-col, #1e1712); opacity: 0.95; transform: translateY(1px) rotate(var(--rot)); text-shadow: var(--char-soot); }
-    45% { color: #ffb257; opacity: 1; text-shadow: 0 0 6px rgba(255, 150, 40, 0.8); }
+    40% { color: #ffcf87; opacity: 1; transform: translateY(0.5px) scale(1.05); text-shadow: 0 0 7px rgba(255, 170, 60, 0.9); }
+    70% { color: #ffe9c4; text-shadow: 0 0 4px rgba(255, 214, 130, 0.6); }
     100% { color: inherit; opacity: 1; transform: none; text-shadow: none; }
 }
 
@@ -2267,6 +1943,25 @@ body.theme-light .subheading { color: #8a8aa0; }
     pointer-events: none;
     overflow: visible;
     z-index: 5;
+    contain: layout style; /* particle churn never re-lays-out the row */
+}
+
+/* The ember glow that rides the fire front (one node per sweep) */
+@keyframes fxGlowPulse {
+    0%, 100% { opacity: .7; }
+    50% { opacity: 1; }
+}
+.fx .fx-glow {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 210, 120, .9);
+    box-shadow: 0 0 12px 5px rgba(255, 146, 43, .5), 0 0 26px 11px rgba(232, 89, 12, .22);
+    animation: fxGlowPulse 220ms ease-in-out infinite;
+    will-change: transform, opacity;
 }
 
 .fx .fp {
@@ -2279,9 +1974,11 @@ body.theme-light .subheading { color: #8a8aa0; }
 @keyframes pxFlame {
     0% { transform: scale(.5, .3); opacity: 0; }
     10% { opacity: 1; transform: scale(1, 1); }
-    45% { transform: scale(.9, .85); }
-    75% { transform: scale(1.02, 1.05); }
-    100% { transform: scale(.55, .4) translateY(-3px); opacity: 0; }
+    30% { transform: scale(1.06, .92) translateY(-0.5px); }
+    45% { transform: scale(.88, .9); }
+    62% { transform: scale(1.04, 1.12) translateY(-1px); }
+    80% { transform: scale(.95, .8); }
+    100% { transform: scale(.5, .35) translateY(-4px); opacity: 0; }
 }
 
 @keyframes pxSmoke {
@@ -2290,23 +1987,51 @@ body.theme-light .subheading { color: #8a8aa0; }
     100% { transform: translate(var(--dx), var(--ry)) scale(1.5); opacity: 0; }
 }
 
-/* Roll-up/down of the subgroup body — fr-unit grid transition, no JS measuring.
+/* Ash flakes drifting down off freshly charred text */
+@keyframes ashFall {
+    0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+    12% { opacity: .85; }
+    100% { transform: translate(var(--ax, 6px), var(--ay, 26px)) rotate(var(--ar, 120deg)); opacity: 0; }
+}
+
+/* One-pass golden sheen crossing a restored row beneath its sparkles */
+@keyframes sheenSweep {
+    0% { transform: translateX(-120%); opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { transform: translateX(320%); opacity: 0; }
+}
+.row-sheen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 45%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 4;
+    background: linear-gradient(100deg, transparent 8%, rgba(255, 224, 130, .16) 45%, rgba(255, 240, 190, .28) 52%, rgba(255, 224, 130, .16) 60%, transparent 92%);
+    animation: sheenSweep .8s ease-out forwards;
+}
+
+/* Roll-up/down of the subgroup body â€” fr-unit grid transition, no JS measuring.
    Hiding waits 0.3s so the fire clearly leads; revealing starts immediately
    while the letters heal. */
 .subgroup-roll {
     display: grid;
     grid-template-rows: 1fr;
-    transition: grid-template-rows 0.55s ease;
+    /* gentle decelerating open */
+    transition: grid-template-rows 0.5s cubic-bezier(0.22, 0.9, 0.32, 1);
 }
 
 .subgroup.hidden-group .subgroup-roll {
     grid-template-rows: 0fr;
-    transition: grid-template-rows 0.55s ease 0.3s;
+    /* closing accelerates in, like the floor giving way under the ash */
+    transition: grid-template-rows 0.5s cubic-bezier(0.55, 0.06, 0.68, 0.19) 0.28s;
 }
 
 .subgroup-inner { min-height: 0; }
 
-/* Clip only while animating or hidden — sparkles and glows fly free otherwise */
+/* Clip only while animating or hidden â€” sparkles and glows fly free otherwise */
 .subgroup.hidden-group .subgroup-inner,
 .subgroup.rolling .subgroup-inner { overflow: hidden; }
 
@@ -2445,9 +2170,11 @@ body.theme-light .provider-col-login { border-top-color: rgba(0, 0, 0, 0.07); }
 body.sz1 .usage-section, body.sz1 .usage-headers { grid-template-columns: minmax(0, 1fr) 44px 36px 72px 68px; }
 body.sz1 .progress-bar { display: none; }
 body.sz1 .usage-bar-group { justify-content: flex-end; }
-body.sz1 .usage-headers { display: none !important; }
+/* Landscape re-shows headers per column; make the exclusivity explicit here
+   instead of relying on source order between equal-specificity !importants */
+body.sz1:not(.landscape) .usage-headers { display: none !important; }
 
-/* Mid band: labels keep their names but windows abbreviate — (daily)->(1D),
+/* Mid band: labels keep their names but windows abbreviate â€” (daily)->(1D),
    with the meaning in a tooltip (set by applyLabelMode, abbreviated only) */
 body.lbl-abbr .usage-label, body.lbl-abbr .expand-section .usage-label { font-size: 0; }
 body.lbl-abbr .usage-label > * { display: none; }
@@ -2501,18 +2228,18 @@ body.sz4 .resets-at-text { display: none; }
     .settings-row-2col, .settings-row-2col.tray-colors-row { grid-template-columns: 1fr; }
 }
 
-/* Vertical squeeze — classes set by the renderer ONLY while the user has
+/* Vertical squeeze â€” classes set by the renderer ONLY while the user has
    hand-sized the window (never during auto-height, so no shrink spiral):
    vh-1 drops planners/headings and tightens rows, vh-2 drops the expandable
    extras and footers, vh-3 drops the graph and shrinks the wordmarks. */
 body.vh-1 .plan-note { display: none !important; }
-body.vh-1 .usage-headers { display: none !important; }
+body.vh-1:not(.landscape) .usage-headers { display: none !important; }
 body.vh-1 .usage-section { height: 26px; margin-bottom: 0; }
 body.vh-1 .provider-section { margin-bottom: 4px; }
 body.vh-1 .section-footer { padding-top: 0; padding-bottom: 2px; }
 body.vh-1 .content { overflow-y: auto; }
 
-body.vh-2 .expand-section { display: none !important; }
+body.vh-2:not(.landscape) .expand-section { display: none !important; }
 body.vh-2 .expand-toggle { display: none !important; }
 body.vh-2 .section-footer { display: none !important; }
 body.vh-2 .subheading-row { padding-top: 0; }
@@ -2525,7 +2252,7 @@ body.vh-3 .section-name { font-size: 15px; }
 /* When the user stretches the window taller than the widget needs, fill the
    space instead of leaving a void: sections spread out evenly, text scales
    up, and the company wordmarks grow progressively with height. Driven by
-   --tall (0..1), set by the renderer ONLY while the window is user-sized —
+   --tall (0..1), set by the renderer ONLY while the window is user-sized â€”
    same anti-spiral gating as the squeeze classes. */
 
 body.tall .content {
@@ -2565,7 +2292,7 @@ body.tall .progress-bar { min-width: 56px; }
     }
 }
 
-/* Wider columns for the bigger type — but never while the narrow ladder is
+/* Wider columns for the bigger type â€” but never while the narrow ladder is
    active (it owns the grid below 540px) */
 @media (min-width: 541px) {
     body.tall .usage-section,
@@ -2600,19 +2327,6 @@ body.tall .progress-bar { min-width: 56px; }
     display: block;
 }
 
-/* ---- Anthropic rows wear the company clay (Fable keeps its fuchsia) ---- */
-.progress-fill {
-    background: linear-gradient(90deg, #e59b78, #d97757);
-}
-
-.progress-fill.weekly {
-    background: linear-gradient(90deg, #d97757, #b85c3c);
-}
-
-.progress-fill.cc {
-    background: linear-gradient(90deg, #d9a18a, #c8846a);
-}
-
 /* ---- No-pizazz mode: the clown is in jail, the party is over ---- */
 body.no-pizazz *,
 body.no-pizazz *::before,
@@ -2622,6 +2336,17 @@ body.no-pizazz *::after {
     text-shadow: none !important;
     filter: none !important;
     backdrop-filter: none !important;
+}
+
+/* Status indicators are information, not pizazz — the loading and refresh
+   spinners keep turning even while the clown is jailed */
+body.no-pizazz .spinner {
+    animation: spin 1s linear infinite !important;
+}
+
+body.no-pizazz .refresh-btn.spinning svg,
+body.no-pizazz .local-login-refresh-btn.spinning svg {
+    animation: spin-refresh 1s linear infinite !important;
 }
 
 /* The iced-over logos thaw to plain text while the clown is jailed */
@@ -2637,22 +2362,6 @@ body.no-pizazz .section-header.frozen .section-name::before,
 body.no-pizazz .section-header.frozen .section-name::after {
     display: none !important;
 }
-
-/* The press button in the title bar replaces the old compact chevrons */
-.compact-collapse-btn, .compact-expand-btn { display: none !important; }
-
-
-/* The clown is twice the size of a normal control — he deserves it */
-.clown-btn {
-    width: 34px;
-    height: 34px;
-}
-
-.clown-btn img {
-    width: 30px;
-    height: 30px;
-}
-
 
 /* ---- Landscape: three company columns side by side ---- */
 body.landscape:not(.compact-mode) .content {
@@ -2680,10 +2389,6 @@ body.landscape .graph-section {
     margin-top: 0;
     align-self: stretch;
 }
-/* Landscape/wide is user-sized, so if the columns + graph overflow the window,
-   let the content scroll instead of clipping the graph. */
-body.landscape:not(.compact-mode) .content { overflow-y: auto; }
-body.landscape .compact-collapse-btn { display: none !important; }
 body.landscape .provider-section { margin-bottom: 4px; }
 
 /* Each column keeps its own header row, in short form... */
@@ -2697,7 +2402,7 @@ body.landscape .col-header::after {
     text-transform: uppercase;
 }
 
-/* ...unless the window is also very short — then they all go */
+/* ...unless the window is also very short â€” then they all go */
 body.landscape.vh-short .usage-headers { display: none !important; }
 
 body.lbl-code .usage-headers { grid-template-columns: 46px 44px 36px 72px 68px; justify-content: start; gap: clamp(4px, 2.4vw, 10px); }
@@ -2727,29 +2432,6 @@ body.sz4 .usage-section, body.sz4 .usage-headers { padding-right: 4px; }
 
 /* The clown lives in the content's top-right corner now */
 .content { position: relative; }
-
-.clown-btn-content {
-    position: absolute;
-    top: 2px;
-    right: 8px;
-    z-index: 30;
-    width: 36px;
-    height: 36px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    opacity: 0.9;
-}
-
-.clown-btn-content:hover { opacity: 1; }
-
-.clown-btn-content img {
-    width: 32px;
-    height: 32px;
-    image-rendering: pixelated;
-    display: block;
-}
 
 /* In compressed bands the stretch rows (credits / reset orbs) span the whole
    remaining row width, so the orbs centre across the window instead of
@@ -2823,8 +2505,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
     overflow: hidden;
 }
 
-/* Pop-out control on the inline graph — detaches it into its own window. */
-.graph-section { position: relative; }
+/* Pop-out control on the inline graph â€” detaches it into its own window. */
 .graph-popout-btn {
     position: absolute;
     top: 6px;
@@ -3020,10 +2701,6 @@ body.landscape.vh-short.dual-compact .dual-pill {
 .dual-head { height: 20px; }
 
 .dual-table.hide-cli .dual-row,
-.dual-table.hide-cli .dual-head {
-    grid-template-columns: 46px 110px;
-}
-
 .dual-table.hide-cli .dual-pair.cli,
 .dual-table.hide-cli .dual-gap,
 .dual-table.hide-cli .dual-group-head.cli-head { display: none; }
@@ -3031,9 +2708,9 @@ body.landscape.vh-short.dual-compact .dual-pill {
 /* The charred pill survives the burn, parked beside the Desktop heading */
 .dual-table.hide-cli .dual-head { grid-template-columns: 46px 110px auto; }
 
-/* Landscape's responsive grid has higher specificity than the base dual
-   table rules. Override it explicitly when CLI columns are collapsed so the
-   desktop trio and the restore affordance never occupy the same cells. */
+/* The base .dual-table.hide-cli rules above are (0,3,0) — STRONGER than the
+   landscape band grids at (0,2,1) — so landscape needs its own explicit
+   hide-cli template to restore the 24px restore-button column. */
 body.landscape .dual-table.hide-cli .dual-row,
 body.landscape .dual-table.hide-cli .dual-head {
     grid-template-columns: minmax(42px, 46px) minmax(0, 1fr) 24px;
@@ -3137,7 +2814,7 @@ body.theme-light .dual-pair .dual-pct { color: #1a1a2e; }
 }
 
 
-/* Wide mode: nothing collapses — chevrons go, expandables stay open */
+/* Wide mode: nothing collapses â€” chevrons go, expandables stay open */
 body.landscape .expand-toggle { display: none !important; }
 body.landscape .expand-section { display: block !important; }
 
