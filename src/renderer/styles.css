@@ -2747,7 +2747,9 @@ body.landscape.vh-short.dual-compact .dual-pill {
 
 .dual-head { height: 20px; }
 
-.dual-table.hide-cli .dual-row,
+/* Collapsing the second account hides ONLY the CLI columns — the Desktop
+   trio and its label stay. (Listing .dual-row here hid the whole row, wiping
+   the Desktop account too.) */
 .dual-table.hide-cli .dual-pair.cli,
 .dual-table.hide-cli .dual-gap,
 .dual-table.hide-cli .dual-group-head.cli-head { display: none; }
