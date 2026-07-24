@@ -2390,7 +2390,13 @@ body.landscape:not(.compact-mode) .content {
 
 body.landscape.graph-off:not(.compact-mode) .content {
     grid-template-rows: auto;
-    flex: 0 1 auto;
+    /* Grow to fill the window like the graph-on layout does, rather than
+       shrink to content. And pin the single row to its natural height at the
+       top (align-content:start) so the box keeps genuine slack over its
+       content — otherwise the row stretches to fill and a descendant sub-pixel
+       lights a phantom ~2px scrollbar while real empty space sits below. */
+    flex: 1 1 auto;
+    align-content: start;
 }
 
 body.landscape .graph-section {
