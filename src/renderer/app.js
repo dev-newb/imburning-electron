@@ -1411,7 +1411,13 @@ function _forceFitHeight({ fitPreset = false, intrinsic = false, userAction = fa
         const ch = intrinsic ? _intrinsicMainContentHeight() : elements.mainContent.scrollHeight;
         const bh = _bannersHeight();
         if (th >= 10 && ch >= 40) {
-            window.electronAPI.resizeWindow(th + bh + ch + 10, true, fitPreset, userAction);
+            const target = th + bh + ch + 10;
+            // Fixed-point guard: .content flex-stretches to the window, so a
+            // scrollHeight measurement can track the window instead of the
+            // content — re-fitting on that reading adds the breathing room
+            // every pass and the window creeps to the screen bottom forever.
+            if (Math.abs(target - window.innerHeight) <= 12) return;
+            window.electronAPI.resizeWindow(target, true, fitPreset, userAction);
         }
     });
 }
@@ -1884,7 +1890,10 @@ if (window.electronAPI.onWindowUserSized) {
             _activePreset = null;
             if (elements.wideBtn) elements.wideBtn.classList.remove('active');
             if (elements.tallBtn) elements.tallBtn.classList.remove('active');
-            _forceFitHeight();
+            // Broadcast-driven refit: measure INTRINSIC content (children
+            // bottoms), never the flex-stretched scrollHeight — this is the
+            // re-entry point of the resize feedback loop.
+            _forceFitHeight({ intrinsic: true });
         }
     });
 }
@@ -2313,14 +2322,20 @@ function resizeWidget(bannerVisible) {
         // refresh would stretch the window underneath the panel
         if (elements.settingsOverlay.style.display !== 'none') return;
         const titleHeight = _chromeHeight();
-        const contentHeight = elements.mainContent.scrollHeight;
+        // Intrinsic children-bottom measurement: .content flex-stretches to
+        // the window, so scrollHeight would track the window (not the
+        // content) whenever the window is taller — the seed of the
+        // grow-forever loop.
+        const contentHeight = _intrinsicMainContentHeight();
         // While minimized/hidden every measurement reads ~0 — resizing then
         // would shrink the window to a sliver. Skip; the focus listener
         // re-measures on restore.
         if (titleHeight < 10 || contentHeight < 40) return;
         const bannerHeight = _bannersHeight();
         // +2 for the widget-container border, +8 bottom breathing room
-        window.electronAPI.resizeWindow(titleHeight + bannerHeight + contentHeight + 10);
+        const target = titleHeight + bannerHeight + contentHeight + 10;
+        if (Math.abs(target - window.innerHeight) <= 8) return; // already fits
+        window.electronAPI.resizeWindow(target);
     });
 }
 

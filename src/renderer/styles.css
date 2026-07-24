@@ -865,25 +865,25 @@ body.theme-light .provider-section {
 }
 
 
+/* Quiet text, no pill — the framed background read as cheap chrome */
 .section-chip.cli {
-    color: #9090a0;
-    background: rgba(128, 128, 128, 0.1);
-    border: 1px solid rgba(128, 128, 128, 0.3);
+    color: #9898a8;
+    background: none;
+    border: none;
+    padding: 2px 0;
     cursor: pointer;
-    transition: color 0.15s ease, border-color 0.15s ease;
+    transition: color 0.15s ease;
 }
 
 .section-chip.cli:hover {
     color: #a78bfa;
-    border-color: rgba(139, 92, 246, 0.55);
 }
 
 /* Anthropic's CLI chip is informational (no OAuth connect there yet) */
 .section-chip.anthropic-cli,
 .section-chip.anthropic-cli:hover {
     cursor: default;
-    color: #9090a0;
-    border-color: rgba(128, 128, 128, 0.3);
+    color: #9898a8;
 }
 
 .settings-connect-btn {
@@ -2863,13 +2863,6 @@ body.theme-light {
    from whatever colour the bar actually renders with — model colour,
    threshold recolour, or Gemini shade — so every colour source carries
    straight into the fire). Pure CSS, no per-frame JS. */
-@keyframes barFireFlicker {
-    0%   { transform: scaleY(0.8); opacity: 0.85; }
-    45%  { transform: scaleY(1.3) translateY(-1px); opacity: 1; }
-    70%  { transform: scaleY(1.05); opacity: 0.95; }
-    100% { transform: scaleY(0.85) translateY(-0.5px); opacity: 0.9; }
-}
-
 @keyframes barHeatPulse {
     from { box-shadow: 0 0 5px 1px color-mix(in srgb, var(--fire-col, #ff922b) 50%, transparent); }
     to   { box-shadow: 0 0 11px 3px color-mix(in srgb, var(--fire-col, #ff922b) 80%, transparent); }
@@ -2887,26 +2880,63 @@ body.theme-light {
     overflow: visible;
 }
 
-/* Pixel flame riding the tip of the fill, cells in the bar's colour family */
+/* Flames along the WHOLE burning bar: two drifting tongue layers (tiled
+   radial gradients) swaying at different speeds — fluid, not steppy. The
+   drift loops one tile width so it's seamless. */
+@keyframes flameDrift {
+    from { background-position-x: 0; }
+    to { background-position-x: 9px; }
+}
+
+@keyframes flameDriftBack {
+    from { background-position-x: 14px; }
+    to { background-position-x: 0; }
+}
+
+@keyframes flameLick {
+    0%   { transform: scaleY(0.72) skewX(-3deg); }
+    50%  { transform: scaleY(1.12) skewX(2deg); }
+    100% { transform: scaleY(0.9) skewX(-1.5deg); }
+}
+
+.progress-fill.on-fire::before,
 .progress-fill.on-fire::after,
+.compact-bar-fill.on-fire::before,
 .compact-bar-fill.on-fire::after {
     content: '';
     position: absolute;
-    right: -1px;
-    top: -8px;
-    width: 2px;
-    height: 2px;
-    background: transparent;
+    left: 1px;
+    right: 1px;
+    bottom: calc(100% - 2px);
+    pointer-events: none;
     transform-origin: 50% 100%;
-    box-shadow:
-        0 6px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 55%, #ffffff),
-        -2px 7px 0 0 var(--fire-col, #ff922b),
-        2px 7px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 75%, transparent),
-        0 4px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 70%, #ffffff),
-        -1px 5px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 88%, #ffffff),
-        1px 3px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 45%, transparent),
-        0 2px 0 0 color-mix(in srgb, var(--fire-col, #ff922b) 35%, transparent);
-    animation: barFireFlicker 0.55s steps(3, end) infinite alternate;
+    background-repeat: repeat-x;
+}
+
+/* inner tongues — bright cores, quick sway */
+.progress-fill.on-fire::before,
+.compact-bar-fill.on-fire::before {
+    height: 9px;
+    background-image: radial-gradient(3px 8px at 4.5px 100%,
+        color-mix(in srgb, var(--fire-col, #ff922b) 55%, #ffffff) 0%,
+        color-mix(in srgb, var(--fire-col, #ff922b) 90%, #ffffff) 34%,
+        color-mix(in srgb, var(--fire-col, #ff922b) 65%, transparent) 58%,
+        transparent 76%);
+    background-size: 9px 100%;
+    animation: flameDrift 1.4s linear infinite, flameLick 0.85s ease-in-out infinite alternate;
+}
+
+/* outer tongues — taller, softer, counter-drifting */
+.progress-fill.on-fire::after,
+.compact-bar-fill.on-fire::after {
+    height: 13px;
+    opacity: 0.7;
+    background-image: radial-gradient(4.5px 12px at 7px 100%,
+        var(--fire-col, #ff922b) 0%,
+        color-mix(in srgb, var(--fire-col, #ff922b) 55%, transparent) 46%,
+        transparent 70%);
+    background-size: 14px 100%;
+    animation: flameDriftBack 2.1s linear infinite, flameLick 1.15s ease-in-out infinite alternate-reverse;
 }
 
 /* Codex banked-reset orbs idle with a faint flame in their own colour.
@@ -2919,24 +2949,41 @@ body.theme-light {
     position: relative;
 }
 
+/* Two-layer flame per orb: a bright inner tongue and a soft outer halo,
+   swaying fluidly, staggered to each orb's own glimmer delay */
+.reset-dot::before,
 .reset-dot::after {
     content: '';
     position: absolute;
     left: 50%;
-    top: -5px;
-    width: 2px;
-    height: 2px;
-    margin-left: -1px;
-    background: transparent;
+    bottom: 6px;
+    pointer-events: none;
     transform-origin: 50% 100%;
-    box-shadow:
-        0 3px 0 0 color-mix(in srgb, var(--fire-col) 60%, #ffffff),
-        -1px 4px 0 0 color-mix(in srgb, var(--fire-col) 85%, transparent),
-        1px 4px 0 0 color-mix(in srgb, var(--fire-col) 55%, transparent),
-        0 1px 0 0 color-mix(in srgb, var(--fire-col) 35%, transparent);
-    opacity: 0.75;
-    animation: barFireFlicker 0.8s ease-in-out infinite alternate;
     animation-delay: inherit;
+}
+
+.reset-dot::before {
+    width: 6px;
+    height: 11px;
+    margin-left: -3px;
+    background: radial-gradient(3px 10px at 50% 100%,
+        color-mix(in srgb, var(--fire-col) 60%, #ffffff) 0%,
+        color-mix(in srgb, var(--fire-col) 92%, #ffffff) 38%,
+        color-mix(in srgb, var(--fire-col) 55%, transparent) 62%,
+        transparent 80%);
+    animation: flameLick 0.8s ease-in-out infinite alternate;
+}
+
+.reset-dot::after {
+    width: 10px;
+    height: 8px;
+    margin-left: -5px;
+    opacity: 0.55;
+    background: radial-gradient(5px 7px at 50% 100%,
+        var(--fire-col) 0%,
+        color-mix(in srgb, var(--fire-col) 45%, transparent) 55%,
+        transparent 78%);
+    animation: flameLick 1.2s ease-in-out infinite alternate-reverse;
 }
 
 /* Export-history buttons in Settings */
