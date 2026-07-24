@@ -8,7 +8,7 @@ const { JsonlHistoryStore, DAY_MS, dedupeEntries } = require('./src/history-stor
 const { finiteOrNull, sampleGapLimitMs, positiveBurn, latestContiguousRun, isExplicitAuthFailure } = require('./src/usage-math');
 const { clampBoundsToDisplays } = require('./src/window-bounds');
 const { startOAuthCallbackServer } = require('./src/oauth-callback');
-const { sanitizeHiddenSeries, sanitizeFetchOptions } = require('./src/settings-validation');
+const { sanitizeHiddenSeries, sanitizeFetchOptions, migrateHiddenSeriesLabels } = require('./src/settings-validation');
 const { normalizeGeminiQuota } = require('./src/provider-models');
 const { discoverCredentialHomes, clearCredentialHomeCache } = require('./src/local-credential-sources');
 
@@ -57,6 +57,37 @@ const store = new Store();
 const DEBUG = process.env.DEBUG_LOG === '1' || process.argv.includes('--burnwatch-debug');
 function debugLog(...args) {
   if (DEBUG) console.log('[Debug]', ...args);
+}
+
+// ---- Stored Anthropic session key (the single reader for every path) ----
+// Prefers the safeStorage-encrypted copy; a legacy plaintext key from a
+// pre-encryption build is adopted and re-encrypted on first read so the
+// plain copy disappears. The raw key never leaves the main process.
+function readStoredSessionKey() {
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = store.get('sessionKey_encrypted');
+    if (encrypted) {
+      try {
+        return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+      } catch (err) {
+        console.error('[Keychain] Failed to decrypt session key:', err.message);
+        return null;
+      }
+    }
+    const legacy = store.get('sessionKey');
+    if (legacy) {
+      try {
+        store.set('sessionKey_encrypted', safeStorage.encryptString(legacy).toString('base64'));
+        store.delete('sessionKey');
+        debugLog('[Keychain] Adopted legacy plaintext session key into safeStorage');
+      } catch (err) {
+        debugLog('[Keychain] Legacy key adoption failed:', err.message);
+      }
+      return legacy;
+    }
+    return null;
+  }
+  return store.get('sessionKey') || null;
 }
 
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -162,7 +193,33 @@ function localCredentialHomes() {
     .sort((a, b) => Number(b.kind === 'wsl') - Number(a.kind === 'wsl'));
 }
 
+// Candidate credential files across every discovered home, WSL first then
+// newest. UNC stats/reads against a sleeping WSL distro can wake its VM, so
+// every local read below is cached briefly; the local-login rescan (and only
+// it) clears the lot for an immediate re-read.
+const CRED_READ_CACHE_MS = 5 * 60 * 1000;
+const _credFileCache = new Map(); // relative path -> { at, files }
+const _credMemos = [];
+function memoizeCredentialRead(fn, ttlMs = CRED_READ_CACHE_MS) {
+  let at = 0;
+  let value = null;
+  const wrapped = () => {
+    if (at && Date.now() - at < ttlMs) return value;
+    value = fn();
+    at = Date.now();
+    return value;
+  };
+  wrapped._reset = () => { at = 0; value = null; };
+  _credMemos.push(wrapped);
+  return wrapped;
+}
+
 function localCredentialFiles(...relativeParts) {
+  const cacheKey = relativeParts.join('/');
+  const cached = _credFileCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CRED_READ_CACHE_MS) {
+    return cached.files.map((file) => ({ ...file }));
+  }
   const files = [];
   for (const source of localCredentialHomes()) {
     const filePath = path.join(source.home, ...relativeParts);
@@ -171,11 +228,13 @@ function localCredentialFiles(...relativeParts) {
       if (stat.isFile()) files.push({ ...source, filePath, mtimeMs: stat.mtimeMs });
     } catch {}
   }
-  return files.sort((a, b) => Number(b.kind === 'wsl') - Number(a.kind === 'wsl')
+  files.sort((a, b) => Number(b.kind === 'wsl') - Number(a.kind === 'wsl')
     || b.mtimeMs - a.mtimeMs);
+  _credFileCache.set(cacheKey, { at: Date.now(), files });
+  return files.map((file) => ({ ...file }));
 }
 
-function readClaudeCodeCredentials() {
+function readClaudeCodeCredentialsUncached() {
   const candidates = [];
   for (const source of localCredentialFiles('.claude', '.credentials.json')) {
     try {
@@ -196,6 +255,7 @@ function readClaudeCodeCredentials() {
   }
   return candidates;
 }
+const readClaudeCodeCredentials = memoizeCredentialRead(readClaudeCodeCredentialsUncached);
 
 function readClaudeCodeToken() {
   return readClaudeCodeCredentials()[0]?.accessToken || null;
@@ -288,7 +348,7 @@ function detectClaudeCliSameAccount(data) {
 // same usage endpoint the CLI polls. The stored access token is used as-is —
 // never refreshed here — and when it has expired we fall back to the newest
 // rate-limit snapshot embedded in the CLI's own session logs.
-function readCodexAuthCandidates() {
+function readCodexAuthCandidatesUncached() {
   const candidates = [];
   for (const source of localCredentialFiles('.codex', 'auth.json')) {
     try {
@@ -313,6 +373,7 @@ function readCodexAuthCandidates() {
   }
   return candidates;
 }
+const readCodexAuthCandidates = memoizeCredentialRead(readCodexAuthCandidatesUncached);
 
 function readCodexAuth() {
   return readCodexAuthCandidates()[0] || null;
@@ -437,21 +498,39 @@ function readCodexSessionSnapshotFromHome(source) {
   try {
     const root = path.join(source.home, '.codex', 'sessions');
     if (!fs.existsSync(root)) return null;
-    let dir = root;
+    // Newest-first bounded walk over the year/month/day tree: check a few of
+    // the most recent directories at each level so one empty "today" folder
+    // cannot defeat the fallback.
+    const PER_LEVEL = 4;
+    const subDirsNewestFirst = (dir) => {
+      try {
+        return fs.readdirSync(dir, { withFileTypes: true })
+          .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
+          .map((d) => d.name)
+          .sort((a, b) => Number(b) - Number(a))
+          .slice(0, PER_LEVEL)
+          .map((name) => path.join(dir, name));
+      } catch { return []; }
+    };
+    let levelDirs = [root];
     for (let depth = 0; depth < 3; depth++) {
-      const subs = fs.readdirSync(dir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
-        .map((d) => d.name)
-        .sort((a, b) => Number(b) - Number(a));
-      if (!subs.length) break;
-      dir = path.join(dir, subs[0]);
+      const next = levelDirs.flatMap(subDirsNewestFirst);
+      if (!next.length) break;
+      levelDirs = next;
     }
-    const files = fs.readdirSync(dir)
-      .filter((f) => f.endsWith('.jsonl'))
-      .map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.m - a.m);
+    const files = [];
+    for (const dir of levelDirs) {
+      try {
+        for (const name of fs.readdirSync(dir)) {
+          if (!name.endsWith('.jsonl')) continue;
+          const p = path.join(dir, name);
+          files.push({ p, m: fs.statSync(p).mtimeMs });
+        }
+      } catch {}
+    }
+    files.sort((a, b) => b.m - a.m);
     if (!files.length) return null;
-    const filePath = path.join(dir, files[0].f);
+    const filePath = files[0].p;
     if (Date.now() - files[0].m > CODEX_SNAPSHOT_MAX_AGE_MS) return null;
 
     const size = fs.statSync(filePath).size;
@@ -495,7 +574,7 @@ function readCodexSessionSnapshotFromHome(source) {
   }
 }
 
-function readCodexSessionSnapshot() {
+function readCodexSessionSnapshotUncached() {
   const snapshots = localCredentialHomes()
     .map(readCodexSessionSnapshotFromHome)
     .filter(Boolean)
@@ -506,6 +585,7 @@ function readCodexSessionSnapshot() {
   debugLog('[Codex] Using session snapshot from', selected.source.id);
   return selected.data;
 }
+const readCodexSessionSnapshot = memoizeCredentialRead(readCodexSessionSnapshotUncached);
 
 // Primary = the widget's own OpenAI login; CLI creds are fallback + dual source
 async function fetchCodexUsage() {
@@ -558,12 +638,20 @@ async function fetchCodexUsage() {
 let _geminiClient = null; // { id, secret } after discovery, false when unavailable
 function getGeminiOAuthClient() {
   if (_geminiClient !== null) return _geminiClient || null;
+  // nvm installs live under versions/node/<ver>/lib/node_modules
+  const nvmVersionRoots = [];
+  try {
+    const versionsDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
+    for (const version of fs.readdirSync(versionsDir)) {
+      nvmVersionRoots.push(path.join(versionsDir, version, 'lib', 'node_modules'));
+    }
+  } catch {}
   const npmPrefixes = [
     process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules') : null,
     '/usr/local/lib/node_modules',
     '/usr/lib/node_modules',
     path.join(os.homedir(), '.npm-global', 'lib', 'node_modules'),
-    path.join(os.homedir(), '.nvm', 'versions')
+    ...nvmVersionRoots
   ].filter(Boolean);
   for (const prefix of npmPrefixes) {
     const root = path.join(prefix, '@google', 'gemini-cli');
@@ -598,23 +686,31 @@ function getGeminiOAuthClient() {
 }
 let _geminiAccessToken = { token: null, expiresAt: 0 };
 
-function hasGeminiCliCredentials() {
-  try {
-    const credPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
-    if (!fs.existsSync(credPath)) return false;
-    const credentials = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-    return !!(credentials.access_token || credentials.refresh_token);
-  } catch {
-    return false;
+// Gemini CLI credentials — the same Windows+WSL multi-home discovery as
+// Claude/Codex (WSL preferred, then newest), read-only, never written back.
+function readGeminiCliCredsFileUncached() {
+  for (const source of localCredentialFiles('.gemini', 'oauth_creds.json')) {
+    try {
+      const creds = JSON.parse(fs.readFileSync(source.filePath, 'utf-8'));
+      if (creds.access_token || creds.refresh_token) return { ...source, creds };
+    } catch (err) {
+      debugLog('[Gemini] Could not read', source.id, 'oauth_creds.json:', err.message);
+    }
   }
+  return null;
+}
+const readGeminiCliCredsFile = memoizeCredentialRead(readGeminiCliCredsFileUncached);
+
+function hasGeminiCliCredentials() {
+  return !!readGeminiCliCredsFile();
 }
 
 function getGeminiAccessToken() {
   return new Promise((resolve) => {
     try {
-      const credPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
-      if (!fs.existsSync(credPath)) return resolve(null);
-      const creds = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
+      const entry = readGeminiCliCredsFile();
+      if (!entry) return resolve(null);
+      const creds = entry.creds;
       if (creds.access_token && creds.expiry_date && creds.expiry_date - Date.now() > 60000) {
         return resolve(creds.access_token);
       }
@@ -712,8 +808,8 @@ async function fetchGeminiWithToken(token) {
 // The gemini CLI's login email, from its stored id_token
 function getGeminiCliEmail() {
   try {
-    const creds = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.gemini', 'oauth_creds.json'), 'utf-8'));
-    return jwtClaims(creds.id_token).email || null;
+    const entry = readGeminiCliCredsFile();
+    return entry ? (jwtClaims(entry.creds.id_token).email || null) : null;
   } catch {
     return null;
   }
@@ -902,7 +998,8 @@ async function runOAuthConnect(provider) {
     storeOAuthTokens(provider, tokens);
     _providerCache[provider === 'openai' ? 'codex' : 'gemini'] = undefined; // force refetch
     callback.complete({ ok: true });
-    debugLog(`[OAuth:${provider}] Connected as`, tokens.email || tokens.accountId);
+    // Account identity (email/id) is deliberately withheld from diagnostics.
+    debugLog(`[OAuth:${provider}] Connected`);
     return { email: tokens.email, accountId: tokens.accountId };
   } catch (error) {
     callback.complete({ ok: false, message: 'The provider token exchange failed. Return to Burnwatch and try again.' });
@@ -953,13 +1050,22 @@ async function getOAuthAccessToken(provider) {
   }
 }
 
+// One flow per provider at a time — a double-click would otherwise race two
+// callback servers onto the same port (OpenAI's redirect port is fixed).
+const _oauthConnectInFlight = { openai: false, google: false };
 ipcMain.handle('oauth-connect', async (event, provider) => {
+  if (_oauthConnectInFlight[provider]) {
+    return { ok: false, error: 'A sign-in for this provider is already in progress' };
+  }
+  _oauthConnectInFlight[provider] = true;
   try {
     const result = await runOAuthConnect(provider);
     return { ok: true, ...result };
   } catch (err) {
     debugLog(`[OAuth:${provider}] Connect failed:`, err.message);
     return { ok: false, error: err.message };
+  } finally {
+    _oauthConnectInFlight[provider] = false;
   }
 });
 
@@ -985,6 +1091,8 @@ function resetLocalCredentialCaches() {
   // account-bound access tokens, provider results, account comparisons, and
   // the cached Windows/WSL home list so newly started distros are discovered.
   clearCredentialHomeCache();
+  _credFileCache.clear();
+  for (const memo of _credMemos) memo._reset();
   _geminiAccessToken = { token: null, expiresAt: 0 };
   _ccSameState = { mode: null, candidate: null, streak: 0 };
   for (const key of Object.keys(_providerCache)) delete _providerCache[key];
@@ -1523,17 +1631,24 @@ app.on('ready', () => {
   session.defaultSession.setUserAgent(CHROME_USER_AGENT);
 });
 
-// Set sessionKey as a cookie in Electron's session
+// Set sessionKey as a cookie in Electron's session. The flag lets the login
+// window's cookie listener ignore writes the app makes itself.
+let _settingSessionCookie = false;
 async function setSessionCookie(sessionKey) {
-  await session.defaultSession.cookies.set({
-    url: 'https://claude.ai',
-    name: 'sessionKey',
-    value: sessionKey,
-    domain: '.claude.ai',
-    path: '/',
-    secure: true,
-    httpOnly: true
-  });
+  _settingSessionCookie = true;
+  try {
+    await session.defaultSession.cookies.set({
+      url: 'https://claude.ai',
+      name: 'sessionKey',
+      value: sessionKey,
+      domain: '.claude.ai',
+      path: '/',
+      secure: true,
+      httpOnly: true
+    });
+  } finally {
+    _settingSessionCookie = false;
+  }
   debugLog('sessionKey cookie set in Electron session');
 }
 
@@ -2271,20 +2386,6 @@ function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255,
 
 
 
-/**
- * Show the main window without the double-blink artifact on Windows.
- *
- * On Windows, transparent + alwaysOnTop + frameless windows re-enter the DWM
- * compositing pipeline in two steps when shown after hide(): an initial layered
- * window render (blink 1) followed by the alwaysOnTop z-order re-assertion
- * (blink 2). Setting opacity to 0 before show() masks those intermediate states;
- * the window is made opaque again after the DWM has had time to settle (~3 frames).
- * macOS and Linux do not have this issue so they just call show() directly.
- */
-function showMainWindowClean() {
-  showMainWindowSmart();
-}
-
 function isMainWindowShownOnScreen() {
   if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return false;
   const bounds = mainWindow.getBounds();
@@ -2327,19 +2428,7 @@ function buildTrayContextMenu() {
       {
         label: 'Log Out',
         click: async () => {
-          store.delete('sessionKey');
-          store.delete('sessionKey_encrypted'); // safeStorage path leaves this behind otherwise
-          store.delete('organizationId');
-          store.delete('organizations');
-          // Clear all Claude.ai cookies and session storage
-          const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
-          for (const cookie of cookies) {
-            await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
-          }
-          await session.defaultSession.clearStorageData({
-            storages: ['localstorage', 'sessionstorage', 'cachestorage'],
-            origin: 'https://claude.ai'
-          });
+          await clearAnthropicLogin();
           if (mainWindow) {
             mainWindow.webContents.send('session-expired');
           }
@@ -2353,6 +2442,25 @@ function buildTrayContextMenu() {
         }
       }
   ]);
+}
+
+// One shared Anthropic logout — used by the tray menu and the Settings
+// action, so neither path can miss a stored copy (the old tray handler once
+// forgot sessionKey_encrypted and resurrected dead sessions).
+async function clearAnthropicLogin() {
+  store.delete('sessionKey');
+  store.delete('sessionKey_encrypted');
+  store.delete('organizationId');
+  store.delete('organizations');
+  // Clear all Claude.ai cookies and session storage so nothing lingers
+  const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
+  for (const cookie of cookies) {
+    await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
+  }
+  await session.defaultSession.clearStorageData({
+    storages: ['localstorage', 'sessionstorage', 'cachestorage'],
+    origin: 'https://claude.ai'
+  });
 }
 
 function hasUsageTrayIcon() {
@@ -2722,53 +2830,65 @@ function updateTrayIcon(usageData) {
   const outlineFor = (severity) =>
     colors.outline.enabled && isElevatedSeverity(severity) ? colors.outline.color : null;
 
-  // Extract percentages and reset times from usage data
-  const sessionPercent = usageData?.five_hour?.utilization || 0;
+  // Extract percentages and reset times from usage data. `null` means the
+  // API reported nothing for that pool — the badge falls back to the neutral
+  // robot icon instead of pretending "0".
+  const sessionPercent = finiteOrNull(usageData?.five_hour?.utilization);
   const sessionResetsAt = usageData?.five_hour?.resets_at;
-  const weeklyPercent = usageData?.seven_day?.utilization || 0;
+  const weeklyPercent = finiteOrNull(usageData?.seven_day?.utilization);
   const weeklyResetsAt = usageData?.seven_day?.resets_at;
   const sessionOutline = outlineFor(getLimitSeverity(usageData, 'session'));
   const weeklyOutline = outlineFor(getLimitSeverity(usageData, 'weekly_all'));
 
   try {
     // Generate Weekly icon (blue background) - LEFT position
-    let weeklyIcon;
-    if (weeklyPercent >= 99) {
-      weeklyIcon = generateRedXIcon(undefined, undefined, weeklyOutline);
-    } else {
-      const weeklyColor = getBackgroundColor(weeklyPercent, colors.weekly.bg, warnThreshold, dangerThreshold);
-      weeklyIcon = generatePercentageIcon(weeklyPercent, weeklyColor, colors.weekly.text, weeklyOutline);
-    }
     if (weeklyTray && !weeklyTray.isDestroyed()) {
-      weeklyTray.setImage(weeklyIcon);
-      let weeklyTooltip = `Claude Models (7d): ${Math.round(weeklyPercent)}%`;
-      const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat, true);
-      if (weeklyResetTime) {
-        weeklyTooltip += `\nResets: ${weeklyResetTime}`;
+      if (weeklyPercent == null) {
+        weeklyTray.setImage(trayStaticIconPath());
+        weeklyTray.setToolTip('Claude Models (7d): no data');
+      } else {
+        let weeklyIcon;
+        if (weeklyPercent >= 99) {
+          weeklyIcon = generateRedXIcon(undefined, undefined, weeklyOutline);
+        } else {
+          const weeklyColor = getBackgroundColor(weeklyPercent, colors.weekly.bg, warnThreshold, dangerThreshold);
+          weeklyIcon = generatePercentageIcon(weeklyPercent, weeklyColor, colors.weekly.text, weeklyOutline);
+        }
+        weeklyTray.setImage(weeklyIcon);
+        let weeklyTooltip = `Claude Models (7d): ${Math.round(weeklyPercent)}%`;
+        const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat, true);
+        if (weeklyResetTime) {
+          weeklyTooltip += `\nResets: ${weeklyResetTime}`;
+        }
+        const weeklyForecastTime = formatResetTime(usageData?.forecasts?.weekly, timeFormat, true);
+        if (weeklyForecastTime && weeklyPercent < 99) {
+          weeklyTooltip += `\nAt current pace, 100% by ${weeklyForecastTime}`;
+        }
+        weeklyTray.setToolTip(weeklyTooltip);
       }
-      const weeklyForecastTime = formatResetTime(usageData?.forecasts?.weekly, timeFormat, true);
-      if (weeklyForecastTime && weeklyPercent < 99) {
-        weeklyTooltip += `\nAt current pace, 100% by ${weeklyForecastTime}`;
-      }
-      weeklyTray.setToolTip(weeklyTooltip);
     }
-    
+
     // Generate Session icon (purple background) - RIGHT position
-    let sessionIcon;
-    if (sessionPercent >= 99) {
-      sessionIcon = generateRedXIcon(undefined, undefined, sessionOutline);
-    } else {
-      const sessionColor = getBackgroundColor(sessionPercent, colors.session.bg, warnThreshold, dangerThreshold);
-      sessionIcon = generatePercentageIcon(sessionPercent, sessionColor, colors.session.text, sessionOutline);
-    }
     if (sessionTray && !sessionTray.isDestroyed()) {
-      sessionTray.setImage(sessionIcon);
-      let sessionTooltip = `Claude Session (5h): ${Math.round(sessionPercent)}%`;
-      const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat, false);
-      if (sessionResetTime) {
-        sessionTooltip += `\nResets: ${sessionResetTime}`;
+      if (sessionPercent == null) {
+        sessionTray.setImage(trayStaticIconPath());
+        sessionTray.setToolTip('Claude Session (5h): no data');
+      } else {
+        let sessionIcon;
+        if (sessionPercent >= 99) {
+          sessionIcon = generateRedXIcon(undefined, undefined, sessionOutline);
+        } else {
+          const sessionColor = getBackgroundColor(sessionPercent, colors.session.bg, warnThreshold, dangerThreshold);
+          sessionIcon = generatePercentageIcon(sessionPercent, sessionColor, colors.session.text, sessionOutline);
+        }
+        sessionTray.setImage(sessionIcon);
+        let sessionTooltip = `Claude Session (5h): ${Math.round(sessionPercent)}%`;
+        const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat, false);
+        if (sessionResetTime) {
+          sessionTooltip += `\nResets: ${sessionResetTime}`;
+        }
+        sessionTray.setToolTip(sessionTooltip);
       }
-      sessionTray.setToolTip(sessionTooltip);
     }
   } catch (error) {
     console.error('Failed to update tray icons:', error);
@@ -2778,30 +2898,13 @@ function updateTrayIcon(usageData) {
 
 
 // IPC Handlers
+// SECURITY: the renderer receives login STATE only — never the session key.
+// Everything that needs the raw key (login, validation, fetching) stays in
+// the main process.
 ipcMain.handle('get-credentials', () => {
-  let sessionKey = null;
-  // Try safeStorage first (OS keychain)
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = store.get('sessionKey_encrypted');
-    if (encrypted) {
-      try {
-        sessionKey = safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-      } catch (err) {
-        console.error('[Keychain] Failed to decrypt session key:', err.message);
-      }
-    } else {
-      // Migration: safeStorage is available now but a legacy plain key exists
-      // (e.g. from a build before encryption) — adopt it rather than showing
-      // the login screen.
-      sessionKey = store.get('sessionKey') || null;
-    }
-  } else {
-    // Fallback: plain storage (legacy or safeStorage unavailable)
-    sessionKey = store.get('sessionKey');
-  }
   const claudeCliAvailable = !!readClaudeCodeToken();
   return {
-    sessionKey,
+    loggedIn: !!readStoredSessionKey(),
     organizationId: store.get('organizationId'),
     organizations: store.get('organizations', []),
     // A fresh claude CLI login can power the Anthropic section with no
@@ -2810,11 +2913,15 @@ ipcMain.handle('get-credentials', () => {
     localProviderCredentialsAvailable: claudeCliAvailable || hasLocalProviderCredentials(),
     // OpenAI/Codex and Google/Gemini credentials remain useful even when the
     // user deliberately logs out of Claude.
-    providerFallbackAvailable: hasExternalProviderCredentials()
+    providerFallbackAvailable: hasExternalProviderCredentials(),
+    // Lets Settings warn when tokens would sit unencrypted on disk
+    encryptionAvailable: safeStorage.isEncryptionAvailable()
   };
 });
 
-ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId, organizations }) => {
+// Main-internal: persist a validated login. Not an IPC surface — the
+// renderer triggers 'anthropic-login' and never handles the key itself.
+async function saveAnthropicCredentials(sessionKey, organizationId, organizations) {
   // Store session key in OS keychain if available
   if (safeStorage.isEncryptionAvailable()) {
     const encrypted = safeStorage.encryptString(sessionKey);
@@ -2835,31 +2942,28 @@ ipcMain.handle('save-credentials', async (event, { sessionKey, organizationId, o
   }
   // Also set cookie in Electron session for window-based fetching
   await setSessionCookie(sessionKey);
+}
+
+// Switch the tracked organization — the renderer sends the org id only.
+ipcMain.handle('set-organization', async (event, orgId) => {
+  const id = String(orgId || '').trim();
+  const known = store.get('organizations', []);
+  if (!id || (known.length && !known.some((org) => org.id === id))) return false;
+  store.set('organizationId', id);
+  await historyStore.read(id, { refresh: true });
   return true;
 });
 
 ipcMain.handle('delete-credentials', async () => {
-  store.delete('sessionKey');
-  store.delete('sessionKey_encrypted');
-  store.delete('organizationId');
-  store.delete('organizations');
-  // Remove all Claude.ai cookies
-  const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
-  for (const cookie of cookies) {
-    await session.defaultSession.cookies.remove('https://claude.ai', cookie.name);
-  }
-  // Clear any cached data from the Electron session (storage, cache)
-  // so nothing lingers on shared machines
-  await session.defaultSession.clearStorageData({
-    storages: ['localstorage', 'sessionstorage', 'cachestorage'],
-    origin: 'https://claude.ai'
-  });
+  await clearAnthropicLogin();
   return true;
 });
 
-// Validate a sessionKey by fetching org ID via hidden BrowserWindow
-ipcMain.handle('validate-session-key', async (event, sessionKey) => {
-  debugLog('Validating session key:', sessionKey.substring(0, 20) + '...');
+// Validate a sessionKey by fetching org ID via hidden BrowserWindow.
+// Main-internal (called by the 'anthropic-login' flow). Never log any part
+// of the key itself — length only.
+async function validateSessionKey(sessionKey) {
+  debugLog('Validating session key (length ' + String(sessionKey || '').length + ')');
   try {
     // Set the cookie in Electron's session first
     await setSessionCookie(sessionKey);
@@ -2906,7 +3010,7 @@ ipcMain.handle('validate-session-key', async (event, sessionKey) => {
     await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
     return { success: false, error: error.message };
   }
-});
+}
 
 ipcMain.on('minimize-window', () => {
   if (mainWindow) {
@@ -2956,7 +3060,7 @@ ipcMain.on('set-min-height', (event, h) => {
   if (mainWindow) mainWindow.setMinimumSize(MIN_WIDGET_WIDTH, Math.max(120, Math.round(h)));
 });
 
-ipcMain.on('resize-window', (event, height, force, fitPreset) => {
+ipcMain.on('resize-window', (event, height, force, fitPreset, userAction) => {
   if (!mainWindow) return;
   const setFittedContentSize = (width, requestedHeight) => {
     const bounds = mainWindow.getBounds();
@@ -2971,11 +3075,13 @@ ipcMain.on('resize-window', (event, height, force, fitPreset) => {
     if (x !== fitted.x || y !== fitted.y) mainWindow.setPosition(x, y);
   };
   if (force) {
-    // Presets, snapped windows, and hand-sized windows own their bounds.
-    // Graph detach/reattach and subgroup reflow may resize the chart, but
-    // must never collapse the BrowserWindow out from under the user.
+    // BACKGROUND refits must never collapse a hand-sized window out from
+    // under the user — but a direct click (graph toggle, subgroup burn,
+    // row hide) is the user asking for the content change, so it may adopt
+    // the new content height even in a hand-sized window (width is kept).
     const explicitPresetFit = fitPreset === true && _activeWindowPreset !== null;
-    if (windowIsUserSized() && !explicitPresetFit) return;
+    const explicitUserAction = userAction === true;
+    if (windowIsUserSized() && !explicitPresetFit && !explicitUserAction) return;
     const [cw] = mainWindow.getContentSize();
     setFittedContentSize(cw, height);
     // Record the ACTUAL height after the OS clamps to the minimum, not the
@@ -3232,6 +3338,7 @@ ipcMain.handle('get-settings', () => {
     sectionCollapsed: store.get('settings.sectionCollapsed', {}),
     subgroupHidden: store.get('settings.subgroupHidden', {}),
     pizazz: store.get('settings.pizazz', true),
+    sortByUsage: store.get('settings.sortByUsage', false),
     hiddenRows: store.get('settings.hiddenRows', {}),
     chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
@@ -3242,6 +3349,16 @@ ipcMain.handle('save-settings', (event, settings) => {
     trayOpenai: settings.trayOpenai, trayGoogle: settings.trayGoogle,
     sectionCollapsed: settings.sectionCollapsed, showTrayStats: settings.showTrayStats
   }));
+  // Chart-relevant snapshot BEFORE the writes — the chart windows get pinged
+  // only when one of these actually changed. (Previously every row-hide /
+  // pizazz / subgroup patch triggered a full chart rebuild in both windows.)
+  const chartRelevantSnapshot = () => JSON.stringify({
+    theme: store.get('settings.theme', 'dark'),
+    timeFormat: store.get('settings.timeFormat', '12h'),
+    projectionsOn: store.get('settings.projectionsOn', true),
+    chartHiddenSeries: store.get('settings.chartHiddenSeries', {})
+  });
+  const chartBefore = chartRelevantSnapshot();
   const supportsLoginItems = process.platform !== 'linux';
   const autoStart = supportsLoginItems ? settings.autoStart : false;
 
@@ -3277,6 +3394,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
   if (settings.subgroupHidden !== undefined) store.set('settings.subgroupHidden', settings.subgroupHidden || {});
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
+  if (settings.sortByUsage !== undefined) store.set('settings.sortByUsage', settings.sortByUsage === true);
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
   if (settings.chartHiddenSeries !== undefined) {
     store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));
@@ -3303,11 +3421,13 @@ ipcMain.handle('save-settings', (event, settings) => {
     }
     mainWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   }
-  if (graphWindow && !graphWindow.isDestroyed()) {
-    graphWindow.webContents.send('graph-settings-updated');
-  }
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('graph-settings-updated');
+  if (chartRelevantSnapshot() !== chartBefore) {
+    if (graphWindow && !graphWindow.isDestroyed()) {
+      graphWindow.webContents.send('graph-settings-updated');
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('graph-settings-updated');
+    }
   }
 
   if (!settings.showTrayStats) {
@@ -3342,7 +3462,9 @@ ipcMain.handle('save-settings', (event, settings) => {
 // SECURITY: Navigation is restricted to trusted domains (claude.ai and OAuth
 // providers) to prevent phishing attacks. Popup windows are blocked. Current
 // URL is displayed in the window title bar for transparency.
-ipcMain.handle('detect-session-key', async () => {
+// Main-internal: the captured key goes straight to validation + storage and
+// never crosses into the widget renderer.
+async function detectSessionKeyViaWindow() {
   // Clear any leftover sessionKey cookie
   try {
     await session.defaultSession.cookies.remove('https://claude.ai', 'sessionKey');
@@ -3403,8 +3525,11 @@ ipcMain.handle('detect-session-key', async () => {
       return { action: 'deny' };
     });
 
-    // Listen for sessionKey cookie being set after login
+    // Listen for sessionKey cookie being set after login. Cookies the app
+    // writes itself (setSessionCookie during a background refresh) must not
+    // complete the login with a stale key.
     const onCookieChanged = (event, cookie, cause, removed) => {
+      if (_settingSessionCookie) return;
       if (
         cookie.name === 'sessionKey' &&
         cookie.domain.includes('claude.ai') &&
@@ -3429,6 +3554,33 @@ ipcMain.handle('detect-session-key', async () => {
 
     loginWin.loadURL('https://claude.ai/login');
   });
+}
+
+// The complete Claude.ai login flow, kept entirely in the main process: the
+// visible login window captures the cookie, the key is validated and stored
+// (encrypted when possible), and only login STATE returns to the renderer.
+let _anthropicLoginInFlight = false;
+ipcMain.handle('anthropic-login', async () => {
+  if (_anthropicLoginInFlight) {
+    return { success: false, error: 'A sign-in is already in progress' };
+  }
+  _anthropicLoginInFlight = true;
+  try {
+    const detected = await detectSessionKeyViaWindow();
+    if (!detected.success) return { success: false, error: detected.error || 'Login failed' };
+    const validation = await validateSessionKey(detected.sessionKey);
+    if (!validation.success) return { success: false, error: validation.error || 'Session invalid' };
+    await saveAnthropicCredentials(detected.sessionKey, validation.organizationId, validation.organizations || []);
+    return {
+      success: true,
+      organizationId: validation.organizationId,
+      organizations: validation.organizations || []
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  } finally {
+    _anthropicLoginInFlight = false;
+  }
 });
 
 // ---- Auto-update (electron-updater) ----
@@ -3547,25 +3699,25 @@ function isNewerVersion(remote, local) {
   } catch { return false; }
 }
 
+// ---- Degraded-session tracking ----
+// Only explicit 401/403s wipe credentials (transient Cloudflare/HTML blocks
+// must not). But a session that is genuinely dead behind an HTML block would
+// otherwise retry silently forever with stale rows — so after a few
+// consecutive failures the renderer shows a quiet non-destructive banner.
+let _anthropicFailStreak = 0;
+const ANTHROPIC_DEGRADED_AFTER = 3;
+function noteAnthropicFetchOutcome(ok) {
+  _anthropicFailStreak = ok ? 0 : _anthropicFailStreak + 1;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('anthropic-fetch-degraded', _anthropicFailStreak >= ANTHROPIC_DEGRADED_AFTER);
+  }
+}
+
 ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   options = sanitizeFetchOptions(options);
   if (options.refreshLocalCredentials === true) resetLocalCredentialCaches();
   const providerFetchOptions = { force: options.forceProviders === true };
-  // Use the same credential retrieval logic as get-credentials
-  let sessionKey = null;
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = store.get('sessionKey_encrypted');
-    if (encrypted) {
-      try {
-        sessionKey = safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-      } catch (err) {
-        console.error('[Keychain] Failed to decrypt session key:', err.message);
-      }
-    }
-  } else {
-    sessionKey = store.get('sessionKey');
-  }
-
+  const sessionKey = readStoredSessionKey();
   const organizationId = store.get('organizationId');
 
   if (!sessionKey || !organizationId) {
@@ -3597,9 +3749,10 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     };
     if (codexF) data.codex = codexF;
     if (geminiF) data.gemini = geminiF;
-    applyAccountToggles(data);
-
+    // History records the UNFILTERED accounts: the visibility toggles are a
+    // display choice and must never change which account a series records.
     await storeUsageHistory(data); // no organizationId → default history scope
+    applyAccountToggles(data);
     data.forecasts = computeForecasts();
     data.sessionPlans = computeSessionPlans();
     data.frozenProviders = computeFrozenProviders(data);
@@ -3647,6 +3800,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   } catch (error) {
     debugLog('API request failed:', error.message);
     if (isExplicitAuthFailure(error)) {
+      noteAnthropicFetchOutcome(true); // renderer switches to login state — banner off
       store.delete('sessionKey');
       store.delete('sessionKey_encrypted');
       store.delete('organizationId');
@@ -3654,17 +3808,21 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
       throw new Error('SessionExpired');
     }
     // Cloudflare, HTML, timeouts, and network failures are transient. Keep
-    // credentials so the next scheduled refresh can recover automatically.
+    // credentials so the next scheduled refresh can recover automatically —
+    // but count the streak so a persistent block surfaces a banner.
+    noteAnthropicFetchOutcome(false);
     throw error;
   }
 
   if (isExplicitAuthFailure(data)) {
+    noteAnthropicFetchOutcome(true);
     store.delete('sessionKey');
     store.delete('sessionKey_encrypted');
     store.delete('organizationId');
     if (mainWindow) mainWindow.webContents.send('session-expired');
     throw new Error('SessionExpired');
   }
+  noteAnthropicFetchOutcome(true);
 
   let overageResult = { status: 'skipped', reason: 'UI panel not visible' };
   let prepaidResult = { status: 'skipped', reason: 'UI panel not visible' };
@@ -3731,9 +3889,13 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (codex) data.codex = codex;
   const gemini = await geminiPromise;
   if (gemini) data.gemini = gemini;
-  applyAccountToggles(data);
 
+  // History records the UNFILTERED accounts: the visibility toggles are a
+  // display choice and must never change which account a series records
+  // (previously, hiding the desktop account silently spliced the CLI
+  // account's numbers into the desktop account's series).
   await storeUsageHistory(data);
+  applyAccountToggles(data);
 
   // Burn-rate forecasts, anomaly check, planner, digest — after the new sample lands
   data.forecasts = computeForecasts();
@@ -3770,26 +3932,32 @@ app.whenReady().then(async () => {
   setupAutoUpdate();
 
   // Restore session cookie if we have stored credentials
-  let sessionKey = null;
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = store.get('sessionKey_encrypted');
-    if (encrypted) {
-      try {
-        sessionKey = safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-      } catch (err) {
-        console.error('[Keychain] Failed to decrypt session key on startup:', err.message);
-      }
-    }
-  } else {
-    sessionKey = store.get('sessionKey');
-  }
-
+  const sessionKey = readStoredSessionKey();
   if (sessionKey) {
     await setSessionCookie(sessionKey);
   }
 
-  await migrateUsageHistoryStorage();
-  pruneStaleBurnAlertCounters();
+  // One-time translation of legacy chart-legend keys (v2.1.1 stored labels;
+  // the charts now key visibility by stable series id).
+  const storedHiddenSeries = store.get('settings.chartHiddenSeries');
+  if (storedHiddenSeries && Object.keys(storedHiddenSeries).some((key) => !String(key).includes(':'))) {
+    store.set('settings.chartHiddenSeries', migrateHiddenSeriesLabels(storedHiddenSeries));
+    debugLog('[Settings] Migrated legacy chartHiddenSeries label keys to series ids');
+  }
+
+  // History migration must never take the app down with it: any failure here
+  // (disk, validation) degrades to "history unavailable this run", not
+  // "no window, no tray, invisible process holding the instance lock".
+  try {
+    await migrateUsageHistoryStorage();
+  } catch (err) {
+    console.error('[History] Migration failed — continuing without it, legacy data left untouched:', err.message);
+  }
+  try {
+    pruneStaleBurnAlertCounters();
+  } catch (err) {
+    debugLog('[Startup] Burn-alert counter pruning failed:', err.message);
+  }
 
   createMainWindow();
   // Avoid creating temporary tray icons during startup when tray stats are disabled.
@@ -3811,7 +3979,9 @@ app.whenReady().then(async () => {
   syncRestoreTray();
 
   // Periodic always-on-top re-assertion to recover from z-order disruptions
-  // (hidden window spawns, window manager shortcuts, alt-tab, etc.)
+  // (window manager shortcuts, alt-tab, other apps asserting topmost). The
+  // old per-request hidden fetch windows were the main disruptor; with the
+  // persistent fetch window a 30s cadence is plenty.
   setInterval(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       const alwaysOnTopSetting = store.get('settings.alwaysOnTop', true);
@@ -3824,7 +3994,18 @@ app.whenReady().then(async () => {
     if (graphWindow && !graphWindow.isDestroyed() && store.get('settings.graphAlwaysOnTop', true)) {
       graphWindow.setAlwaysOnTop(true, 'floating');
     }
-  }, 5000);
+  }, 30000);
+
+  // History file retention runs off the fetch path: once at startup, then
+  // twice a day. (Appends no longer prune inline.)
+  const pruneHistoryFiles = () => {
+    historyStore.pruneExpiredFiles(currentHistoryScope())
+      .catch((err) => debugLog('[History] Retention prune failed:', err.message));
+  };
+  pruneHistoryFiles();
+  setInterval(pruneHistoryFiles, 12 * 60 * 60 * 1000);
+}).catch((err) => {
+  console.error('[Startup] Initialization error:', err);
 });
 
 app.on('window-all-closed', () => {

@@ -32,17 +32,17 @@ function isAllowedExternalUrl(url) {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Credentials management
+  // Credentials management. The renderer only ever sees login STATE — the
+  // whole detect/validate/store login flow runs inside the main process.
   getCredentials: () => ipcRenderer.invoke('get-credentials'),
-  saveCredentials: (credentials) => ipcRenderer.invoke('save-credentials', credentials),
+  anthropicLogin: () => ipcRenderer.invoke('anthropic-login'),
+  setOrganization: (orgId) => ipcRenderer.invoke('set-organization', String(orgId || '')),
   deleteCredentials: () => ipcRenderer.invoke('delete-credentials'),
-  validateSessionKey: (sessionKey) => ipcRenderer.invoke('validate-session-key', sessionKey),
-  detectSessionKey: () => ipcRenderer.invoke('detect-session-key'),
 
   // Window controls
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
-  resizeWindow: (height, force, fitPreset) => ipcRenderer.send('resize-window', height, force, fitPreset),
+  resizeWindow: (height, force, fitPreset, userAction) => ipcRenderer.send('resize-window', height, force, fitPreset, userAction === true),
   fitLandscapeWidth: (expanded) => ipcRenderer.send('fit-landscape-width', expanded === true),
   setMinHeight: (h) => ipcRenderer.send('set-min-height', h),
 
@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onSessionExpired: (callback) => {
     ipcRenderer.on('session-expired', () => callback());
+  },
+  onAnthropicDegraded: (callback) => {
+    ipcRenderer.on('anthropic-fetch-degraded', (event, degraded) => callback(degraded === true));
   },
   onWindowUserSized: (callback) => {
     ipcRenderer.on('window-user-sized', (event, userSized) => callback(userSized));

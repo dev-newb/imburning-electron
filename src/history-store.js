@@ -20,16 +20,23 @@ function validEntry(entry) {
 }
 
 function dedupeEntries(entries) {
-  const seen = new Set();
-  const result = [];
+  // Bucket by timestamp so the expensive JSON comparison only runs for the
+  // rare colliding samples instead of stringifying every retained entry on
+  // every append.
+  const byTimestamp = new Map();
   for (const entry of entries) {
     if (!validEntry(entry)) continue;
-    const key = `${entry.timestamp}:${JSON.stringify(entry)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(entry);
+    const bucket = byTimestamp.get(entry.timestamp);
+    if (!bucket) {
+      byTimestamp.set(entry.timestamp, [entry]);
+      continue;
+    }
+    const json = JSON.stringify(entry);
+    if (!bucket.some((existing) => JSON.stringify(existing) === json)) bucket.push(entry);
   }
-  return result.sort((a, b) => a.timestamp - b.timestamp);
+  return [...byTimestamp.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .flatMap(([, bucket]) => bucket);
 }
 
 class JsonlHistoryStore {
@@ -97,7 +104,8 @@ class JsonlHistoryStore {
 
     const retained = this._retain(entries);
     this.cache.set(cacheKey, retained);
-    await this.pruneExpiredFiles(scope);
+    // No inline pruning: file retention belongs to the owner's scheduled
+    // pruneExpiredFiles() calls, never to the read/append hot paths.
     return retained;
   }
 
@@ -113,7 +121,8 @@ class JsonlHistoryStore {
       const current = this.cache.has(cacheKey) ? this.cache.get(cacheKey) : await this.read(scope);
       const retained = this._retain([...current, entry]);
       this.cache.set(cacheKey, retained);
-      await this.pruneExpiredFiles(scope);
+      // Deliberately NO pruneExpiredFiles here: file retention runs on the
+      // owner's schedule (startup + a timer), off the awaited refresh path.
       return retained;
     });
     this.queues.set(cacheKey, operation.catch(() => {}));

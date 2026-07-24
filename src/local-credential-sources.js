@@ -3,10 +3,14 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const DISCOVERY_CACHE_MS = 5 * 60 * 1000;
 const WSL_COMMAND_TIMEOUT_MS = 3000;
+// Utility distros (Docker Desktop plumbing and friends) never hold user CLI
+// logins, and probing them cold-boots their VMs — skip them outright.
+const UTILITY_DISTRO_PATTERN = /^(docker-desktop|rancher-desktop|podman-machine)/i;
+// Discovery is deliberately sticky: `wsl.exe -d <distro> printenv` BOOTS a
+// stopped distro, so the scan runs once and is refreshed only by an explicit
+// clearCredentialHomeCache() (app start / the local-login rescan button).
 let cachedHomes = null;
-let cachedAt = 0;
 
 function decodeWslListOutput(stdout) {
   if (!stdout) return '';
@@ -45,6 +49,7 @@ function discoverWslHomes({ spawnSyncImpl = spawnSync, platform = process.platfo
 
   const homes = [];
   for (const distro of parseWslDistros(listed.stdout)) {
+    if (UTILITY_DISTRO_PATTERN.test(distro)) continue;
     const result = spawnSyncImpl('wsl.exe', ['-d', distro, '--', 'printenv', 'HOME'], {
       encoding: 'utf8',
       windowsHide: true,
@@ -60,14 +65,13 @@ function discoverWslHomes({ spawnSyncImpl = spawnSync, platform = process.platfo
 function discoverCredentialHomes({
   force = false,
   homedir,
-  now = Date.now(),
   platform = process.platform,
   spawnSyncImpl = spawnSync
 } = {}) {
   const localHome = homedir || require('os').homedir();
   const mayUseCache = !force && !homedir && platform === process.platform
     && spawnSyncImpl === spawnSync;
-  if (mayUseCache && cachedHomes && now - cachedAt < DISCOVERY_CACHE_MS) {
+  if (mayUseCache && cachedHomes) {
     return cachedHomes.map((entry) => ({ ...entry }));
   }
 
@@ -77,14 +81,12 @@ function discoverCredentialHomes({
   ];
   if (mayUseCache) {
     cachedHomes = homes;
-    cachedAt = now;
   }
   return homes.map((entry) => ({ ...entry }));
 }
 
 function clearCredentialHomeCache() {
   cachedHomes = null;
-  cachedAt = 0;
 }
 
 module.exports = {
@@ -93,5 +95,6 @@ module.exports = {
   linuxHomeToUnc,
   discoverWslHomes,
   discoverCredentialHomes,
-  clearCredentialHomeCache
+  clearCredentialHomeCache,
+  UTILITY_DISTRO_PATTERN
 };
