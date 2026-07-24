@@ -77,7 +77,10 @@
             <!-- Update Banner (hidden by default) -->
             <div class="update-banner" id="updateBanner" style="display: none;">
                 <span class="update-banner-text" id="updateBannerText"></span>
-                <button class="update-banner-dismiss" id="updateBannerDismiss" title="Dismiss">✕</button>
+                <button class="update-banner-dismiss" id="updateBannerDismiss" title="Dismiss" aria-label="Dismiss update banner">✕</button>
+            </div>
+            <div class="stale-banner" id="staleBanner" style="display: none;" role="status">
+                <span class="stale-banner-text">⚠ Claude.ai unreachable — data may be stale. If this persists, re-log in Settings.</span>
             </div>
 
             <!-- Loading State -->
@@ -101,13 +104,6 @@
 
             <!-- Main Content -->
             <div class="content" id="mainContent" style="display: none;">
-
-                <!-- Compact toggle chevron — fixed position, does not move with expand -->
-                <button class="compact-collapse-btn" id="compactCollapseBtn" title="Compact mode" style="display: none;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
-
-
 
                 <!-- ANTHROPIC provider section -->
                 <div class="provider-section" id="sectionAnthropic">
@@ -311,18 +307,14 @@
                             <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
                         </svg>
                     </button>
-                    <canvas id="usageChart"></canvas>
+                    <canvas id="usageChart" role="img" aria-label="Usage history chart"></canvas>
                 </div>
 
 
             </div>
 
-            <!-- Compact Content -->
+            <!-- Compact Content (enter/exit via the title-bar press button) -->
             <div class="compact-content" id="compactContent" style="display: none;">
-                <!-- Expand chevron — right edge, returns to normal mode -->
-                <button class="compact-expand-btn" id="compactExpandBtn" title="Normal mode">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
                 <!-- Rows are built dynamically: one slim bar per active pool
                      across ALL providers, grouped by company edge colour -->
                 <div class="compact-rows" id="compactRows"></div>
@@ -471,6 +463,15 @@
                                 </span>
                             </div>
                         </div>
+                        <div class="settings-row-2col">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Sort models by usage</span>
+                                <label class="toggle-switch"><input type="checkbox" id="sortByUsageToggle" aria-label="Sort models by usage"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-hint">Most-used pools rise to the top of each company. Session &amp; Weekly stay pinned.</span>
+                            </div>
+                        </div>
 
                         <!-- Per-company settings: one column per provider, login controls lowest -->
                         <div class="settings-providers">
@@ -488,6 +489,7 @@
                                 </div>
                                 <div class="provider-col-login">
                                     <span class="settings-row-hint" id="anthropicLoginStatus">Not connected</span>
+                                    <span class="settings-row-hint plain-storage-warning" id="plainStorageWarning" style="display:none;">⚠ No OS keychain available — stored logins sit unencrypted on this machine</span>
                                     <button class="settings-connect-btn" id="logoutBtn" title="Sign in to Claude.ai">Log In</button>
                                 </div>
                             </div>

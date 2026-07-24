@@ -55,6 +55,11 @@
             display: flex; align-items: center; justify-content: center;
             color: #7a7a90; font-size: 12px; text-align: center; padding: 20px;
         }
+        /* The clown-jail (pizazz off) reaches the detached graph too */
+        body.no-pizazz *, body.no-pizazz *::before, body.no-pizazz *::after {
+            animation: none !important;
+            transition: none !important;
+        }
     </style>
 </head>
 
@@ -65,7 +70,7 @@
         <button class="pin-btn" id="pinBtn" title="Keep this graph window above other windows">📌 <span id="pinLabel">On top</span></button>
     </div>
     <div class="gwrap">
-        <canvas id="usageChart"></canvas>
+        <canvas id="usageChart" role="img" aria-label="Usage history chart"></canvas>
         <div class="gempty" id="gEmpty" style="display:none;">No usage history yet — the graph fills in as data is collected.</div>
     </div>
     <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>

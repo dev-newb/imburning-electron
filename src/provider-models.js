@@ -1,8 +1,11 @@
 'use strict';
 
+// Owner-confirmed display order: Pro pools first (still the premium tier,
+// even when the version number is older), then the current Flash models,
+// then unknown/future buckets in API order.
 const GEMINI_MODEL_PRIORITY = new Map([
-  ['gemini-3.6-flash', 0],
-  ['gemini-3.5-flash-lite', 1]
+  ['gemini-3.6-flash', 10],
+  ['gemini-3.5-flash-lite', 11]
 ]);
 
 function geminiModelLabel(modelId) {
@@ -13,8 +16,8 @@ function geminiModelLabel(modelId) {
 
 function geminiModelPriority(modelId) {
   const normalized = String(modelId).toLowerCase();
+  if (/pro/i.test(normalized)) return 0;
   if (GEMINI_MODEL_PRIORITY.has(normalized)) return GEMINI_MODEL_PRIORITY.get(normalized);
-  if (/pro/i.test(normalized)) return 10;
   return 20;
 }
 

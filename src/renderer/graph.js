@@ -21,11 +21,13 @@
     let T = THEMES.dark;
     async function applyTheme(settings) {
         let dark = true;
+        let pizazzOff = false;
         try {
             const s = settings || await api.getSettings();
             const theme = (s && s.theme) || 'dark';
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             dark = theme === 'dark' || (theme === 'system' && prefersDark);
+            pizazzOff = !!(s && s.pizazz === false);
         } catch (e) { /* default dark */ }
         T = dark ? THEMES.dark : THEMES.light;
         const root = document.documentElement.style;
@@ -34,6 +36,8 @@
         root.setProperty('--g-title', T.title);
         root.setProperty('--g-border', T.border);
         document.body.classList.toggle('light', !dark);
+        // The clown-jail reaches the detached window too
+        document.body.classList.toggle('no-pizazz', pizazzOff);
     }
 
     function build(history, latest, settings = {}) {
@@ -106,10 +110,24 @@
         // Forecast projection lines (dotted, to the 100% crossing).
         const last = history[history.length - 1];
         let xMax = last.timestamp;
-        const addProj = (seriesId, label, color, lastVal, etaIso) => {
+        // Window-reset clamps: a projection that lands after its own window
+        // reset is a race the reset wins — don't draw it (matches the inline
+        // chart). Scoped pools' resets come from the latest limits[] payload.
+        const weeklyResetMs = latest?.seven_day?.resets_at
+            ? new Date(latest.seven_day.resets_at).getTime() : null;
+        const scopedResetMs = {};
+        for (const l of ((latest && latest.limits) || [])) {
+            if (l.kind !== 'weekly_scoped' || !l.resets_at) continue;
+            const nm = String(l.scope?.model?.display_name || l.scope?.surface || 'Scoped');
+            scopedResetMs[nm.toLowerCase().replace(/[^a-z0-9]+/g, '_')] = new Date(l.resets_at).getTime();
+        }
+        let hadProjection = false;
+        const addProj = (seriesId, label, color, lastVal, etaIso, resetMs) => {
             if (etaIso == null || lastVal == null) return;
             const t = new Date(etaIso).getTime();
             if (!(t > last.timestamp)) return;
+            if (resetMs && t > resetMs) return; // the window resets first — no cap hit
+            hadProjection = true;
             datasets.push({
                 seriesId: `projection:${seriesId}`,
                 baseSeriesId: seriesId,
@@ -126,26 +144,44 @@
             xMax = Math.max(xMax, t);
         };
         if (settings.projectionsOn !== false) {
-            addProj('claude:session', 'CLA 5H', '#8b5cf6', last.session, forecasts.session);
-            addProj('claude:weekly', 'CLA 7D', '#3b82f6', last.weekly, forecasts.weekly);
+            addProj('claude:session', 'CLA 5H', '#8b5cf6', last.session, forecasts.session, null);
+            addProj('claude:weekly', 'CLA 7D', '#3b82f6', last.weekly, forecasts.weekly, weeklyResetMs);
             for (const [lbl, color, key] of [
                 ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
                 ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
             ]) {
                 const id = key === 'oauthApps' ? 'oauth-apps' : key;
-                addProj(`anthropic:${id}`, lbl, color, last[key], forecasts[key]);
+                addProj(`anthropic:${id}`, lbl, color, last[key], forecasts[key], weeklyResetMs);
             }
             for (const k of scopedKeys) {
                 addProj(`scoped:${k}`, k.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                    SCOPED_COLORS[k] || '#84cc16', last.scoped?.[k], forecasts.scoped?.[k]);
+                    SCOPED_COLORS[k] || '#84cc16', last.scoped?.[k], forecasts.scoped?.[k], scopedResetMs[k] || null);
             }
             for (const [lbl, color, key] of [
                 ['Codex', CODE.codex, 'codex'], ['Gemini', COMPANY.google, 'gemini'],
                 ['Claude CLI', COMPANY.anthropic, 'claudeCli'], ['Codex CLI', CODE.codex, 'codexCli'],
                 ['Gemini CLI', COMPANY.google, 'geminiCli']
             ]) {
-                addProj(`provider:${key}`, lbl, color, last[key], forecasts[key]);
+                addProj(`provider:${key}`, lbl, color, last[key], forecasts[key], null);
             }
+        }
+        // Grey reset marker when the weekly reset falls inside the projected
+        // span — the visual race between "cap hit" and "window resets".
+        if (hadProjection && weeklyResetMs && weeklyResetMs > last.timestamp
+            && weeklyResetMs <= xMax + 6 * 60 * 60 * 1000) {
+            xMax = Math.max(xMax, weeklyResetMs);
+            datasets.push({
+                seriesId: 'marker:weekly-reset',
+                label: 'Weekly reset',
+                data: [{ x: weeklyResetMs, y: 0 }, { x: weeklyResetMs, y: 100 }],
+                borderColor: '#9ca3af',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderDash: [2, 3],
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
         }
         xMax = Math.min(xMax, Date.now() + 3 * 24 * 60 * 60 * 1000);
 
@@ -177,6 +213,19 @@
                         type: 'linear',
                         min: first.getTime(),
                         max: xMax,
+                        // Day-boundary ticks on multi-day spans (matches the
+                        // inline chart) — default numeric steps repeat labels.
+                        afterBuildTicks(axis) {
+                            const span = axis.max - axis.min;
+                            if (span < 48 * 60 * 60 * 1000) return;
+                            const d = new Date(first.getTime());
+                            const ticks = [];
+                            while (d.getTime() <= axis.max) {
+                                if (d.getTime() >= axis.min) ticks.push({ value: d.getTime() });
+                                d.setDate(d.getDate() + 1);
+                            }
+                            if (ticks.length >= 2) axis.ticks = ticks;
+                        },
                         ticks: {
                             font: { size: 10 }, color: T.tick, maxRotation: 0,
                             callback: (value) => chartUtils.formatTimestampTick(value, spanMs, settings.timeFormat)

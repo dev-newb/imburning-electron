@@ -30,14 +30,14 @@ function debugLog(...args) {
 function hasUsableCredentials(value = credentials) {
     return !!(
         value
-        && ((value.sessionKey && value.organizationId)
+        && ((value.loggedIn && value.organizationId)
             || value.cliFallbackAvailable
             || value.providerFallbackAvailable)
     );
 }
 
 function hasClaudeWebCredentials(value = credentials) {
-    return !!(value && value.sessionKey && value.organizationId);
+    return !!(value && value.loggedIn && value.organizationId);
 }
 
 // DOM elements
@@ -142,8 +142,6 @@ const elements = {
     compactModeToggle: document.getElementById('compactModeToggle'),
     compactModeToggleCompact: document.getElementById('compactModeToggleCompact'),
     compactContent: document.getElementById('compactContent'),
-    compactCollapseBtn: document.getElementById('compactCollapseBtn'),
-    compactExpandBtn: document.getElementById('compactExpandBtn'),
     compactSessionFill: document.getElementById('compactSessionFill'),
     compactSessionPct: document.getElementById('compactSessionPct'),
     compactWeeklyFill: document.getElementById('compactWeeklyFill'),
@@ -174,6 +172,7 @@ const elements = {
     webhookToggle: document.getElementById('webhookToggle'),
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
+    sortByUsageToggle: document.getElementById('sortByUsageToggle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
     showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
@@ -213,12 +212,12 @@ function populateOrgSelector(organizations, selectedOrgId) {
     }
 }
 
-// Handle organization change
+// Handle organization change — main only needs the org id
 async function handleOrgChange() {
     const newOrgId = elements.orgSelector.value;
     if (newOrgId && newOrgId !== credentials.organizationId) {
         credentials.organizationId = newOrgId;
-        await window.electronAPI.saveCredentials(credentials);
+        await window.electronAPI.setOrganization(newOrgId);
         // Refresh usage data with new org
         await fetchUsageData();
     }
@@ -228,6 +227,19 @@ async function handleOrgChange() {
 async function init() {
     setupEventListeners();
     initSubheadings();
+    // Give every settings toggle an accessible name from its row label
+    document.querySelectorAll('.settings-col').forEach((col) => {
+        const label = col.querySelector('.settings-row-label');
+        const input = col.querySelector('.toggle-switch input');
+        if (label && input && !input.getAttribute('aria-label')) {
+            input.setAttribute('aria-label', label.textContent.trim());
+        }
+    });
+    // Icon buttons whose visible glyph (⚙️, −, ×) would otherwise become
+    // their accessible name get a real one from their tooltip instead
+    document.querySelectorAll('button[title]:not([aria-label])').forEach((btn) => {
+        btn.setAttribute('aria-label', btn.title.split('—')[0].trim());
+    });
     credentials = await window.electronAPI.getCredentials();
 
     // Apply saved theme and load thresholds immediately
@@ -342,6 +354,12 @@ function setupProviderSections() {
     for (const { key, traySetting } of PROVIDER_SECTIONS) {
         const { header, body, eye } = sectionEls(key);
         if (!header) continue;
+        // Headers are div click-targets — make them keyboard-operable too
+        header.setAttribute('tabindex', '0');
+        header.setAttribute('role', 'button');
+        header.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); }
+        });
         header.addEventListener('click', async (e) => {
             if (e.target.closest('.section-eye')) return; // eye handles itself
             const nowCollapsed = !body.classList.contains('collapsed');
@@ -391,7 +409,8 @@ function setupEventListeners() {
         }
         _forceFitHeight({
             fitPreset: _activePreset !== null,
-            intrinsic: !_graphIsInline()
+            intrinsic: !_graphIsInline(),
+            userAction: true
         });
         _saveViewState();
     });
@@ -410,7 +429,7 @@ function setupEventListeners() {
             elements.graphPopoutBtn.classList.add('active');
             if (elements.graphSection) elements.graphSection.style.display = 'none';
             syncGraphLayoutState();
-            _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: true });
+            _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: true, userAction: true });
         });
         if (window.electronAPI.onGraphWindowClosed) {
             window.electronAPI.onGraphWindowClosed(() => {
@@ -422,7 +441,7 @@ function setupEventListeners() {
                     requestAnimationFrame(() => usageChart?.resize());
                 }
                 syncGraphLayoutState();
-                _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: !_graphIsInline() });
+                _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: !_graphIsInline(), userAction: true });
             });
         }
     }
@@ -638,6 +657,17 @@ function setupEventListeners() {
 
     setupProviderSections();
 
+    // Keyboard access for the click-only expand toggles (headers get theirs
+    // inside setupProviderSections)
+    for (const toggle of [elements.expandToggle, elements.openaiExpandToggle]) {
+        if (!toggle) continue;
+        toggle.setAttribute('tabindex', '0');
+        toggle.setAttribute('role', 'button');
+        toggle.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); }
+        });
+    }
+
     // Listen for refresh requests from tray
     window.electronAPI.onRefreshUsage(async () => {
         if (elements.refreshBtn) elements.refreshBtn.classList.add('spinning');
@@ -667,6 +697,20 @@ function setupEventListeners() {
             showLoginRequired();
         }
     });
+
+    // Quiet, non-destructive notice when Claude.ai has failed several
+    // consecutive refreshes (a session that is dead behind an HTML block is
+    // deliberately NOT wiped — this banner is the recovery path instead).
+    if (window.electronAPI.onAnthropicDegraded) {
+        window.electronAPI.onAnthropicDegraded((degraded) => {
+            const banner = document.getElementById('staleBanner');
+            if (!banner) return;
+            const show = !!degraded && hasClaudeWebCredentials();
+            const wasShown = banner.style.display !== 'none';
+            banner.style.display = show ? 'flex' : 'none';
+            if (wasShown !== show && !isCompactMode) resizeWidget();
+        });
+    }
 
     // Update banner
     elements.updateBannerDismiss.addEventListener('click', () => {
@@ -701,17 +745,8 @@ function setupEventListeners() {
         if (!isCompactMode) resizeWidget(true);
     });
 
-    // Compact mode — collapse chevron (normal → compact)
-    elements.compactCollapseBtn.addEventListener('click', async () => {
-        applyCompactMode(true);
-        await _saveCompactSetting(true);
-    });
-
-    // Compact mode — expand chevron (compact → normal)
-    elements.compactExpandBtn.addEventListener('click', async () => {
-        applyCompactMode(false);
-        await _saveCompactSetting(false);
-    });
+    // Compact mode enter/exit lives on the title-bar press button (the old
+    // edge chevrons are fully retired — markup, CSS and wiring)
 
     // Compact mode toggle in normal settings panel — deferred to Done click
 
@@ -787,18 +822,11 @@ async function handleAnthropicAuthAction() {
 
         button.textContent = 'Waiting for browser sign-in...';
         if (elements.anthropicLoginStatus) elements.anthropicLoginStatus.textContent = 'Waiting for Claude.ai...';
-        const detected = await window.electronAPI.detectSessionKey();
-        if (!detected.success) throw new Error(detected.error || 'Login failed');
+        // The whole login (browser window → validation → encrypted storage)
+        // runs in the main process; only success/failure comes back here.
+        const result = await window.electronAPI.anthropicLogin();
+        if (!result.success) throw new Error(result.error || 'Login failed');
 
-        button.textContent = 'Validating...';
-        const validation = await window.electronAPI.validateSessionKey(detected.sessionKey);
-        if (!validation.success) throw new Error(validation.error || 'Session invalid');
-
-        await window.electronAPI.saveCredentials({
-            sessionKey: detected.sessionKey,
-            organizationId: validation.organizationId,
-            organizations: validation.organizations || []
-        });
         credentials = await window.electronAPI.getCredentials();
         populateOrgSelector(credentials.organizations || [], credentials.organizationId);
         await fetchUsageData({ forceExtended: true, forceProviders: true });
@@ -1293,6 +1321,7 @@ function buildExtraRows(data) {
         elements.expandSection.style.display = 'none';
     }
 
+    _sortRowsByUsage();
     applySubgroups();
     applyLabelMode();
     updateHiddenChips();
@@ -1335,20 +1364,33 @@ function _fitPresetIfGraphHidden() {
     }, 120);
 }
 
+// Combined height of any visible notice banners (update + stale-session)
+function _bannersHeight() {
+    let h = 0;
+    if (elements.updateBanner && elements.updateBanner.style.display !== 'none') {
+        h += elements.updateBanner.offsetHeight || 28;
+    }
+    const stale = document.getElementById('staleBanner');
+    if (stale && stale.style.display !== 'none') h += stale.offsetHeight || 24;
+    return h;
+}
+
 // Fit the window height to the content, keeping the user's width — used by
 // toggles that change content height (graph, subgroup rolls) so the window
 // grows and contracts with what it shows. A preset fit is a one-time explicit
 // transition; the preset continues to own geometry after it completes.
-function _forceFitHeight({ fitPreset = false, intrinsic = false } = {}) {
+// userAction marks a direct click (graph toggle, burn, hide): those may adopt
+// the new content height even in a hand-sized window; background refits never.
+function _forceFitHeight({ fitPreset = false, intrinsic = false, userAction = false } = {}) {
     if (isCompactMode) return;
-    if (_windowUserSized && !fitPreset) return;
+    if (_windowUserSized && !fitPreset && !userAction) return;
     if (elements.settingsOverlay.style.display !== 'none') return;
     requestAnimationFrame(() => {
         const th = _chromeHeight();
         const ch = intrinsic ? _intrinsicMainContentHeight() : elements.mainContent.scrollHeight;
-        const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
+        const bh = _bannersHeight();
         if (th >= 10 && ch >= 40) {
-            window.electronAPI.resizeWindow(th + bh + ch + 10, true, fitPreset);
+            window.electronAPI.resizeWindow(th + bh + ch + 10, true, fitPreset, userAction);
         }
     });
 }
@@ -1439,6 +1481,28 @@ function hiddenRowsMap() {
     return (window._cachedSettings || {}).hiddenRows || {};
 }
 
+// Optional rank-by-use (settings.sortByUsage, default off): reorder each
+// container's pool rows heaviest-first. Summary rows (credits / limit resets
+// / extra-usage) keep the bottom; Anthropic's Session/Weekly are structural
+// rows outside these containers and stay pinned by design.
+const _SUMMARY_ROW_KEYS = /^(extra_usage|codex(_cli)?_row_(credits|resets))$/;
+function _sortRowsByUsage() {
+    if (!(window._cachedSettings || {}).sortByUsage) return;
+    for (const container of [elements.scopedRows, elements.extraRows, elements.openaiRows,
+        elements.googleRows, elements.anthropicCliRows, elements.openaiCliRows, elements.googleCliRows]) {
+        if (!container || container.children.length < 2) continue;
+        const rows = [...container.children].filter((el) => el.dataset && el.dataset.rowKey);
+        if (rows.length < 2) continue;
+        const pct = (row) => {
+            if (_SUMMARY_ROW_KEYS.test(row.dataset.rowKey)) return -1;
+            const value = latestUsageData?.[row.dataset.rowKey]?.utilization;
+            return Number.isFinite(value) ? value : -1;
+        };
+        rows.sort((a, b) => pct(b) - pct(a));
+        for (const row of rows) container.appendChild(row);
+    }
+}
+
 async function hideRow(key) {
     const hiddenRows = { ...hiddenRowsMap(), [key]: true };
     await _saveSettingsPatch({ hiddenRows });
@@ -1515,7 +1579,7 @@ async function burnHideRow(row, key) {
         row.style.height = h + 'px';
         row.style.overflow = 'hidden';
         void row.offsetWidth;
-        row.style.transition = `height ${COLLAPSE}ms ease, margin ${COLLAPSE}ms ease, opacity ${COLLAPSE}ms ease`;
+        row.style.transition = `height ${COLLAPSE}ms cubic-bezier(0.4, 0, 0.2, 1), margin ${COLLAPSE}ms cubic-bezier(0.4, 0, 0.2, 1), opacity ${COLLAPSE}ms ease`;
         requestAnimationFrame(() => {
             row.style.height = '0px';
             row.style.marginTop = '0';
@@ -1554,7 +1618,8 @@ function revealMarkedRows() {
         r.style.marginTop = '0';
         r.style.marginBottom = '0';
         void r.offsetWidth;
-        r.style.transition = 'height .5s ease, opacity .5s ease .12s, margin .5s ease';
+        // Slight overshoot on the way open — the row lands with a soft bounce
+        r.style.transition = 'height .5s cubic-bezier(0.34, 1.26, 0.44, 1), opacity .5s ease .12s, margin .5s ease';
         requestAnimationFrame(() => {
             r.style.height = h + 'px';
             r.style.opacity = '1';
@@ -1596,7 +1661,11 @@ function sparkleRow(row) {
         burst.appendChild(s);
     }
     row.appendChild(burst);
-    setTimeout(() => burst.remove(), 1900);
+    // A golden sheen crosses the row once beneath the sparkles
+    const sheen = document.createElement('div');
+    sheen.className = 'row-sheen';
+    row.appendChild(sheen);
+    setTimeout(() => { burst.remove(); sheen.remove(); }, 1900);
 }
 
 // ---- Desktop / CLI subgroups with burnable subheadings ----
@@ -1611,10 +1680,12 @@ const _PXCOLS = { deep: '#e8590c', mid: '#ff922b', bright: '#ffd43b', core: '#ff
 const _rnd = (a, b) => a + Math.random() * (b - a);
 const _pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-// Chunky flame sprite out of 2px cells (box-shadow art, robot-logo palette)
-function _spawnPixelFlame(layer, x, lifeMs) {
+// Chunky flame sprite out of 2px cells (box-shadow art, robot-logo palette).
+// `tall` spawns an occasional taller lick near the front for variety.
+function _spawnPixelFlame(layer, x, lifeMs, tall) {
+    if (layer.childElementCount > 110) return; // bounded — never floods the DOM
     const cells = [];
-    const rows = Math.floor(_rnd(4, 7));
+    const rows = Math.floor(tall ? _rnd(7, 11) : _rnd(4, 7));
     for (let r = 0; r < rows; r++) {
         for (const c of [-1, 0, 1]) {
             const edge = Math.abs(c) === 1;
@@ -1631,11 +1702,12 @@ function _spawnPixelFlame(layer, x, lifeMs) {
     f.className = 'fp';
     f.style.cssText = `left:${x}px; bottom:1px; width:2px; height:2px; background:transparent;
         box-shadow:${cells.join(',')};
-        animation: pxFlame ${Math.round(lifeMs)}ms steps(5) forwards;`;
+        animation: pxFlame ${Math.round(lifeMs)}ms steps(7) forwards;`;
     layer.appendChild(f);
 }
 
 function _spawnPixelSmoke(layer, x) {
+    if (layer.childElementCount > 110) return;
     const s = document.createElement('div');
     s.className = 'fp';
     s.style.cssText = `left:${x}px; bottom:${_rnd(8, 13)}px; width:3px; height:3px;
@@ -1643,6 +1715,18 @@ function _spawnPixelSmoke(layer, x) {
         --dx:${Math.round(_rnd(-2, 3)) * 3}px; --ry:${-Math.round(_rnd(5, 11)) * 3}px;
         animation: pxSmoke ${Math.round(_rnd(650, 1100))}ms steps(6) forwards;`;
     layer.appendChild(s);
+}
+
+// Charred-paper ash: tiny grey flakes tumbling DOWN off the burn line
+function _spawnAshFlake(layer, x) {
+    if (layer.childElementCount > 110) return;
+    const a = document.createElement('div');
+    a.className = 'fp';
+    a.style.cssText = `left:${x}px; bottom:${_rnd(5, 12)}px; width:2px; height:2px;
+        background:${_pick(['#5c5c68', '#4a4a56', '#6e6e7a'])};
+        --ax:${_rnd(-12, 12).toFixed(0)}px; --ay:${_rnd(16, 32).toFixed(0)}px; --ar:${_rnd(-160, 160).toFixed(0)}deg;
+        animation: ashFall ${Math.round(_rnd(700, 1250))}ms ease-in forwards;`;
+    layer.appendChild(a);
 }
 
 // The sweep itself: a hot front races across the word; every few px it leaves
@@ -1654,16 +1738,26 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
     const layer = document.createElement('div');
     layer.className = 'fx';
     btn.appendChild(layer);
+    // The ember glow rides the front — one node, transform-only movement
+    const glow = document.createElement('div');
+    glow.className = 'fx-glow';
+    layer.appendChild(glow);
     const W = Math.max(10, btn.offsetWidth - 14);
     const t0 = performance.now();
     let trailX = hide ? W : 0;
     let lastFront = 0, lastSmoke = 0;
     const lit = [];
     function frame(now) {
+        // Tab hidden or clown jailed mid-sweep: stop cold, leave no debris
+        if (document.hidden || document.body.classList.contains('no-pizazz')) {
+            layer.remove();
+            return;
+        }
         const t = Math.min(1, (now - t0) / SWEEP);
         const x = hide ? W * (1 - t) : W * t;
         const remaining = SWEEP - (now - t0);
-        if (now - lastFront > 22) { lastFront = now; _spawnPixelFlame(layer, x, _rnd(160, 300)); }
+        glow.style.transform = `translateX(${(x - 3).toFixed(1)}px)`;
+        if (now - lastFront > 22) { lastFront = now; _spawnPixelFlame(layer, x, _rnd(160, 300), Math.random() < 0.12); }
         while (hide ? trailX > x : trailX < x) {
             _spawnPixelFlame(layer, trailX + _rnd(-1, 1), remaining + _rnd(60, 220));
             lit.push(trailX);
@@ -1676,15 +1770,18 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
         }
         if (t < 1) requestAnimationFrame(frame);
         else if (hide) {
-            // Soot & Sparks aftermath: lingering smoke + stray sparks, dying out
+            glow.remove();
+            // Soot & Sparks aftermath: lingering smoke, drifting ash and stray
+            // sparks, all dying out on a decaying clock
             const a0 = performance.now(), ADUR = aftermathMs || 3200;
             (function aftermath() {
                 const at = (performance.now() - a0) / ADUR;
-                if (at >= 1 || document.body.classList.contains('no-pizazz')) {
+                if (at >= 1 || document.hidden || document.body.classList.contains('no-pizazz')) {
                     setTimeout(() => layer.remove(), 1600);
                     return;
                 }
                 _spawnPixelSmoke(layer, _rnd(0, W));
+                if (Math.random() < 0.45) _spawnAshFlake(layer, _rnd(0, W));
                 if (Math.random() < 0.5) {
                     const s = document.createElement('div');
                     const col = _pick(['#ffd43b', '#ff922b']);
@@ -1698,7 +1795,7 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
                 setTimeout(aftermath, 260 * (1 + at * 2.5));
             })();
         }
-        else setTimeout(() => layer.remove(), 1200);
+        else { glow.remove(); setTimeout(() => layer.remove(), 1200); }
     }
     requestAnimationFrame(frame);
 }
@@ -1792,8 +1889,8 @@ function _followResize(durationMs) {
                 && elements.settingsOverlay.style.display === 'none') {
                 const th = _chromeHeight();
                 const ch = elements.mainContent.scrollHeight;
-                const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
-                if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true);
+                const bh = _bannersHeight();
+                if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true, false, true);
             } else {
                 resizeWidget();
             }
@@ -1803,7 +1900,7 @@ function _followResize(durationMs) {
             const th = _chromeHeight();
             const ch = elements.mainContent.scrollHeight;
             if (th >= 10 && ch >= 40) {
-                const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
+                const bh = _bannersHeight();
                 window.electronAPI.resizeWindow(th + bh + ch + 10);
             }
         }
@@ -2030,6 +2127,18 @@ function renderDualTables(data) {
         const body = document.querySelector(bodySel);
         if (!table || !body) continue;
         const pairs = dualPairsFor(company, data);
+        // Rank-by-use also applies to the landscape dual tables: heaviest
+        // side of each desktop/CLI pair wins; summary rows keep the bottom.
+        if (pairs && (window._cachedSettings || {}).sortByUsage) {
+            const sideScore = (side) => (side && typeof side.pct === 'number') ? side.pct : null;
+            const pairScore = (p) => {
+                const desk = sideScore(p.desk);
+                const cli = sideScore(p.cli);
+                if (desk == null && cli == null) return -1;
+                return Math.max(desk ?? -1, cli ?? -1);
+            };
+            pairs.sort((a, b) => pairScore(b) - pairScore(a));
+        }
         body.classList.toggle('has-dual', !!pairs);
         table.innerHTML = '';
         if (!pairs) continue;
@@ -2186,8 +2295,7 @@ function resizeWidget(bannerVisible) {
         // would shrink the window to a sliver. Skip; the focus listener
         // re-measures on restore.
         if (titleHeight < 10 || contentHeight < 40) return;
-        const bannerHeight = elements.updateBanner.style.display !== 'none'
-            ? (elements.updateBanner.offsetHeight || BANNER_HEIGHT) : 0;
+        const bannerHeight = _bannersHeight();
         // +2 for the widget-container border, +8 bottom breathing room
         window.electronAPI.resizeWindow(titleHeight + bannerHeight + contentHeight + 10);
     });
@@ -2554,11 +2662,6 @@ function applyCompactMode(compact) {
     }
     syncGraphLayoutState();
 
-    // Show/hide the collapse chevron (only visible in normal mode with data)
-    if (elements.compactCollapseBtn) {
-        elements.compactCollapseBtn.style.display = compact ? 'none' : 'flex';
-    }
-
     // Keep refresh button visible in compact mode so users can see when data updates
     // Hide graph button in compact mode (not applicable)
     if (elements.graphBtn) {
@@ -2625,6 +2728,12 @@ function updateCompactBars(data) {
     const _sec = (window._cachedSettings || {}).sectionCollapsed || {};
     const visiblePools = pools.filter((p) =>
         !_sec[p.co] && !(p.cli ? _sub[p.co + '_cli'] : _sub[p.co + '_desktop']));
+
+    // Rank-by-use inside each company block (grouping preserved)
+    if ((window._cachedSettings || {}).sortByUsage) {
+        const coOrder = { anthropic: 0, openai: 1, google: 2 };
+        visiblePools.sort((a, b) => (coOrder[a.co] - coOrder[b.co]) || (b.pct - a.pct));
+    }
 
     container.innerHTML = '';
     for (const p of visiblePools) {
@@ -3022,6 +3131,9 @@ function showLoginRequired() {
     // Close any open overlays
     elements.settingsOverlay.style.display = 'none';
     elements.compactSettingsOverlay.style.display = 'none';
+    // Logged out — the stale-session notice no longer applies
+    const staleBanner = document.getElementById('staleBanner');
+    if (staleBanner) staleBanner.style.display = 'none';
     // Keep recovery and configuration controls available while logged out.
     elements.settingsBtn.style.display = 'flex';
     elements.refreshBtn.style.display = 'flex';
@@ -3051,10 +3163,6 @@ function showMainContent() {
         elements.mainContent.style.display = 'block';
     }
     elements.compactContent.style.display = isCompactMode ? 'flex' : 'none';
-    // Always show collapse chevron here — applyCompactMode hides it when needed
-    if (elements.compactCollapseBtn) {
-        elements.compactCollapseBtn.style.display = isCompactMode ? 'none' : 'flex';
-    }
     // Restore header buttons after login - but respect compact mode for graph button
     elements.settingsBtn.style.display = 'flex';
     elements.refreshBtn.style.display = 'flex';
@@ -3418,6 +3526,20 @@ function renderChart(history) {
                     type: 'linear',
                     min: firstDayMidnight.getTime(),
                     max: chartXMax,
+                    // Multi-day spans get one tick per local midnight — Chart.js's
+                    // "nice" numeric steps land at arbitrary times in ms-space and
+                    // repeat the same date label. Short spans keep default ticks.
+                    afterBuildTicks(axis) {
+                        const spanMs = axis.max - axis.min;
+                        if (spanMs < 48 * 60 * 60 * 1000) return;
+                        const d = new Date(firstDayMidnight.getTime());
+                        const ticks = [];
+                        while (d.getTime() <= axis.max) {
+                            if (d.getTime() >= axis.min) ticks.push({ value: d.getTime() });
+                            d.setDate(d.getDate() + 1);
+                        }
+                        if (ticks.length >= 2) axis.ticks = ticks;
+                    },
                     ticks: {
                         maxRotation: 0,
                         minRotation: 0,
@@ -3524,6 +3646,10 @@ async function loadSettings() {
     // an expired web session), so derive the Anthropic action fresh each time.
     credentials = await window.electronAPI.getCredentials();
     syncAnthropicAuthControls();
+    // Warn when the OS keychain is unavailable — stored logins would be
+    // sitting in plaintext on disk.
+    const plainWarn = document.getElementById('plainStorageWarning');
+    if (plainWarn) plainWarn.style.display = credentials.encryptionAvailable === false ? '' : 'none';
     const settings = await window.electronAPI.getSettings();
     window._cachedSettings = settings;
     const isLinux = window.electronAPI.platform === 'linux';
@@ -3580,6 +3706,7 @@ async function loadSettings() {
     if (elements.webhookToggle) elements.webhookToggle.checked = settings.webhook?.enabled === true;
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
+    if (elements.sortByUsageToggle) elements.sortByUsageToggle.checked = settings.sortByUsage === true;
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
     if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
@@ -3673,6 +3800,7 @@ async function saveSettings() {
             url: elements.webhookUrl.value.trim()
         },
         dailyDigest: elements.dailyDigestToggle.checked,
+        sortByUsage: elements.sortByUsageToggle ? elements.sortByUsageToggle.checked : false,
         showCodex: elements.showCodexToggle.checked,
         showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
