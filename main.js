@@ -3289,6 +3289,36 @@ ipcMain.on('set-compact-mode', (event, compact) => {
   }
 });
 
+// ---- Settings window fit/restore ----
+// While Settings is open the window grows to show EVERY setting and is not
+// user-resizable; closing restores exactly the window the user had before.
+// We size directly (not through the resize-window IPC) so the auto-fit
+// trackers are left untouched — the restored bounds then line up with them.
+let _preSettingsBounds = null;
+ipcMain.on('settings-fit', (event, contentHeight) => {
+  if (!mainWindow) return;
+  if (!_preSettingsBounds) _preSettingsBounds = mainWindow.getBounds();
+  mainWindow.setResizable(false);
+  const bounds = mainWindow.getBounds();
+  const [cw, curContentH] = mainWindow.getContentSize();
+  const frame = Math.max(0, bounds.height - curContentH);
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const h = Math.max(200, Math.min(Math.round(contentHeight), workArea.height - frame));
+  mainWindow.setContentSize(cw, h);
+  const fitted = mainWindow.getBounds();
+  const x = Math.min(Math.max(fitted.x, workArea.x), workArea.x + workArea.width - fitted.width);
+  const y = Math.min(Math.max(fitted.y, workArea.y), workArea.y + workArea.height - fitted.height);
+  if (x !== fitted.x || y !== fitted.y) mainWindow.setPosition(x, y);
+});
+ipcMain.on('settings-restore', (event, options = {}) => {
+  if (!mainWindow) return;
+  mainWindow.setResizable(true);
+  // reCompact: the settings were opened from compact mode — the caller
+  // re-enters compact itself, so don't restore the pre-compact bounds.
+  if (!options.reCompact && _preSettingsBounds) mainWindow.setBounds(_preSettingsBounds);
+  _preSettingsBounds = null;
+});
+
 // Wide / tall preset layouts. We deliberately do NOT touch _expectedWidth /
 // _lastSetHeight here: leaving them at the widget defaults makes
 // windowIsUserSized() report true, which is exactly what engages the

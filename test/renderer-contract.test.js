@@ -214,12 +214,26 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.match(css, /\.ambient-fire/);
   assert.match(app, /function _tickElementFire/);
   assert.match(app, /_spawnPixelFlame\(layer, _rnd\(0, width\), _rnd\(240, 460\), Math\.random\(\) < 0\.1, palette\)/);
-  // Flame style selector: dual-side whitelist + both engines present
+  // Flame style: persisted on both sides, both engines present, and switched
+  // by CLICKING a burning bar (not a Settings control)
   assert.match(main, /flameStyle: store\.get\('settings\.flameStyle', 'classic'\)/);
   assert.match(main, /settings\.flameStyle === 'particle' \? 'particle' : 'classic'/);
   assert.match(app, /function _spawnFireParticle/);
+  assert.match(app, /_saveSettingsPatch\(\{ flameStyle: next \}\)/);
   const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
-  assert.match(html, /id="flameStyle"/);
+  assert.doesNotMatch(html, /id="flameStyle"/);
+});
+
+test('settings window fits all content and restores the prior window', () => {
+  const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(repoDir, 'preload.js'), 'utf8');
+  assert.match(main, /ipcMain\.on\('settings-fit'/);
+  assert.match(main, /ipcMain\.on\('settings-restore'/);
+  assert.match(main, /mainWindow\.setResizable\(false\)/);
+  assert.match(preload, /settingsFit:/);
+  assert.match(preload, /settingsRestore:/);
+  assert.match(app, /function fitSettingsWindow/);
 });
 
 test('no-pizazz keeps functional spinners alive and reaches the detached graph', () => {

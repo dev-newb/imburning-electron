@@ -30,7 +30,7 @@ Burnwatch tracks **both accounts per company, simultaneously**:
 ## New in 2.2 & 2.3 — rank by burn, bars on fire, and a hardening pass
 
 - 🔥🚨 **Bars catch fire under burn alerts** *(2.3)* — when the burn detector notices a pool eating tokens unusually fast, that pool's percentage bar burns with live pixel fire **in its own colour** (threshold recolours and Gemini shades included) until the pace settles back below half the trigger. Codex's banked reset orbs idle with a small flame of their own.
-- 🎛️🔥 **Two flame styles** *(2.4)* — Settings → Flame style: **Style 1 Classic pixel** (chunky sprites, the app's signature fire) or **Style 2 Particle inferno** (a dense storm of rising fire-motes with occasional tongues — busier, more chaotic, more real).
+- 🎛️🔥 **Two flame styles, switched by clicking a burning bar** *(2.4)* — click any bar that's on fire to toggle between **Classic pixel** (chunky sprites, the app's signature fire) and **Particle inferno** (a dense storm of rising fire-motes with occasional tongues — busier, more chaotic, more real). The choice sticks.
 
 - 📊 **Sort models by usage** *(Settings, optional)* — inside every company the pools you're burning hardest rise to the top, live: portrait rows, wide-mode dual tables, and compact bars all rank by current %. Session & Weekly stay pinned; credits and reset orbs keep the bottom.
 - 🔥 **The burn got better** — an ember glow rides the fire front, letters flash white-hot as they ignite, ash flakes tumble off freshly charred text, and restored rows return under a golden sheen. It's cheaper too: particle counts are capped and everything stops cold while the window is hidden.

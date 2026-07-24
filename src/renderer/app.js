@@ -173,7 +173,6 @@ const elements = {
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
     sortByUsageToggle: document.getElementById('sortByUsageToggle'),
-    flameStyle: document.getElementById('flameStyle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
     showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
@@ -506,19 +505,17 @@ function setupEventListeners() {
         }
     });
 
-    // Settings close
+    // Settings close — return to exactly the window the user had before
     elements.closeSettingsBtn.addEventListener('click', async () => {
         await saveSettings();
         elements.settingsOverlay.style.display = 'none';
         if (_settingsOpenedFromCompact) {
             _settingsOpenedFromCompact = false;
-            if (isCompactMode) {
-                window.electronAPI.setCompactMode(true);
-            } else {
-                resizeWidget();
-            }
-        } else if (!isCompactMode) {
-            resizeWidget();
+            // Re-enter compact ourselves; don't restore the pre-compact bounds
+            window.electronAPI.settingsRestore({ reCompact: true });
+            window.electronAPI.setCompactMode(true);
+        } else {
+            window.electronAPI.settingsRestore();
         }
         startAutoUpdate();
         // Account toggles filter post-fetch, so a refetch applies them now
@@ -658,6 +655,17 @@ function setupEventListeners() {
 
     setupProviderSections();
 
+    // Click a bar that's on fire to switch its flame style (classic pixel ⇄
+    // particle inferno). Only burning bars respond; the ambient fire loop
+    // reads the new style on its very next frame, so it changes live.
+    document.addEventListener('click', (e) => {
+        const group = e.target.closest('.usage-bar-group, .compact-bar-wrap');
+        if (!group || !group.querySelector('.progress-fill.on-fire, .compact-bar-fill.on-fire')) return;
+        const next = (window._cachedSettings || {}).flameStyle === 'particle' ? 'classic' : 'particle';
+        _saveSettingsPatch({ flameStyle: next });
+        _flameStyleToast(group, next);
+    });
+
     // Keyboard access for the click-only expand toggles (headers get theirs
     // inside setupProviderSections)
     for (const toggle of [elements.expandToggle, elements.openaiExpandToggle]) {
@@ -768,7 +776,9 @@ function setupEventListeners() {
         }
         await loadSettings();
         elements.settingsOverlay.style.display = 'flex';
-        window.electronAPI.resizeWindow(700 + 34);
+        // Grow the window to show EVERY setting (and lock resizing) once the
+        // panel has laid out. Two frames: display change, then measure.
+        requestAnimationFrame(() => requestAnimationFrame(fitSettingsWindow));
     });
 
     // Close compact settings — apply compact toggle value then close
@@ -1871,6 +1881,20 @@ function runPixelSweep(btn, hide, sweepMs, aftermathMs) {
         else { glow.remove(); setTimeout(() => layer.remove(), 1200); }
     }
     requestAnimationFrame(frame);
+}
+
+// Brief floating confirmation when the flame style is switched by clicking a
+// burning bar. position:fixed so it never disturbs layout.
+function _flameStyleToast(anchor, style) {
+    if (document.body.classList.contains('no-pizazz')) return;
+    const rect = anchor.getBoundingClientRect();
+    const toast = document.createElement('div');
+    toast.className = 'flame-style-toast';
+    toast.textContent = style === 'particle' ? '🔥 Inferno' : '🔥 Classic';
+    toast.style.left = Math.round(rect.left + rect.width / 2) + 'px';
+    toast.style.top = Math.round(rect.top - 4) + 'px';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1100);
 }
 
 // ---- Ambient fire loop: burning bars + reset orbs wear LIVE pixel fire ----
@@ -3860,6 +3884,21 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Measure the settings panel's full intrinsic height and grow the window to
+// it, so no setting is ever cut off at the bottom. `.settings-content` is
+// normally height:100% (stretched to the window) with an internal scroll, so
+// we briefly un-stretch it to read its true content height, then hand that to
+// the main process (which sizes the window and locks resizing).
+function fitSettingsWindow() {
+    const content = elements.settingsOverlay
+        && elements.settingsOverlay.querySelector('.settings-content');
+    if (!content) return;
+    content.classList.add('measuring');
+    const needed = Math.ceil(content.getBoundingClientRect().height) + 2;
+    content.classList.remove('measuring');
+    if (needed >= 120) window.electronAPI.settingsFit(needed);
+}
+
 // Settings management
 let warnThreshold = 75;
 let dangerThreshold = 90;
@@ -3930,7 +3969,6 @@ async function loadSettings() {
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.sortByUsageToggle) elements.sortByUsageToggle.checked = settings.sortByUsage === true;
-    if (elements.flameStyle) elements.flameStyle.value = settings.flameStyle === 'particle' ? 'particle' : 'classic';
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
     if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
@@ -4025,7 +4063,6 @@ async function saveSettings() {
         },
         dailyDigest: elements.dailyDigestToggle.checked,
         sortByUsage: elements.sortByUsageToggle ? elements.sortByUsageToggle.checked : false,
-        flameStyle: elements.flameStyle ? elements.flameStyle.value : 'classic',
         showCodex: elements.showCodexToggle.checked,
         showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,

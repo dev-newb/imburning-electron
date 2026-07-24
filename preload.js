@@ -99,6 +99,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Compact mode
   setCompactMode: (compact) => ipcRenderer.send('set-compact-mode', compact),
 
+  // Settings window fit (grow to show all settings) / restore prior window
+  settingsFit: (height) => ipcRenderer.send('settings-fit', height),
+  settingsRestore: (options) => ipcRenderer.send('settings-restore', options || {}),
+
   // Wide / tall window presets
   applyWindowPreset: (preset) => ipcRenderer.send('apply-window-preset', preset),
 

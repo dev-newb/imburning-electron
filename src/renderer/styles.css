@@ -2917,6 +2917,40 @@ body.theme-light {
     z-index: 5;
 }
 
+/* A burning bar is clickable: it cycles the flame style */
+.usage-bar-group:has(.progress-fill.on-fire),
+.compact-bar-wrap:has(.compact-bar-fill.on-fire) {
+    cursor: pointer;
+}
+
+/* Floating confirmation shown when the flame style is switched */
+@keyframes flameToastFade {
+    0% { opacity: 0; transform: translate(-50%, -90%) scale(0.9); }
+    18% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+    75% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
+}
+.flame-style-toast {
+    position: fixed;
+    z-index: 2000;
+    pointer-events: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #ffd43b;
+    text-shadow: 0 0 6px rgba(255, 146, 43, 0.9), 0 1px 2px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    animation: flameToastFade 1.1s ease-out forwards;
+}
+
+/* Un-stretch the settings panel to read its true content height for the
+   grow-to-fit measurement (see fitSettingsWindow) */
+.settings-content.measuring {
+    height: auto !important;
+    align-self: flex-start !important;
+    overflow: visible !important;
+}
+
 .compact-bar-fill {
     position: relative;
 }
