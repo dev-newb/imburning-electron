@@ -15,6 +15,7 @@
     <title>Burnwatch</title>
     <link rel="stylesheet" href="styles.css">
     <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
+    <script src="chart-utils.js"></script>
 </head>
 
 <body>
@@ -27,6 +28,7 @@
                     <span>Burnwatch</span>
                 </div>
                 <div class="title-caption">
+                    <button class="caption-btn caption-minimize" id="minimizeBtn" title="Minimise to System Tray">−</button>
                     <button class="caption-btn preset-btn" id="wideBtn" title="Wide layout — spread the sections into side-by-side columns">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5" /></svg>
                     </button>
@@ -37,27 +39,39 @@
                 </div>
             </div>
 
-            <!-- Toolbar (dedicated strip under the title bar, never hidden): minimize · press · clown · refresh · graph · settings · close -->
+            <!-- Centered toolbar: playful view controls left, utility controls right. -->
             <div class="bottom-bar" id="bottomBar">
-                <button class="control-btn minimize-btn" id="minimizeBtn" title="Minimise to System Tray">−</button>
-                <button class="control-btn sprite-btn" id="compactPressBtn" title="Compact mode — stomp the widget down">
-                    <img id="pressImg" src="../../assets/press-up.png" alt="Compact toggle">
-                </button>
-                <button class="control-btn sprite-btn" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
-                    <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
-                </button>
-                <button class="control-btn refresh-btn" id="refreshBtn" title="Refresh">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 4v6h-6M1 20v-6h6" />
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                    </svg>
-                </button>
-                <button class="control-btn graph-btn" id="graphBtn" title="Toggle Usage Graph">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                    </svg>
-                </button>
-                <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+                <div class="toolbar-group toolbar-group-play">
+                    <button class="control-btn sprite-btn" id="compactPressBtn" title="Compact mode — stomp the widget down">
+                        <img id="pressImg" src="../../assets/press-up.png" alt="Compact toggle">
+                    </button>
+                    <button class="control-btn sprite-btn" id="clownBtn" title="Pizazz: ON — click to jail the clown and turn off all visual effects">
+                        <img id="clownImg" src="../../assets/clown-happy.png" alt="Pizazz toggle">
+                    </button>
+                </div>
+                <span class="toolbar-spacer" aria-hidden="true"></span>
+                <div class="toolbar-group toolbar-group-utility">
+                    <button class="control-btn refresh-btn" id="refreshBtn" title="Refresh usage">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6" />
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                        </svg>
+                    </button>
+                    <button class="control-btn local-login-refresh-btn" id="refreshLocalLoginsBtn" title="Refresh local CLI logins and account tokens" aria-label="Refresh local CLI logins">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="7.5" cy="12.5" r="3.5" />
+                            <path d="M11 12.5h9l-2 2 2 2" />
+                            <path d="M17 4a7 7 0 0 1 4 6" />
+                            <path d="M21 6v4h-4" />
+                        </svg>
+                    </button>
+                    <button class="control-btn graph-btn" id="graphBtn" title="Toggle Usage Graph">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                    </button>
+                    <button class="control-btn settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+                </div>
             </div>
 
             <!-- Update Banner (hidden by default) -->
@@ -70,49 +84,6 @@
             <div class="loading-container" id="loadingContainer">
                 <div class="spinner"></div>
                 <p>Loading usage data...</p>
-            </div>
-
-            <!-- Login -->
-            <div class="login-container" id="loginContainer" style="display: none;">
-                <div class="login-content">
-                    <div class="login-step1" id="loginStep1">
-                        <div class="step-icon">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                                <polyline points="10 17 15 12 10 7" />
-                                <line x1="15" y1="12" x2="3" y2="12" />
-                            </svg>
-                        </div>
-                        <div class="step-text">
-                            <h3>Connect to Claude.ai</h3>
-                            <p>Log in to your Claude account</p>
-                            <p class="step-hint">If auto-login doesn't work, use Manual to paste your session key — Claude.ai may block embedded browsers.</p>
-                            <p class="step-error" id="autoDetectError"></p>
-                        </div>
-                        <button class="auto-detect-btn" id="autoDetectBtn">Log in</button>
-                        <button class="next-step-btn" id="nextStepBtn">Manual →</button>
-                    </div>
-
-                    <div class="login-step2" id="loginStep2" style="display: none;">
-                        <div class="session-key-form">
-                            <div class="session-key-header">
-                                <h3>Paste your Session Key</h3>
-                                <p>
-                                    <a href="#" id="openBrowserLink" class="open-browser-link">Open claude.ai</a>
-                                    → <code>F12</code> → Application → Cookies → <code>sessionKey</code>
-                                </p>
-                            </div>
-                            <div class="session-key-input-row">
-                                <input type="password" id="sessionKeyInput" placeholder="sk-ant-sid01-..." spellcheck="false" autocomplete="off">
-                                <button class="connect-btn" id="connectBtn">Connect</button>
-                            </div>
-                            <div class="session-key-footer">
-                                <p class="session-key-error" id="sessionKeyError"></p>
-                                <button class="back-step-btn" id="backStepBtn">← Back</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- No Usage State -->
@@ -516,7 +487,8 @@
                                     <label class="toggle-switch"><input type="checkbox" id="showClaudeCodeToggle"><span class="toggle-slider"></span></label>
                                 </div>
                                 <div class="provider-col-login">
-                                    <button class="logout-btn" id="logoutBtn" title="Clears the widget's own claude.ai login. OpenAI and Google have their own Disconnect buttons.">Log Out</button>
+                                    <span class="settings-row-hint" id="anthropicLoginStatus">Not connected</span>
+                                    <button class="settings-connect-btn" id="logoutBtn" title="Sign in to Claude.ai">Log In</button>
                                 </div>
                             </div>
                             <div class="provider-col">

@@ -4,6 +4,7 @@
 // re-renders whenever the main process signals new data. Owns its own pin.
 (async function () {
     const api = window.electronAPI;
+    const chartUtils = window.BurnwatchChartUtils;
     const COMPANY = { anthropic: '#d97757', openai: '#10a37f', google: '#4285f4' };
     const CODE = { codex: '#2dd4bf', gemini: '#4285f4' };
     const SCOPED_COLORS = { fable: '#d946ef' };
@@ -18,10 +19,10 @@
         light: { bg: '#f4f4f8', text: '#2a2a3a', title: '#1a1a2e', border: '#d8d8e2', tick: '#5a5a70', grid: 'rgba(0,0,0,0.08)', legend: '#4a4a60' }
     };
     let T = THEMES.dark;
-    async function applyTheme() {
+    async function applyTheme(settings) {
         let dark = true;
         try {
-            const s = await api.getSettings();
+            const s = settings || await api.getSettings();
             const theme = (s && s.theme) || 'dark';
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             dark = theme === 'dark' || (theme === 'system' && prefersDark);
@@ -35,7 +36,7 @@
         document.body.classList.toggle('light', !dark);
     }
 
-    function build(history, latest) {
+    function build(history, latest, settings = {}) {
         if (chart) { chart.destroy(); chart = null; }
         if (!history || !history.length) {
             canvas.style.display = 'none';
@@ -52,9 +53,10 @@
             for (const k of Object.keys(e.scoped || {})) { if (!seen.has(k)) { seen.add(k); scopedKeys.push(k); } }
         }
 
-        const line = (label, color, pick, dash) => ({
+        const line = (seriesId, label, color, pick, dash) => ({
+            seriesId,
             label,
-            data: history.map((e) => ({ x: e.timestamp, y: pick(e) || 0 })),
+            data: history.map((e) => chartUtils.point(e.timestamp, pick(e))),
             borderColor: color,
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -66,24 +68,26 @@
         });
 
         const datasets = [
-            line('CLA 5H', '#8b5cf6', (e) => e.session),
-            line('CLA 7D', '#3b82f6', (e) => e.weekly)
+            line('claude:session', 'CLA 5H', '#8b5cf6', (e) => e.session),
+            line('claude:weekly', 'CLA 7D', '#3b82f6', (e) => e.weekly)
         ];
         // Anthropic per-model/surface pools, when present.
         for (const [lbl, color, key] of [
             ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
-            ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
+            ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps'],
+            ['Extra Usage', '#f59e0b', 'extraUsage']
         ]) {
-            const vals = history.map((e) => e[key] || 0);
-            if (vals.some((v) => v > 0)) datasets.push(line(lbl, color, (e) => e[key]));
+            const vals = history.map((e) => chartUtils.finiteOrNull(e[key]));
+            const id = key === 'oauthApps' ? 'oauth-apps' : key === 'extraUsage' ? 'extra-usage' : key;
+            if (chartUtils.hasPositive(vals)) datasets.push(line(`anthropic:${id}`, lbl, color, (e) => e[key]));
         }
         let ci = 0;
         for (const k of scopedKeys) {
-            const vals = history.map((e) => (e.scoped ? e.scoped[k] : 0) || 0);
-            if (!vals.some((v) => v > 0)) continue;
+            const vals = history.map((e) => chartUtils.finiteOrNull(e.scoped?.[k]));
+            if (!chartUtils.hasPositive(vals)) continue;
             const lbl = k.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             const color = SCOPED_COLORS[k] || SCOPED_FALLBACK[ci++ % SCOPED_FALLBACK.length];
-            datasets.push(line(lbl, color, (e) => (e.scoped ? e.scoped[k] : 0)));
+            datasets.push(line(`scoped:${k}`, lbl, color, (e) => e.scoped?.[k]));
         }
         // Cross-provider comparison lines (already 0-100%). CLI second accounts dashed.
         const PROVIDERS = [
@@ -94,19 +98,21 @@
             ['Gemini CLI', COMPANY.google, 'geminiCli', [5, 3]]
         ];
         for (const [lbl, color, key, dash] of PROVIDERS) {
-            const vals = history.map((e) => e[key] || 0);
-            if (!vals.some((v) => v > 0)) continue;
-            datasets.push(line(lbl, color, (e) => e[key], dash));
+            const vals = history.map((e) => chartUtils.finiteOrNull(e[key]));
+            if (!chartUtils.hasPositive(vals)) continue;
+            datasets.push(line(`provider:${key}`, lbl, color, (e) => e[key], dash));
         }
 
         // Forecast projection lines (dotted, to the 100% crossing).
         const last = history[history.length - 1];
         let xMax = last.timestamp;
-        const addProj = (label, color, lastVal, etaIso) => {
+        const addProj = (seriesId, label, color, lastVal, etaIso) => {
             if (etaIso == null || lastVal == null) return;
             const t = new Date(etaIso).getTime();
             if (!(t > last.timestamp)) return;
             datasets.push({
+                seriesId: `projection:${seriesId}`,
+                baseSeriesId: seriesId,
                 label: label + ' → 100%',
                 data: [{ x: last.timestamp, y: lastVal }, { x: t, y: 100 }],
                 borderColor: color,
@@ -119,32 +125,43 @@
             });
             xMax = Math.max(xMax, t);
         };
-        addProj('CLA 5H', '#8b5cf6', last.session, forecasts.session);
-        addProj('CLA 7D', '#3b82f6', last.weekly, forecasts.weekly);
-        for (const [lbl, color, key] of [
-            ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
-            ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
-        ]) {
-            addProj(lbl, color, last[key], forecasts[key]);
-        }
-        for (const k of scopedKeys) {
-            addProj(k.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                SCOPED_COLORS[k] || '#84cc16', last.scoped ? last.scoped[k] : null,
-                forecasts.scoped ? forecasts.scoped[k] : null);
-        }
-        for (const [lbl, color, key] of [
-            ['Codex', CODE.codex, 'codex'], ['Gemini', COMPANY.google, 'gemini'],
-            ['Claude CLI', COMPANY.anthropic, 'claudeCli'], ['Codex CLI', CODE.codex, 'codexCli'],
-            ['Gemini CLI', COMPANY.google, 'geminiCli']
-        ]) {
-            addProj(lbl, color, last[key], forecasts[key]);
+        if (settings.projectionsOn !== false) {
+            addProj('claude:session', 'CLA 5H', '#8b5cf6', last.session, forecasts.session);
+            addProj('claude:weekly', 'CLA 7D', '#3b82f6', last.weekly, forecasts.weekly);
+            for (const [lbl, color, key] of [
+                ['Sonnet', '#f43f5e', 'sonnet'], ['Opus', '#f59e0b', 'opus'], ['Cowork', '#06b6d4', 'cowork'],
+                ['Design', '#92400e', 'design'], ['OAuth Apps', '#f97316', 'oauthApps']
+            ]) {
+                const id = key === 'oauthApps' ? 'oauth-apps' : key;
+                addProj(`anthropic:${id}`, lbl, color, last[key], forecasts[key]);
+            }
+            for (const k of scopedKeys) {
+                addProj(`scoped:${k}`, k.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                    SCOPED_COLORS[k] || '#84cc16', last.scoped?.[k], forecasts.scoped?.[k]);
+            }
+            for (const [lbl, color, key] of [
+                ['Codex', CODE.codex, 'codex'], ['Gemini', COMPANY.google, 'gemini'],
+                ['Claude CLI', COMPANY.anthropic, 'claudeCli'], ['Codex CLI', CODE.codex, 'codexCli'],
+                ['Gemini CLI', COMPANY.google, 'geminiCli']
+            ]) {
+                addProj(`provider:${key}`, lbl, color, last[key], forecasts[key]);
+            }
         }
         xMax = Math.min(xMax, Date.now() + 3 * 24 * 60 * 60 * 1000);
+
+        const hiddenSeries = settings.chartHiddenSeries || {};
+        datasets.forEach((dataset) => {
+            if (hiddenSeries[dataset.seriesId]
+                || (dataset.baseSeriesId && hiddenSeries[dataset.baseSeriesId])) {
+                dataset.hidden = true;
+            }
+        });
 
         let maxV = 0;
         for (const d of datasets) for (const pt of d.data) if (pt.y > maxV) maxV = pt.y;
         const yMax = Math.max(10, Math.ceil(maxV / 10) * 10);
         const first = new Date(history[0].timestamp); first.setHours(0, 0, 0, 0);
+        const spanMs = Math.max(0, xMax - first.getTime());
 
         chart = new Chart(canvas.getContext('2d'), {
             type: 'line',
@@ -153,13 +170,17 @@
                 animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                spanGaps: false,
                 interaction: { intersect: false, mode: 'nearest' },
                 scales: {
                     x: {
                         type: 'linear',
                         min: first.getTime(),
                         max: xMax,
-                        ticks: { font: { size: 10 }, color: T.tick, maxRotation: 0 },
+                        ticks: {
+                            font: { size: 10 }, color: T.tick, maxRotation: 0,
+                            callback: (value) => chartUtils.formatTimestampTick(value, spanMs, settings.timeFormat)
+                        },
                         grid: { display: false }
                     },
                     y: {
@@ -177,6 +198,19 @@
                             boxWidth: 8, boxHeight: 8, padding: 6,
                             font: { size: 9 }, color: T.legend,
                             filter: (item) => !/→ 100%|reset/i.test(item.text)
+                        },
+                        onClick: async (event, item, legend) => {
+                            const target = legend.chart;
+                            const willHide = target.isDatasetVisible(item.datasetIndex);
+                            target.getDatasetMeta(item.datasetIndex).hidden = willHide ? true : null;
+                            target.update();
+                            const seriesId = target.data.datasets[item.datasetIndex].seriesId;
+                            if (!seriesId) return;
+                            const nextSettings = await api.getSettings();
+                            const hidden = { ...(nextSettings.chartHiddenSeries || {}) };
+                            if (willHide) hidden[seriesId] = true; else delete hidden[seriesId];
+                            nextSettings.chartHiddenSeries = hidden;
+                            await api.saveSettings(nextSettings);
                         }
                     }
                 }
@@ -184,13 +218,15 @@
         });
     }
 
-    let lastHistory = null, lastLatest = null;
+    let lastHistory = null, lastLatest = null, lastSettings = null;
     async function refresh() {
         try {
-            const [history, latest] = await Promise.all([api.getUsageHistory(), api.getLatestUsage()]);
-            lastHistory = history; lastLatest = latest;
-            await applyTheme();
-            build(history, latest);
+            const [history, latest, settings] = await Promise.all([
+                api.getUsageHistory(), api.getLatestUsage(), api.getSettings()
+            ]);
+            lastHistory = history; lastLatest = latest; lastSettings = settings;
+            await applyTheme(settings);
+            build(history, latest, settings);
         } catch (err) { /* window may be closing */ }
     }
 
@@ -205,11 +241,11 @@
 
     // React to OS light/dark flips when the user's theme is "System".
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
-        await applyTheme();
-        if (lastHistory) build(lastHistory, lastLatest);
+        await applyTheme(lastSettings);
+        if (lastHistory) build(lastHistory, lastLatest, lastSettings || {});
     });
 
     if (api.onUsageUpdated) api.onUsageUpdated(() => refresh());
-    await applyTheme();
-    refresh();
+    if (api.onGraphSettingsUpdated) api.onGraphSettingsUpdated(() => refresh());
+    await refresh();
 })();

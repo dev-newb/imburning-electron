@@ -18,6 +18,7 @@ const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WIDGET_HEIGHT_COLLAPSED = 155;
 const WIDGET_ROW_HEIGHT = 30;
 const GRAPH_HEIGHT = 232;
+const chartUtils = window.BurnwatchChartUtils;
 
 // Debug logging — only shows in DevTools (development mode).
 // Regular users won't see verbose logs in production.
@@ -26,22 +27,24 @@ function debugLog(...args) {
   if (DEBUG) console.log('[Debug]', ...args);
 }
 
+function hasUsableCredentials(value = credentials) {
+    return !!(
+        value
+        && ((value.sessionKey && value.organizationId)
+            || value.cliFallbackAvailable
+            || value.providerFallbackAvailable)
+    );
+}
+
+function hasClaudeWebCredentials(value = credentials) {
+    return !!(value && value.sessionKey && value.organizationId);
+}
+
 // DOM elements
 const elements = {
     loadingContainer: document.getElementById('loadingContainer'),
-    loginContainer: document.getElementById('loginContainer'),
     noUsageContainer: document.getElementById('noUsageContainer'),
     mainContent: document.getElementById('mainContent'),
-    loginStep1: document.getElementById('loginStep1'),
-    loginStep2: document.getElementById('loginStep2'),
-    autoDetectBtn: document.getElementById('autoDetectBtn'),
-    autoDetectError: document.getElementById('autoDetectError'),
-    openBrowserLink: document.getElementById('openBrowserLink'),
-    nextStepBtn: document.getElementById('nextStepBtn'),
-    backStepBtn: document.getElementById('backStepBtn'),
-    sessionKeyInput: document.getElementById('sessionKeyInput'),
-    connectBtn: document.getElementById('connectBtn'),
-    sessionKeyError: document.getElementById('sessionKeyError'),
     refreshBtn: document.getElementById('refreshBtn'),
     graphBtn: document.getElementById('graphBtn'),
     graphPopoutBtn: document.getElementById('graphPopoutBtn'),
@@ -92,6 +95,8 @@ const elements = {
     settingsOverlay: document.getElementById('settingsOverlay'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
+    anthropicLoginStatus: document.getElementById('anthropicLoginStatus'),
+    refreshLocalLoginsBtn: document.getElementById('refreshLocalLoginsBtn'),
     githubBtn: document.getElementById('githubBtn'),
     psychicBtn: document.getElementById('psychicBtn'),
     chipAnthropic: document.getElementById('chipAnthropic'),
@@ -257,6 +262,7 @@ async function init() {
             graphWasVisible = true;
         }
     }
+    syncGraphLayoutState();
 
     // Restore expanded state (default: everything expanded)
     if (settings.expandedOpen !== false) {
@@ -271,7 +277,7 @@ async function init() {
     applyPsychicState();
     applyPizazz(settings.pizazz !== false);
 
-    if ((credentials.sessionKey && credentials.organizationId) || credentials.cliFallbackAvailable) {
+    if (hasUsableCredentials()) {
         // Populate org selector if user has multiple orgs
         if (credentials.organizations && credentials.organizations.length > 0) {
             populateOrgSelector(credentials.organizations, credentials.organizationId);
@@ -365,39 +371,11 @@ function setupProviderSections() {
 
 // Event Listeners
 function setupEventListeners() {
-    // Step 1: Login via BrowserWindow
-    elements.autoDetectBtn.addEventListener('click', handleAutoDetect);
-
-    // Step navigation
-    elements.nextStepBtn.addEventListener('click', () => {
-        elements.loginStep1.style.display = 'none';
-        elements.loginStep2.style.display = 'block';
-        elements.sessionKeyInput.focus();
-    });
-
-    elements.backStepBtn.addEventListener('click', () => {
-        elements.loginStep2.style.display = 'none';
-        elements.loginStep1.style.display = 'flex';
-        elements.sessionKeyError.textContent = '';
-    });
-
-    // Open browser link in step 2
-    elements.openBrowserLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.electronAPI.openExternal('https://claude.ai');
-    });
-
-    // Step 2: Manual sessionKey connect
-    elements.connectBtn.addEventListener('click', handleConnect);
-    elements.sessionKeyInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleConnect();
-        elements.sessionKeyError.textContent = '';
-    });
-
     elements.refreshBtn.addEventListener('click', async () => {
         debugLog('Refresh button clicked');
         elements.refreshBtn.classList.add('spinning');
-        await fetchUsageData();
+        credentials = await window.electronAPI.getCredentials();
+        await fetchUsageData({ forceProviders: true });
         elements.refreshBtn.classList.remove('spinning');
     });
 
@@ -406,10 +384,15 @@ function setupEventListeners() {
         elements.graphBtn.classList.toggle('active', graphVisible);
         // Keep the inline graph hidden while it's detached into its own window.
         elements.graphSection.style.display = (graphVisible && !graphDetached) ? 'block' : 'none';
+        syncGraphLayoutState();
         if (graphVisible && !graphDetached) {
             await loadChart();
+            requestAnimationFrame(() => usageChart?.resize());
         }
-        _forceFitHeight();
+        _forceFitHeight({
+            fitPreset: _activePreset !== null,
+            intrinsic: !_graphIsInline()
+        });
         _saveViewState();
     });
 
@@ -426,7 +409,8 @@ function setupEventListeners() {
             graphDetached = true;
             elements.graphPopoutBtn.classList.add('active');
             if (elements.graphSection) elements.graphSection.style.display = 'none';
-            _forceFitHeight();
+            syncGraphLayoutState();
+            _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: true });
         });
         if (window.electronAPI.onGraphWindowClosed) {
             window.electronAPI.onGraphWindowClosed(() => {
@@ -435,8 +419,10 @@ function setupEventListeners() {
                 if (graphVisible && elements.graphSection) {
                     elements.graphSection.style.display = 'block';
                     loadChart();
+                    requestAnimationFrame(() => usageChart?.resize());
                 }
-                _forceFitHeight();
+                syncGraphLayoutState();
+                _forceFitHeight({ fitPreset: _activePreset !== null, intrinsic: !_graphIsInline() });
             });
         }
     }
@@ -450,6 +436,8 @@ function setupEventListeners() {
             window.electronAPI.applyWindowPreset(goWide ? 'wide' : 'reset');
             elements.wideBtn.classList.toggle('active', goWide);
             if (elements.tallBtn) elements.tallBtn.classList.remove('active');
+            _fitPresetIfGraphHidden();
+            if (goWide) setTimeout(syncLandscapeCliWidth, 180);
         });
     }
     if (elements.tallBtn) {
@@ -459,6 +447,7 @@ function setupEventListeners() {
             window.electronAPI.applyWindowPreset(goTall ? 'tall' : 'reset');
             elements.tallBtn.classList.toggle('active', goTall);
             if (elements.wideBtn) elements.wideBtn.classList.remove('active');
+            _fitPresetIfGraphHidden();
         });
     }
 
@@ -516,18 +505,8 @@ function setupEventListeners() {
         await fetchUsageData();
     });
 
-    elements.logoutBtn.addEventListener('click', async () => {
-        await window.electronAPI.deleteCredentials();
-        credentials = await window.electronAPI.getCredentials();
-        elements.settingsOverlay.style.display = 'none';
-        if (credentials.cliFallbackAvailable) {
-            // The claude CLI login keeps the Anthropic section alive
-            showMainContent();
-            await fetchUsageData({ forceExtended: true });
-        } else {
-            showLoginRequired();
-        }
-    });
+    elements.logoutBtn.addEventListener('click', handleAnthropicAuthAction);
+    elements.refreshLocalLoginsBtn.addEventListener('click', refreshLocalLogins);
 
     elements.githubBtn.addEventListener('click', () => {
         window.electronAPI.openExternal('https://github.com/dev-newb/burnwatch');
@@ -662,18 +641,28 @@ function setupEventListeners() {
     // Listen for refresh requests from tray
     window.electronAPI.onRefreshUsage(async () => {
         if (elements.refreshBtn) elements.refreshBtn.classList.add('spinning');
-        await fetchUsageData();
+        credentials = await window.electronAPI.getCredentials();
+        await fetchUsageData({ forceProviders: true });
         if (elements.refreshBtn) elements.refreshBtn.classList.remove('spinning');
     });
+
+    if (window.electronAPI.onGraphSettingsUpdated) {
+        window.electronAPI.onGraphSettingsUpdated(async () => {
+            const settings = await window.electronAPI.getSettings();
+            window._cachedSettings = settings;
+            projectionsVisible = settings.projectionsOn !== false;
+            applyPsychicState();
+            if (graphVisible && !graphDetached) await loadChart();
+        });
+    }
 
     // Listen for session expiration events (403 errors)
     window.electronAPI.onSessionExpired(async () => {
         debugLog('Session expired event received');
         credentials = await window.electronAPI.getCredentials();
-        if (credentials.cliFallbackAvailable) {
-            // The claude CLI login keeps the section alive without the web session
+        if (hasUsableCredentials()) {
             showMainContent();
-            await fetchUsageData({ forceExtended: true });
+            await fetchUsageData({ forceExtended: true, forceProviders: true });
         } else {
             showLoginRequired();
         }
@@ -758,80 +747,119 @@ function setupEventListeners() {
     });
 }
 
-// Handle manual sessionKey connect
-async function handleConnect() {
-    const sessionKey = elements.sessionKeyInput.value.trim();
-    if (!sessionKey) {
-        elements.sessionKeyError.textContent = 'Please paste your session key';
-        return;
+function syncAnthropicAuthControls() {
+    const connected = hasClaudeWebCredentials();
+    const usingCli = !connected && !!credentials?.cliFallbackAvailable;
+    if (elements.anthropicLoginStatus) {
+        elements.anthropicLoginStatus.textContent = connected
+            ? 'Connected to Claude.ai'
+            : (usingCli ? 'Not connected (using CLI login)' : 'Not connected');
     }
-
-    elements.connectBtn.disabled = true;
-    elements.connectBtn.textContent = '...';
-    elements.sessionKeyError.textContent = '';
-
-    try {
-        const result = await window.electronAPI.validateSessionKey(sessionKey);
-        if (result.success) {
-            credentials = { 
-                sessionKey, 
-                organizationId: result.organizationId,
-                organizations: result.organizations || []
-            };
-            await window.electronAPI.saveCredentials(credentials);
-            populateOrgSelector(result.organizations || [], result.organizationId);
-            elements.sessionKeyInput.value = '';
-            showMainContent();
-            await fetchUsageData();
-            startAutoUpdate();
-        } else {
-            elements.sessionKeyError.textContent = result.error || 'Invalid session key';
-        }
-    } catch (error) {
-        elements.sessionKeyError.textContent = 'Connection failed. Check your key.';
-    } finally {
-        elements.connectBtn.disabled = false;
-        elements.connectBtn.textContent = 'Connect';
+    if (elements.logoutBtn) {
+        elements.logoutBtn.textContent = connected ? 'Log Out' : 'Log In';
+        elements.logoutBtn.className = connected ? 'logout-btn' : 'settings-connect-btn';
+        elements.logoutBtn.title = connected
+            ? 'Clear Burnwatch\'s Claude.ai login. Other provider accounts are unaffected.'
+            : 'Sign in to Claude.ai';
     }
 }
 
-// Handle auto-detect from browser cookies
-async function handleAutoDetect() {
-    elements.autoDetectBtn.disabled = true;
-    elements.autoDetectBtn.textContent = 'Waiting...';
-    elements.autoDetectError.textContent = '';
+async function handleAnthropicAuthAction() {
+    const button = elements.logoutBtn;
+    if (!button || button.disabled) return;
 
+    button.disabled = true;
     try {
-        const result = await window.electronAPI.detectSessionKey();
-        if (!result.success) {
-            elements.autoDetectError.textContent = result.error || 'Login failed';
+        if (hasClaudeWebCredentials()) {
+            button.textContent = 'Logging out...';
+            await window.electronAPI.deleteCredentials();
+            credentials = await window.electronAPI.getCredentials();
+            if (hasUsableCredentials()) {
+                await fetchUsageData({ forceExtended: true, forceProviders: true });
+                startAutoUpdate();
+            } else {
+                showLoginRequired();
+                stopAutoUpdate();
+            }
+            await loadSettings();
             return;
         }
 
-        // Got sessionKey from login, now validate it
-        elements.autoDetectBtn.textContent = 'Validating...';
-        const validation = await window.electronAPI.validateSessionKey(result.sessionKey);
+        button.textContent = 'Waiting for browser sign-in...';
+        if (elements.anthropicLoginStatus) elements.anthropicLoginStatus.textContent = 'Waiting for Claude.ai...';
+        const detected = await window.electronAPI.detectSessionKey();
+        if (!detected.success) throw new Error(detected.error || 'Login failed');
 
-        if (validation.success) {
-            credentials = {
-                sessionKey: result.sessionKey,
-                organizationId: validation.organizationId,
-                organizations: validation.organizations || []
-            };
-            await window.electronAPI.saveCredentials(credentials);
-            populateOrgSelector(validation.organizations || [], validation.organizationId);
-            showMainContent();
-            await fetchUsageData();
-            startAutoUpdate();
-        } else {
-            elements.autoDetectError.textContent =
-                'Session invalid. Try again or use Manual →';
-        }
+        button.textContent = 'Validating...';
+        const validation = await window.electronAPI.validateSessionKey(detected.sessionKey);
+        if (!validation.success) throw new Error(validation.error || 'Session invalid');
+
+        await window.electronAPI.saveCredentials({
+            sessionKey: detected.sessionKey,
+            organizationId: validation.organizationId,
+            organizations: validation.organizations || []
+        });
+        credentials = await window.electronAPI.getCredentials();
+        populateOrgSelector(credentials.organizations || [], credentials.organizationId);
+        await fetchUsageData({ forceExtended: true, forceProviders: true });
+        startAutoUpdate();
+        await loadSettings();
     } catch (error) {
-        elements.autoDetectError.textContent = error.message || 'Login failed';
+        credentials = await window.electronAPI.getCredentials();
+        syncAnthropicAuthControls();
+        if (elements.anthropicLoginStatus) {
+            elements.anthropicLoginStatus.textContent = error.message || 'Login failed';
+        }
     } finally {
-        elements.autoDetectBtn.disabled = false;
-        elements.autoDetectBtn.textContent = 'Log in';
+        button.disabled = false;
+        if (hasClaudeWebCredentials()) syncAnthropicAuthControls();
+    }
+}
+
+async function refreshLocalLogins() {
+    const button = elements.refreshLocalLoginsBtn;
+    if (!button || button.disabled) return;
+
+    const defaultTitle = 'Refresh local CLI logins and account tokens';
+    clearTimeout(button._feedbackTimer);
+    button.disabled = true;
+    button.classList.remove('refresh-success', 'refresh-error');
+    button.classList.add('spinning');
+    button.title = 'Refreshing local CLI logins...';
+    let feedbackClass = 'refresh-success';
+    let feedbackTitle = 'Local CLI logins refreshed';
+
+    try {
+        // get-credentials reads the provider auth files again. A forced provider
+        // fetch then bypasses the usage cache so an account switch is reflected
+        // immediately instead of waiting for the app to restart or cache to age.
+        credentials = await window.electronAPI.getCredentials();
+        if (!credentials?.localProviderCredentialsAvailable) {
+            await loadSettings();
+            feedbackClass = 'refresh-error';
+            feedbackTitle = 'No usable local CLI logins found';
+            return;
+        }
+
+        await fetchUsageData({
+            forceExtended: true,
+            forceProviders: true,
+            refreshLocalCredentials: true
+        });
+        await loadSettings();
+        startAutoUpdate();
+    } catch (error) {
+        feedbackClass = 'refresh-error';
+        feedbackTitle = error.message || 'Local login refresh failed';
+    } finally {
+        button.disabled = false;
+        button.classList.remove('spinning');
+        button.classList.add(feedbackClass);
+        button.title = feedbackTitle;
+        button._feedbackTimer = setTimeout(() => {
+            button.classList.remove('refresh-success', 'refresh-error');
+            button.title = defaultTitle;
+        }, 2500);
     }
 }
 
@@ -844,7 +872,7 @@ async function fetchUsageData(options = {}) {
         return;
     }
 
-    if (!(credentials.sessionKey && credentials.organizationId) && !credentials.cliFallbackAvailable) {
+    if (!hasUsableCredentials()) {
         debugLog('Missing credentials, showing login');
         showLoginRequired();
         return;
@@ -860,12 +888,14 @@ async function fetchUsageData(options = {}) {
         console.error('Error fetching usage data:', error);
         if (error.message.includes('SessionExpired') || error.message.includes('Unauthorized')) {
             credentials = await window.electronAPI.getCredentials();
-            if (credentials.cliFallbackAvailable) {
+            if (hasUsableCredentials()) {
                 showMainContent();
-                setTimeout(() => fetchUsageData({ forceExtended: true }), 1500);
+                setTimeout(() => fetchUsageData({ forceExtended: true, forceProviders: true }), 1500);
             } else {
                 showLoginRequired();
             }
+        } else if (error.message.includes('Missing credentials')) {
+            showLoginRequired();
         } else {
             debugLog('Failed to fetch usage data');
         }
@@ -900,6 +930,107 @@ const EXTRA_ROW_CONFIG = {
 // hidden" chip only counts hidden rows that actually exist, so it never shows
 // a count for a pool the API stopped reporting.
 const _availableRowKeys = new Set();
+
+function appendCodexCreditsRow(codexData, key, container, hiddenRows) {
+    const credits = codexData?.credits;
+    if (!credits || !(codexData.limits || []).length) return;
+    _availableRowKeys.add(key);
+    if (hiddenRows[key]) return;
+
+    const row = document.createElement('div');
+    row.className = 'usage-section stretch-bar';
+    const label = document.createElement('span');
+    label.className = 'usage-label';
+    label.dataset.code = 'CR';
+    label.dataset.abbr = 'Credits';
+    label.style.setProperty('--row-col', CODE_COLORS.codex);
+    const creditsOn = credits.unlimited || credits.hasCredits;
+    const statusTag = document.createElement('span');
+    statusTag.className = `extra-status ${creditsOn ? 'on' : 'off'}`;
+    statusTag.textContent = creditsOn ? 'ON' : 'OFF';
+    label.appendChild(statusTag);
+    label.appendChild(document.createTextNode(' Credits'));
+    row.appendChild(label);
+
+    const barGroup = document.createElement('div');
+    barGroup.className = 'usage-bar-group';
+    const approx = document.createElement('span');
+    approx.className = 'credits-approx';
+    const fmtRange = (range) => (Array.isArray(range) && range.length === 2)
+        ? (range[0] === range[1] ? String(range[0]) : `${range[0]}–${range[1]}`)
+        : null;
+    if (credits.unlimited) {
+        approx.textContent = 'unlimited';
+    } else if (credits.hasCredits) {
+        const local = fmtRange(credits.approxLocal);
+        const cloud = fmtRange(credits.approxCloud);
+        approx.textContent = [local && `≈ ${local} local msgs`, cloud && `${cloud} cloud`]
+            .filter(Boolean).join(' · ') || 'balance available';
+    } else {
+        approx.textContent = 'none purchased';
+        approx.classList.add('dim');
+    }
+    barGroup.appendChild(approx);
+    row.appendChild(barGroup);
+
+    const balLabel = document.createElement('span');
+    balLabel.className = 'timer-text extra-balance-label';
+    balLabel.textContent = 'Account Credits:';
+    row.appendChild(balLabel);
+    const balAmount = document.createElement('span');
+    balAmount.className = 'resets-at-text extra-balance-amount';
+    balAmount.textContent = credits.unlimited ? 'unlimited' : String(credits.balance ?? 0);
+    row.appendChild(balAmount);
+
+    attachHideBtn(row, key, 'Credits');
+    container.appendChild(row);
+}
+
+function appendCodexResetsRow(codexData, key, container, hiddenRows) {
+    const resets = codexData?.resetCredits;
+    if (!resets || !(codexData.limits || []).length) return;
+    _availableRowKeys.add(key);
+    if (hiddenRows[key]) return;
+
+    const row = document.createElement('div');
+    row.className = 'usage-section stretch-bar';
+    row.title = resets.applicable > 0
+        ? `${resets.applicable} reset${resets.applicable > 1 ? 's' : ''} usable right now to clear a hit limit`
+        : 'Banked limit resets — become usable when a limit is reached';
+    const label = document.createElement('span');
+    label.className = 'usage-label';
+    label.textContent = 'Limit Resets';
+    label.dataset.code = 'RST';
+    label.dataset.abbr = 'Resets';
+    label.style.setProperty('--row-col', CODE_COLORS.codex);
+    row.appendChild(label);
+
+    const barGroup = document.createElement('div');
+    barGroup.className = 'usage-bar-group';
+    const dotsWrap = document.createElement('div');
+    const dotCount = Math.min(resets.available, 12);
+    dotsWrap.className = 'reset-dots' + (dotCount === 1 ? ' single' : '');
+    for (let i = 0; i < dotCount; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'reset-dot';
+        dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
+        dotsWrap.appendChild(dot);
+    }
+    barGroup.appendChild(dotsWrap);
+    row.appendChild(barGroup);
+
+    const balLabel = document.createElement('span');
+    balLabel.className = 'timer-text extra-balance-label';
+    balLabel.textContent = 'Resets Available:';
+    row.appendChild(balLabel);
+    const balAmount = document.createElement('span');
+    balAmount.className = 'resets-at-text extra-balance-amount';
+    balAmount.textContent = String(resets.available);
+    row.appendChild(balAmount);
+
+    attachHideBtn(row, key, 'Limit Resets');
+    container.appendChild(row);
+}
 
 function buildExtraRows(data) {
     // Don't clear existing rows if we don't have new data to replace them with
@@ -1141,111 +1272,13 @@ function buildExtraRows(data) {
         }
     }
 
-    // Codex credits — styled exactly like Anthropic's Extra Usage row
-    // (ON/OFF tag, muted bar, right-aligned "Account Credits: N")
-    const codexCredits = data.codex?.credits;
-    if (codexCredits && elements.openaiRows.children.length) _availableRowKeys.add('codex_row_credits');
-    if (codexCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_credits) {
-        const row = document.createElement('div');
-        row.className = 'usage-section stretch-bar';
-
-        const label = document.createElement('span');
-        label.className = 'usage-label';
-        label.dataset.code = 'CR';
-        label.dataset.abbr = 'Credits';
-        label.style.setProperty('--row-col', CODE_COLORS.codex);
-        const creditsOn = codexCredits.unlimited || codexCredits.hasCredits;
-        const statusTag = document.createElement('span');
-        statusTag.className = `extra-status ${creditsOn ? 'on' : 'off'}`;
-        statusTag.textContent = creditsOn ? 'ON' : 'OFF';
-        label.appendChild(statusTag);
-        label.appendChild(document.createTextNode(' Credits'));
-        row.appendChild(label);
-
-        // Credits are a wallet, not a meter — no bar. Show the API's own
-        // message-count estimate for the balance instead.
-        const barGroup = document.createElement('div');
-        barGroup.className = 'usage-bar-group';
-        const approx = document.createElement('span');
-        approx.className = 'credits-approx';
-        const fmtRange = (r) => (Array.isArray(r) && r.length === 2)
-            ? (r[0] === r[1] ? String(r[0]) : `${r[0]}–${r[1]}`)
-            : null;
-        if (codexCredits.unlimited) {
-            approx.textContent = 'unlimited';
-        } else if (codexCredits.hasCredits) {
-            const local = fmtRange(codexCredits.approxLocal);
-            const cloud = fmtRange(codexCredits.approxCloud);
-            approx.textContent = [local && `≈ ${local} local msgs`, cloud && `${cloud} cloud`]
-                .filter(Boolean).join(' · ') || 'balance available';
-        } else {
-            approx.textContent = 'none purchased';
-            approx.classList.add('dim');
-        }
-        barGroup.appendChild(approx);
-        row.appendChild(barGroup); // spans bar+elapsed columns (stretch-bar)
-
-        const balLabel = document.createElement('span');
-        balLabel.className = 'timer-text extra-balance-label';
-        balLabel.textContent = 'Account Credits:';
-        row.appendChild(balLabel);
-
-        const balAmount = document.createElement('span');
-        balAmount.className = 'resets-at-text extra-balance-amount';
-        balAmount.textContent = codexCredits.unlimited ? 'unlimited' : String(codexCredits.balance ?? 0);
-        row.appendChild(balAmount);
-
-        attachHideBtn(row, 'codex_row_credits', 'Credits');
-        elements.openaiExtraRows.appendChild(row);
-    }
-
-    // OpenAI weekly-limit reset feature — banked resets shown as magic dots
-    // (no ON/OFF: resets aren't a toggle, they simply exist)
-    const resetCredits = data.codex?.resetCredits;
-    if (resetCredits && elements.openaiRows.children.length) _availableRowKeys.add('codex_row_resets');
-    if (resetCredits && elements.openaiRows.children.length && !hiddenRows.codex_row_resets) {
-        const row = document.createElement('div');
-        row.className = 'usage-section stretch-bar';
-        row.title = resetCredits.applicable > 0
-            ? `${resetCredits.applicable} reset${resetCredits.applicable > 1 ? 's' : ''} usable right now to clear a hit limit`
-            : 'Banked limit resets — become usable when a limit is reached';
-
-        const label = document.createElement('span');
-        label.className = 'usage-label';
-        label.textContent = 'Limit Resets';
-        label.dataset.code = 'RST';
-        label.dataset.abbr = 'Resets';
-        label.style.setProperty('--row-col', CODE_COLORS.codex);
-        row.appendChild(label);
-
-        // One teal dot per banked reset, spread edge to edge across the column
-        const barGroupDots = document.createElement('div');
-        barGroupDots.className = 'usage-bar-group';
-        const dotsWrap = document.createElement('div');
-        const dotCount = Math.min(resetCredits.available, 12);
-        dotsWrap.className = 'reset-dots' + (dotCount === 1 ? ' single' : '');
-        for (let i = 0; i < dotCount; i++) {
-            const dot = document.createElement('span');
-            dot.className = 'reset-dot';
-            dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
-            dotsWrap.appendChild(dot);
-        }
-        barGroupDots.appendChild(dotsWrap);
-        row.appendChild(barGroupDots); // spans bar+elapsed columns (stretch-bar)
-
-        const balLabel = document.createElement('span');
-        balLabel.className = 'timer-text extra-balance-label';
-        balLabel.textContent = 'Resets Available:';
-        row.appendChild(balLabel);
-
-        const balAmount = document.createElement('span');
-        balAmount.className = 'resets-at-text extra-balance-amount';
-        balAmount.textContent = String(resetCredits.available);
-        row.appendChild(balAmount);
-
-        attachHideBtn(row, 'codex_row_resets', 'Limit Resets');
-        elements.openaiExtraRows.appendChild(row);
-    }
+    // Credits and banked weekly-limit resets are account-scoped. Render the
+    // desktop and CLI values independently instead of silently dropping the
+    // secondary account's fields from the same live payload.
+    appendCodexCreditsRow(data.codex, 'codex_row_credits', elements.openaiExtraRows, hiddenRows);
+    appendCodexResetsRow(data.codex, 'codex_row_resets', elements.openaiExtraRows, hiddenRows);
+    appendCodexCreditsRow(data.codex?.cli, 'codex_cli_row_credits', elements.openaiCliRows, hiddenRows);
+    appendCodexResetsRow(data.codex?.cli, 'codex_cli_row_resets', elements.openaiCliRows, hiddenRows);
 
     // Provider sections appear only when they have rows
     elements.sectionOpenai.style.display = '';
@@ -1267,17 +1300,56 @@ function buildExtraRows(data) {
     return count;
 }
 
+function _intrinsicMainContentHeight() {
+    const content = elements.mainContent;
+    const contentRect = content.getBoundingClientRect();
+    const style = getComputedStyle(content);
+    let bottom = parseFloat(style.paddingTop) || 0;
+
+    for (const child of content.children) {
+        const childStyle = getComputedStyle(child);
+        if (childStyle.display === 'none' || childStyle.position === 'absolute') continue;
+        bottom = Math.max(bottom, child.getBoundingClientRect().bottom - contentRect.top);
+    }
+
+    return Math.ceil(bottom + (parseFloat(style.paddingBottom) || 0));
+}
+
+function _graphIsInline() {
+    return graphVisible && !graphDetached && !isCompactMode;
+}
+
+function syncGraphLayoutState() {
+    document.body.classList.toggle('graph-off', !_graphIsInline());
+}
+
+function _fitPresetIfGraphHidden() {
+    if (_activePreset === null || _graphIsInline()) return;
+    // Wait for Electron's preset bounds and the resulting CSS reflow before
+    // measuring the provider rows. The callback re-checks state in case the
+    // chart was enabled during the transition.
+    setTimeout(() => {
+        if (_activePreset === null || _graphIsInline()) return;
+        syncGraphLayoutState();
+        _forceFitHeight({ fitPreset: true, intrinsic: true });
+    }, 120);
+}
+
 // Fit the window height to the content, keeping the user's width — used by
 // toggles that change content height (graph, subgroup rolls) so the window
-// grows and contracts with what it shows
-function _forceFitHeight() {
+// grows and contracts with what it shows. A preset fit is a one-time explicit
+// transition; the preset continues to own geometry after it completes.
+function _forceFitHeight({ fitPreset = false, intrinsic = false } = {}) {
     if (isCompactMode) return;
+    if (_windowUserSized && !fitPreset) return;
     if (elements.settingsOverlay.style.display !== 'none') return;
     requestAnimationFrame(() => {
         const th = _chromeHeight();
-        const ch = elements.mainContent.scrollHeight;
+        const ch = intrinsic ? _intrinsicMainContentHeight() : elements.mainContent.scrollHeight;
         const bh = elements.updateBanner.style.display !== 'none' ? (elements.updateBanner.offsetHeight || 28) : 0;
-        if (th >= 10 && ch >= 40) window.electronAPI.resizeWindow(th + bh + ch + 10, true);
+        if (th >= 10 && ch >= 40) {
+            window.electronAPI.resizeWindow(th + bh + ch + 10, true, fitPreset);
+        }
     });
 }
 
@@ -1659,6 +1731,10 @@ function applySqueezeClasses() {
     document.body.classList.toggle('lbl-code', eff <= 450);
     document.body.classList.toggle('sz3', eff <= 330);
     document.body.classList.toggle('sz4', eff <= 288);
+    // The shared dual-account table is a compact landscape treatment. Once a
+    // company column is wide enough for full labels, use the normal provider
+    // rows again (this most visibly affects Google's desktop + CLI accounts).
+    document.body.classList.toggle('dual-compact', landscape && eff < 450);
 
     document.body.classList.toggle('vh-1', on && !landscape && h < 520);
     document.body.classList.toggle('vh-2', on && !landscape && h < 430);
@@ -1826,16 +1902,40 @@ function dualPairsFor(company, data) {
         const d = data.codex;
         if (!d || !d.cli || !d.cli.limits || !d.cli.limits.length) return null;
         const total = (k) => k.includes('seven_day') ? 10080 : 300;
+        const creditInfo = (credits) => credits ? {
+            kind: 'summary',
+            text: credits.unlimited ? '∞' : String(credits.balance ?? 0),
+            title: credits.unlimited ? 'Unlimited account credits' : `${credits.balance ?? 0} account credits`
+        } : null;
+        const resetInfo = (resets) => resets ? {
+            kind: 'summary',
+            text: String(resets.available ?? 0),
+            title: `${resets.available ?? 0} banked limit resets`
+        } : null;
+        const hiddenRows = hiddenRowsMap();
         const byKey = {};
         for (const l of (d.limits || [])) byKey[l.key] = { label: l.label, desk: mk(l.percent, l.resetsAt, total(l.key)) };
         for (const l of d.cli.limits) {
             byKey[l.key] = byKey[l.key] || { label: l.label };
             byKey[l.key].cli = mk(l.percent, l.resetsAt, total(l.key));
         }
-        return Object.entries(byKey).map(([k, v]) => ({
+        const pairs = Object.entries(byKey).map(([k, v]) => ({
             code: rowCode('codex_' + k, v.label), color: CODE_COLORS.codex,
             name: v.label, desk: v.desk, cli: v.cli
         }));
+        const deskCredits = hiddenRows.codex_row_credits ? null : creditInfo(d.credits);
+        const cliCredits = hiddenRows.codex_cli_row_credits ? null : creditInfo(d.cli.credits);
+        if (deskCredits || cliCredits) pairs.push({
+            code: 'CR', color: CODE_COLORS.codex, name: 'Credits',
+            desk: deskCredits, cli: cliCredits
+        });
+        const deskResets = hiddenRows.codex_row_resets ? null : resetInfo(d.resetCredits);
+        const cliResets = hiddenRows.codex_cli_row_resets ? null : resetInfo(d.cli.resetCredits);
+        if (deskResets || cliResets) pairs.push({
+            code: 'RST', color: CODE_COLORS.codex, name: 'Limit Resets',
+            desk: deskResets, cli: cliResets
+        });
+        return pairs;
     }
     if (company === 'anthropic') {
         const cc = data.claude_code_same_account === false ? data.claude_code : null;
@@ -1870,6 +1970,15 @@ function buildDualPair(info, cliSide) {
     const pair = document.createElement('div');
     pair.className = 'dual-pair' + (cliSide ? ' cli' : '');
     if (!info) return pair;
+    if (info.kind === 'summary') {
+        pair.classList.add('special');
+        pair.title = info.title || '';
+        const value = document.createElement('span');
+        value.className = 'dual-special-value';
+        value.textContent = info.text;
+        pair.appendChild(value);
+        return pair;
+    }
     const pct = document.createElement('span');
     pct.className = 'dual-pct';
     pct.textContent = Math.round(Math.min(Math.max(info.pct || 0, 0), 100)) + '%';
@@ -1896,6 +2005,18 @@ function buildDualPair(info, cliSide) {
     pie.dataset.total = info.total;
     pair.appendChild(pie);
     return pair;
+}
+
+function syncLandscapeCliWidth() {
+    if (_activePreset !== 'wide' || !document.body.classList.contains('landscape')
+        || !window.electronAPI.fitLandscapeWidth) return;
+    const tables = ['dualTableAnthropic', 'dualTableOpenai', 'dualTableGoogle']
+        .map((id) => document.getElementById(id))
+        .filter((table) => table && table.parentElement?.classList.contains('has-dual'));
+    if (!tables.length) return;
+    // One open second-account cluster still needs the full preset width. Only
+    // contract when every visible provider has collapsed its CLI columns.
+    window.electronAPI.fitLandscapeWidth(tables.some((table) => !table.classList.contains('hide-cli')));
 }
 
 function renderDualTables(data) {
@@ -1945,9 +2066,19 @@ function renderDualTables(data) {
             pill.dataset.animating = '1';
             pill.classList.remove('burnt', 'burning', 'unburning');
             void pill.offsetWidth;
-            pill.classList.add(hidden ? 'burning' : 'unburning');
-            runPixelSweep(pill, hidden);
-            setTimeout(() => { table.classList.toggle('hide-cli', hidden); }, 160);
+            // Both directions use the same burn flash. Revealing removes the
+            // terminal state first, burns across the restored title, then
+            // leaves the clean text behind when the animation finishes.
+            pill.classList.add('burning');
+            runPixelSweep(pill, true);
+            if (!hidden) {
+                table.classList.remove('hide-cli');
+                syncLandscapeCliWidth();
+            }
+            setTimeout(() => {
+                if (hidden) table.classList.add('hide-cli');
+                syncLandscapeCliWidth();
+            }, 160);
             setTimeout(() => {
                 pill.classList.remove('burning', 'unburning');
                 pill.classList.toggle('burnt', hidden);
@@ -1992,6 +2123,7 @@ function renderDualTables(data) {
             table.appendChild(row);
         }
     }
+    requestAnimationFrame(syncLandscapeCliWidth);
 }
 
 function setSubgroupState(group, hidden) {
@@ -2420,6 +2552,7 @@ function applyCompactMode(compact) {
         elements.graphSection.style.display = 'block';
         loadChart();
     }
+    syncGraphLayoutState();
 
     // Show/hide the collapse chevron (only visible in normal mode with data)
     if (elements.compactCollapseBtn) {
@@ -2884,21 +3017,15 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
 // UI State Management
 function showLoginRequired() {
     elements.loadingContainer.style.display = 'none';
-    elements.loginContainer.style.display = 'flex';
     elements.noUsageContainer.style.display = 'none';
-    elements.mainContent.style.display = 'none';
-    // Reset to step 1
-    elements.loginStep1.style.display = 'flex';
-    elements.loginStep2.style.display = 'none';
-    elements.sessionKeyError.textContent = '';
-    elements.sessionKeyInput.value = '';
+    elements.mainContent.style.display = isCompactMode ? 'none' : 'block';
     // Close any open overlays
     elements.settingsOverlay.style.display = 'none';
     elements.compactSettingsOverlay.style.display = 'none';
-    // Hide header buttons during login
-    elements.settingsBtn.style.display = 'none';
-    elements.refreshBtn.style.display = 'none';
-    elements.graphBtn.style.display = 'none';
+    // Keep recovery and configuration controls available while logged out.
+    elements.settingsBtn.style.display = 'flex';
+    elements.refreshBtn.style.display = 'flex';
+    elements.graphBtn.style.display = isCompactMode ? 'none' : 'flex';
     stopAutoUpdate();
     if (countdownInterval) {
         clearInterval(countdownInterval);
@@ -2912,15 +3039,12 @@ function showLoginRequired() {
     alertFired.session_danger = false;
     alertFired.weekly_warn = false;
     alertFired.weekly_danger = false;
-    // Resize window to fit login content — without this the window stays at
-    // the default 155px widget height and the "Log in"/"Manual" buttons are
-    // clipped off-screen and unreachable on a frameless, non-resizable window.
-    window.electronAPI.resizeWindow(360);
+    // Keep the provider dashboard and Settings entry visible while logged out.
+    if (!isCompactMode) resizeWidget();
 }
 
 function showMainContent() {
     elements.loadingContainer.style.display = 'none';
-    elements.loginContainer.style.display = 'none';
     elements.noUsageContainer.style.display = 'none';
     // Respect compact mode — don't force mainContent visible if we're in compact
     if (!isCompactMode) {
@@ -2984,22 +3108,23 @@ function renderChart(history) {
     }
     const allValues = history.flatMap((entry) => {
         const values = [entry.session, entry.weekly];
-        if (showSonnet) values.push(entry.sonnet || 0);
-        if (showOpus) values.push(entry.opus || 0);
-        if (showCowork) values.push(entry.cowork || 0);
-        if (showDesign) values.push(entry.design || 0);
-        if (showOAuthApps) values.push(entry.oauthApps || 0);
-        if (showExtraUsage) values.push(entry.extraUsage || 0);
-        for (const key of scopedKeys) values.push(entry.scoped?.[key] || 0);
-        values.push(entry.codex || 0, entry.gemini || 0, entry.codexCli || 0, entry.geminiCli || 0, entry.claudeCli || 0);
-        return values;
+        if (showSonnet) values.push(entry.sonnet);
+        if (showOpus) values.push(entry.opus);
+        if (showCowork) values.push(entry.cowork);
+        if (showDesign) values.push(entry.design);
+        if (showOAuthApps) values.push(entry.oauthApps);
+        if (showExtraUsage) values.push(entry.extraUsage);
+        for (const key of scopedKeys) values.push(entry.scoped?.[key]);
+        values.push(entry.codex, entry.gemini, entry.codexCli, entry.geminiCli, entry.claudeCli);
+        return values.map(chartUtils.finiteOrNull).filter((value) => value != null);
     });
-    const yMax = Math.max(10, Math.ceil(Math.max(...allValues) / 10) * 10);
+    let yMax = Math.max(10, Math.ceil(Math.max(0, ...allValues) / 10) * 10);
 
     const datasets = [
         {
+            seriesId: 'claude:session',
             label: 'CLA 5H',
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry.session })),
+            data: history.map((entry) => chartUtils.point(entry.timestamp, entry.session)),
             borderColor: '#8b5cf6',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -3009,8 +3134,9 @@ function renderChart(history) {
             pointHitRadius: 10
         },
         {
+            seriesId: 'claude:weekly',
             label: 'CLA 7D',
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry.weekly })),
+            data: history.map((entry) => chartUtils.point(entry.timestamp, entry.weekly)),
             borderColor: '#3b82f6',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -3022,11 +3148,12 @@ function renderChart(history) {
     ];
 
     if (showSonnet) {
-        const sonnetData = history.map((entry) => entry.sonnet || 0);
-        if (sonnetData.some((value) => value > 0)) {
+        const sonnetData = history.map((entry) => chartUtils.finiteOrNull(entry.sonnet));
+        if (chartUtils.hasPositive(sonnetData)) {
             datasets.push({
+                seriesId: 'anthropic:sonnet',
                 label: 'Sonnet',
-                data: history.map((entry) => ({ x: entry.timestamp, y: entry.sonnet || 0 })),
+                data: history.map((entry) => chartUtils.point(entry.timestamp, entry.sonnet)),
                 borderColor: '#f43f5e',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
@@ -3039,11 +3166,12 @@ function renderChart(history) {
     }
 
     if (showOpus) {
-        const opusData = history.map((entry) => entry.opus || 0);
-        if (opusData.some((value) => value > 0)) {
+        const opusData = history.map((entry) => chartUtils.finiteOrNull(entry.opus));
+        if (chartUtils.hasPositive(opusData)) {
             datasets.push({
+                seriesId: 'anthropic:opus',
                 label: 'Opus',
-                data: history.map((entry) => ({ x: entry.timestamp, y: entry.opus || 0 })),
+                data: history.map((entry) => chartUtils.point(entry.timestamp, entry.opus)),
                 borderColor: '#f59e0b',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
@@ -3056,11 +3184,12 @@ function renderChart(history) {
     }
 
     if (showCowork) {
-        const coworkData = history.map((entry) => entry.cowork || 0);
-        if (coworkData.some((value) => value > 0)) {
+        const coworkData = history.map((entry) => chartUtils.finiteOrNull(entry.cowork));
+        if (chartUtils.hasPositive(coworkData)) {
             datasets.push({
+                seriesId: 'anthropic:cowork',
                 label: 'Cowork',
-                data: history.map((entry) => ({ x: entry.timestamp, y: entry.cowork || 0 })),
+                data: history.map((entry) => chartUtils.point(entry.timestamp, entry.cowork)),
                 borderColor: '#06b6d4',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
@@ -3073,11 +3202,12 @@ function renderChart(history) {
     }
 
     if (showDesign) {
-        const designData = history.map((entry) => entry.design || 0);
-        if (designData.some((value) => value > 0)) {
+        const designData = history.map((entry) => chartUtils.finiteOrNull(entry.design));
+        if (chartUtils.hasPositive(designData)) {
             datasets.push({
+                seriesId: 'anthropic:design',
                 label: 'Design',
-                data: history.map((entry) => ({ x: entry.timestamp, y: entry.design || 0 })),
+                data: history.map((entry) => chartUtils.point(entry.timestamp, entry.design)),
                 borderColor: '#92400e',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
@@ -3090,11 +3220,12 @@ function renderChart(history) {
     }
 
     if (showOAuthApps) {
-        const oauthAppsData = history.map((entry) => entry.oauthApps || 0);
-        if (oauthAppsData.some((value) => value > 0)) {
+        const oauthAppsData = history.map((entry) => chartUtils.finiteOrNull(entry.oauthApps));
+        if (chartUtils.hasPositive(oauthAppsData)) {
             datasets.push({
+                seriesId: 'anthropic:oauth-apps',
                 label: 'OAuth Apps',
-                data: history.map((entry) => ({ x: entry.timestamp, y: entry.oauthApps || 0 })),
+                data: history.map((entry) => chartUtils.point(entry.timestamp, entry.oauthApps)),
                 borderColor: '#f97316',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
@@ -3107,11 +3238,12 @@ function renderChart(history) {
     }
 
     if (showExtraUsage) {
-        const extraUsageData = history.map((entry) => entry.extraUsage || 0);
-        if (extraUsageData.some((value) => value > 0)) {
+        const extraUsageData = history.map((entry) => chartUtils.finiteOrNull(entry.extraUsage));
+        if (chartUtils.hasPositive(extraUsageData)) {
             datasets.push({
+            seriesId: 'anthropic:extra-usage',
             label: 'Extra Usage',
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry.extraUsage || 0 })),
+            data: history.map((entry) => chartUtils.point(entry.timestamp, entry.extraUsage)),
             borderColor: '#f59e0b',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -3129,16 +3261,17 @@ function renderChart(history) {
     const SCOPED_FALLBACK_COLORS = ['#84cc16', '#14b8a6', '#a855f7', '#64748b'];
     let scopedColorIndex = 0;
     for (const key of scopedKeys) {
-        const scopedData = history.map((entry) => entry.scoped?.[key] || 0);
-        if (!scopedData.some((value) => value > 0)) continue;
+        const scopedData = history.map((entry) => chartUtils.finiteOrNull(entry.scoped?.[key]));
+        if (!chartUtils.hasPositive(scopedData)) continue;
         const label = key.split('_')
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
         const borderColor = SCOPED_CHART_COLORS[key]
             || SCOPED_FALLBACK_COLORS[scopedColorIndex++ % SCOPED_FALLBACK_COLORS.length];
         datasets.push({
+            seriesId: `scoped:${key}`,
             label,
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry.scoped?.[key] || 0 })),
+            data: history.map((entry) => chartUtils.point(entry.timestamp, entry.scoped?.[key])),
             borderColor,
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -3161,11 +3294,12 @@ function renderChart(history) {
         { key: 'geminiCli', label: 'Gemini CLI', color: COMPANY_COLORS.google, dash: [5, 3] }
     ];
     for (const s of PROVIDER_SERIES) {
-        const vals = history.map((entry) => entry[s.key] || 0);
-        if (!vals.some((v) => v > 0)) continue;
+        const vals = history.map((entry) => chartUtils.finiteOrNull(entry[s.key]));
+        if (!chartUtils.hasPositive(vals)) continue;
         datasets.push({
+            seriesId: `provider:${s.key}`,
             label: s.label,
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry[s.key] || 0 })),
+            data: history.map((entry) => chartUtils.point(entry.timestamp, entry[s.key])),
             borderColor: s.color,
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -3186,12 +3320,14 @@ function renderChart(history) {
     const weeklyResetMs = latestUsageData?.seven_day?.resets_at
         ? new Date(latestUsageData.seven_day.resets_at).getTime() : null;
     const projections = [];
-    const addProjection = (label, color, lastVal, etaIso, resetMs) => {
+    const addProjection = (seriesId, label, color, lastVal, etaIso, resetMs) => {
         if (!etaIso || lastVal == null) return;
         const eta = new Date(etaIso).getTime();
         if (eta <= lastEntry.timestamp) return;
         if (resetMs && eta > resetMs) return; // window resets first — no cap hit
         projections.push({
+            seriesId: `projection:${seriesId}`,
+            baseSeriesId: seriesId,
             label: `${label} → 100%`,
             data: [{ x: lastEntry.timestamp, y: lastVal }, { x: eta, y: 100 }],
             borderColor: color,
@@ -3208,36 +3344,40 @@ function renderChart(history) {
         // A series hidden from the legend hides its dotted projection too (the
         // projection is not a legend item, so there's no other way to hide it).
         const chartHiddenP = (window._cachedSettings || {}).chartHiddenSeries || {};
-        const proj = (lbl, col, lv, eta, resetMs) => { if (!chartHiddenP[lbl]) addProjection(lbl, col, lv, eta, resetMs); };
+        const proj = (id, lbl, col, lv, eta, resetMs) => {
+            if (!chartHiddenP[id]) addProjection(id, lbl, col, lv, eta, resetMs);
+        };
         // Anthropic session (5h) + weekly (7d) + per-model/surface pools.
-        proj('CLA 5H', '#8b5cf6', lastEntry.session, forecasts.session, null);
-        proj('CLA 7D', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
-        proj('Sonnet', '#f43f5e', lastEntry.sonnet, forecasts.sonnet, weeklyResetMs);
-        proj('Opus', '#f59e0b', lastEntry.opus, forecasts.opus, weeklyResetMs);
-        proj('Cowork', '#06b6d4', lastEntry.cowork, forecasts.cowork, weeklyResetMs);
-        proj('Design', '#92400e', lastEntry.design, forecasts.design, weeklyResetMs);
-        proj('OAuth Apps', '#f97316', lastEntry.oauthApps, forecasts.oauthApps, weeklyResetMs);
+        proj('claude:session', 'CLA 5H', '#8b5cf6', lastEntry.session, forecasts.session, null);
+        proj('claude:weekly', 'CLA 7D', '#3b82f6', lastEntry.weekly, forecasts.weekly, weeklyResetMs);
+        proj('anthropic:sonnet', 'Sonnet', '#f43f5e', lastEntry.sonnet, forecasts.sonnet, weeklyResetMs);
+        proj('anthropic:opus', 'Opus', '#f59e0b', lastEntry.opus, forecasts.opus, weeklyResetMs);
+        proj('anthropic:cowork', 'Cowork', '#06b6d4', lastEntry.cowork, forecasts.cowork, weeklyResetMs);
+        proj('anthropic:design', 'Design', '#92400e', lastEntry.design, forecasts.design, weeklyResetMs);
+        proj('anthropic:oauth-apps', 'OAuth Apps', '#f97316', lastEntry.oauthApps, forecasts.oauthApps, weeklyResetMs);
         // Scoped weekly pools (e.g. Fable) — label matches the base series.
         const SCOPED_CHART_COLORS = { fable: '#d946ef' };
         for (const key of scopedKeys) {
             const scopedLabel = key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             const scopedResetIso = latestUsageData?.['seven_day_scoped_' + key]?.resets_at;
-            proj(scopedLabel, SCOPED_CHART_COLORS[key] || '#84cc16', lastEntry.scoped?.[key],
+            proj(`scoped:${key}`, scopedLabel, SCOPED_CHART_COLORS[key] || '#84cc16', lastEntry.scoped?.[key],
                 forecasts.scoped?.[key], scopedResetIso ? new Date(scopedResetIso).getTime() : null);
         }
         // Cross-provider pools have no Claude-style reset window → resetMs=null.
-        proj('Codex', CODE_COLORS.codex, lastEntry.codex, forecasts.codex, null);
-        proj('Gemini', COMPANY_COLORS.google, lastEntry.gemini, forecasts.gemini, null);
-        proj('Claude CLI', COMPANY_COLORS.anthropic, lastEntry.claudeCli, forecasts.claudeCli, null);
-        proj('Codex CLI', CODE_COLORS.codex, lastEntry.codexCli, forecasts.codexCli, null);
-        proj('Gemini CLI', COMPANY_COLORS.google, lastEntry.geminiCli, forecasts.geminiCli, null);
+        proj('provider:codex', 'Codex', CODE_COLORS.codex, lastEntry.codex, forecasts.codex, null);
+        proj('provider:gemini', 'Gemini', COMPANY_COLORS.google, lastEntry.gemini, forecasts.gemini, null);
+        proj('provider:claudeCli', 'Claude CLI', COMPANY_COLORS.anthropic, lastEntry.claudeCli, forecasts.claudeCli, null);
+        proj('provider:codexCli', 'Codex CLI', CODE_COLORS.codex, lastEntry.codexCli, forecasts.codexCli, null);
+        proj('provider:geminiCli', 'Gemini CLI', COMPANY_COLORS.google, lastEntry.geminiCli, forecasts.geminiCli, null);
     }
     if (projections.length) {
         datasets.push(...projections);
+        yMax = Math.max(yMax, 100);
         // Reset marker, if the weekly reset falls inside the projected span
         if (weeklyResetMs && weeklyResetMs > lastEntry.timestamp && weeklyResetMs <= chartXMax + 6 * 60 * 60 * 1000) {
             chartXMax = Math.max(chartXMax, weeklyResetMs);
             datasets.push({
+                seriesId: 'marker:weekly-reset',
                 label: 'Weekly reset',
                 data: [{ x: weeklyResetMs, y: 0 }, { x: weeklyResetMs, y: 100 }],
                 borderColor: '#9ca3af',
@@ -3257,7 +3397,9 @@ function renderChart(history) {
 
     // Apply persisted per-series show/hide (toggled from the chart legend).
     const chartHidden = (window._cachedSettings || {}).chartHiddenSeries || {};
-    datasets.forEach((d) => { if (chartHidden[d.label]) d.hidden = true; });
+    datasets.forEach((d) => {
+        if (chartHidden[d.seriesId] || (d.baseSeriesId && chartHidden[d.baseSeriesId])) d.hidden = true;
+    });
 
     usageChart = new Chart(elements.usageChart.getContext('2d'), {
         type: 'line',
@@ -3266,6 +3408,7 @@ function renderChart(history) {
             animation: false,
             responsive: true,
             maintainAspectRatio: false,
+            spanGaps: false,
             interaction: {
                 intersect: false,
                 mode: 'nearest'
@@ -3275,16 +3418,6 @@ function renderChart(history) {
                     type: 'linear',
                     min: firstDayMidnight.getTime(),
                     max: chartXMax,
-                    afterBuildTicks(axis) {
-                        const end = chartXMax;
-                        const d = new Date(firstDayMidnight.getTime());
-                        const ticks = [];
-                        while (d.getTime() <= end) {
-                            ticks.push({ value: d.getTime() });
-                            d.setDate(d.getDate() + 1);
-                        }
-                        axis.ticks = ticks;
-                    },
                     ticks: {
                         maxRotation: 0,
                         minRotation: 0,
@@ -3336,7 +3469,8 @@ function renderChart(history) {
                         const willHide = ci.isDatasetVisible(item.datasetIndex);
                         ci.getDatasetMeta(item.datasetIndex).hidden = willHide ? true : null;
                         ci.update();
-                        const key = ci.data.datasets[item.datasetIndex].label;
+                        const key = ci.data.datasets[item.datasetIndex].seriesId;
+                        if (!key) return;
                         const chartHiddenSeries = { ...((window._cachedSettings || {}).chartHiddenSeries || {}) };
                         if (willHide) chartHiddenSeries[key] = true; else delete chartHiddenSeries[key];
                         _saveSettingsPatch({ chartHiddenSeries });
@@ -3363,16 +3497,7 @@ function renderChart(history) {
 }
 
 function formatTimestampTick(timestamp, spanMs, timeFormat) {
-    const date = new Date(timestamp);
-    const hour12 = (timeFormat || '12h') !== '24h';
-
-    if (spanMs < 12 * 60 * 60 * 1000) {
-        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12 });
-    }
-    if (spanMs < 48 * 60 * 60 * 1000) {
-        return date.toLocaleString([], { weekday: 'short', hour: 'numeric', hour12 });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return chartUtils.formatTimestampTick(timestamp, spanMs, timeFormat);
 }
 
 // Add spinning animation for refresh button
@@ -3383,7 +3508,8 @@ style.textContent = `
         to { transform: rotate(360deg); }
     }
     
-    .refresh-btn.spinning svg {
+    .refresh-btn.spinning svg,
+    .local-login-refresh-btn.spinning svg {
         animation: spin-refresh 1s linear infinite;
     }
 `;
@@ -3394,7 +3520,12 @@ let warnThreshold = 75;
 let dangerThreshold = 90;
 
 async function loadSettings() {
+    // Credential state can change outside the renderer (logout, CLI login, or
+    // an expired web session), so derive the Anthropic action fresh each time.
+    credentials = await window.electronAPI.getCredentials();
+    syncAnthropicAuthControls();
     const settings = await window.electronAPI.getSettings();
+    window._cachedSettings = settings;
     const isLinux = window.electronAPI.platform === 'linux';
     const isPortable = window.electronAPI.isPortable;
     const autoStartUnsupported = isLinux || isPortable;
@@ -3620,16 +3751,14 @@ window.addEventListener('focus', () => {
     if (!isCompactMode && elements.mainContent.style.display !== 'none') resizeWidget();
 });
 
-// Start the application
-init();
+// Start the application. A renderer initialization error must never leave the
+// widget displaying an unexplained permanent spinner.
+init().catch((error) => {
+    console.error('Burnwatch initialization failed:', error);
+    const message = elements.loadingContainer?.querySelector('p');
+    if (message) message.textContent = `Burnwatch could not start: ${error.message || 'Unknown error'}`;
+});
 window.addEventListener('beforeunload', () => {
     stopAutoUpdate();
     if (countdownInterval) clearInterval(countdownInterval);
 });
-
-
-
-
-
-
-
