@@ -12,6 +12,7 @@ let graphWasVisible = false; // preserves graph state across compact mode toggle
 let appInitializing = true;  // suppresses _saveViewState during startup restore
 let isFetching = false;       // in-flight guard — prevents overlapping fetchUsageData calls
 let _updateReadyToInstall = false; // an auto-update is downloaded and ready to apply
+let _canSelfUpdate = false;        // macOS source install that can rebuild itself
 let isOpenaiExtrasOpen = true;     // OpenAI Credits + Limit Resets sub-panel
 let projectionsVisible = true;     // graph forecast lines (the psychic's trance)
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
@@ -731,20 +732,22 @@ function setupEventListeners() {
         elements.updateBanner.style.display = 'none';
         resizeWidget();
     });
-    elements.updateBannerText.addEventListener('click', () => {
+    // One click path for the banner and the settings link alike: apply a
+    // downloaded update (Windows), rebuild in place (macOS source install),
+    // or fall back to opening the releases page.
+    const applyUpdateClick = () => {
         if (_updateReadyToInstall) {
             window.electronAPI.installUpdate();
+        } else if (_canSelfUpdate) {
+            // The app is about to quit so its own bundle can be replaced.
+            elements.updateBannerText.textContent = '▲  Updating — reopens when the rebuild finishes';
+            window.electronAPI.runMacUpdate();
         } else {
             window.electronAPI.openExternal(`https://github.com/dev-newb/burnwatch/releases/latest`);
         }
-    });
-    elements.settingsUpdateLink.addEventListener('click', () => {
-        if (_updateReadyToInstall) {
-            window.electronAPI.installUpdate();
-        } else {
-            window.electronAPI.openExternal(`https://github.com/dev-newb/burnwatch/releases/latest`);
-        }
-    });
+    };
+    elements.updateBannerText.addEventListener('click', applyUpdateClick);
+    elements.settingsUpdateLink.addEventListener('click', applyUpdateClick);
 
     // Auto-update: a downloaded release turns the banner into a one-click
     // "restart & apply" — no installer wizard involved
@@ -4191,9 +4194,13 @@ async function checkForUpdate() {
         if (!result.hasUpdate) return;
 
         const version = result.version;
+        // A macOS source install rebuilds itself, so it offers "update" rather
+        // than sending the user off to a releases page with no Mac asset on it.
+        _canSelfUpdate = !!result.canSelfUpdate;
 
         // Show banner and expand window to compensate
-        elements.updateBannerText.textContent = `▲  Version ${version} available — click to download`;
+        const action = _canSelfUpdate ? 'update' : 'download';
+        elements.updateBannerText.textContent = `▲  Version ${version} available — click to ${action}`;
         elements.updateBanner.style.display = 'flex';
         resizeWidget(true);
 

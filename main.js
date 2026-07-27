@@ -3700,6 +3700,48 @@ ipcMain.on('install-update', () => {
   }
 });
 
+// --- macOS self-update ------------------------------------------------------
+// There are no signed Mac builds, so electron-updater cannot apply an update on
+// darwin (Squirrel.Mac requires a matching code signature). macOS installs are
+// instead built from source by tools/mac/install.sh, which records the clone
+// path in ~/.burnwatch-repo. When that marker points at a real checkout we can
+// offer the same one-click update the Windows banner has: quit, rebuild,
+// replace the bundle, relaunch.
+function macUpdateScript() {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const marker = path.join(os.homedir(), '.burnwatch-repo');
+    if (!fs.existsSync(marker)) return null;
+    const repo = fs.readFileSync(marker, 'utf8').trim();
+    if (!repo) return null;
+    const script = path.join(repo, 'tools', 'mac', 'update.sh');
+    return fs.existsSync(script) ? script : null;
+  } catch {
+    return null;
+  }
+}
+
+ipcMain.on('run-mac-update', () => {
+  const script = macUpdateScript();
+  if (!script) return;
+  try {
+    const { spawn } = require('child_process');
+    // detached + unref: the rebuild has to outlive the app it is replacing.
+    // The script waits for us to exit, swaps the bundle, then relaunches.
+    const child = spawn('/bin/bash', [script], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: path.dirname(script)
+    });
+    child.unref();
+    debugLog('[MacUpdate] Rebuild spawned; quitting so the bundle can be replaced');
+    // Give the child a moment to be fully handed off before we go away.
+    setTimeout(() => app.quit(), 300);
+  } catch (e) {
+    debugLog('[MacUpdate] Could not start updater:', e.message);
+  }
+});
+
 // Check GitHub releases for a newer version
 ipcMain.handle('check-for-update', () => {
   return new Promise((resolve) => {
@@ -3730,7 +3772,9 @@ ipcMain.handle('check-for-update', () => {
           const tag = (data.tag_name || '').replace(/^v/, '');
           const current = app.getVersion();
           if (tag && isNewerVersion(tag, current)) {
-            resolve({ hasUpdate: true, version: tag });
+            // canSelfUpdate: darwin build-from-source install that can apply
+            // the update itself, so the banner offers "update" not "download".
+            resolve({ hasUpdate: true, version: tag, canSelfUpdate: !!macUpdateScript() });
           } else {
             resolve({ hasUpdate: false, version: null });
           }

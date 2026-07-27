@@ -18,6 +18,10 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 chmod +x "$UPDATER"
 mkdir -p "$HOME/Library/LaunchAgents"
 
+# Record the clone path so the installed app can find this updater and offer
+# an in-app "click to update" instead of a link to a page with no Mac build.
+printf '%s\n' "$REPO_DIR" > "$HOME/.burnwatch-repo"
+
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

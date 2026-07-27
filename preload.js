@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-downloaded', (event, version) => callback(version));
   },
   installUpdate: () => ipcRenderer.send('install-update'),
+  runMacUpdate: () => ipcRenderer.send('run-mac-update'),
 
   // Notifications
   showNotification: (title, body) => ipcRenderer.send('show-notification', { title, body }),
