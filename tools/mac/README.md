@@ -19,10 +19,13 @@ later `Claude-Usage-Widget.app` appears in Applications and launches.
 
 ## After that
 
-Nothing. At every login the agent checks GitHub for a newer release tag. If
-there is one it rebuilds, replaces the app, and relaunches it; if not it just
-launches the app. Normal logins cost one quick `git fetch` — the slow rebuild
-only happens on the logins where a new version actually exists.
+Nothing. The agent checks GitHub for a newer release tag at login and every 6
+hours after that. If there is one it rebuilds, replaces the app, and relaunches
+it; if not it just launches the app. Checks are cheap — one `git fetch` — and
+the slow rebuild only happens when a new version actually exists.
+
+Updating quits the running app and reopens it, so if you happen to be looking
+at the widget when an update lands, it will blink out and come back.
 
 Keep the cloned folder where it is — the agent builds from it.
 

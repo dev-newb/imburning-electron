@@ -30,6 +30,9 @@ cat > "$PLIST" <<PLISTEOF
         <string>$UPDATER</string>
     </array>
     <key>RunAtLoad</key><true/>
+    <!-- Also check every 6h while logged in: a Mac that is closed and reopened
+         rather than logged out would otherwise never run the login check. -->
+    <key>StartInterval</key><integer>21600</integer>
 </dict>
 </plist>
 PLISTEOF
