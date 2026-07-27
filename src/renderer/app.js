@@ -1977,6 +1977,84 @@ function _scheduleAmbientFire(delayMs) {
     }, delayMs);
 }
 
+// ---- Frozen-provider ice -------------------------------------------------
+// The block's chipped outline and the row of icicles are generated once from a
+// fixed seed: irregular, but identical on every render and every launch rather
+// than reshuffling underneath the user. Real elements, not one clip-path strip,
+// because each icicle needs its own width, length, lean and opacity — and its
+// own lit/shadowed gradient — to read as ice instead of as a sawtooth.
+function _seededRandom(seed) {
+    let a = seed;
+    return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+// Deep bites along the top and sides, near-flat along the bottom so the
+// icicles stay attached to it.
+const _CHIPPED_CLIP = (() => {
+    const rnd = _seededRandom(1000);
+    const steps = 7, ya = 12, xa = 2.6, by = 2;
+    const pts = [];
+    const px = (v) => v.toFixed(2) + '%';
+    for (let i = 0; i <= steps; i++) pts.push([i / steps * 100, rnd() * ya]);
+    for (let i = 1; i <= 3; i++) pts.push([100 - rnd() * xa, i / 4 * 100]);
+    for (let i = steps; i >= 0; i--) pts.push([i / steps * 100, 100 - rnd() * by]);
+    for (let i = 3; i >= 1; i--) pts.push([rnd() * xa, i / 4 * 100]);
+    return 'polygon(' + pts.map((p) => px(p[0]) + ' ' + px(p[1])).join(', ') + ')';
+})();
+
+function _buildIcicles() {
+    const wrap = document.createElement('span');
+    wrap.className = 'icicles';
+    const rnd = _seededRandom(20260726);
+    let x = 0.4;
+    while (x < 98.5) {
+        const w = 2.1 + rnd() * 4.3;
+        // rnd()*rnd() skews short, so a few long ones stand out among stubs
+        const h = Math.min(0.22 + rnd() * rnd() * 1.75, 1.4);
+        const lean = (rnd() - 0.5) * 7;
+        const op = Math.min(0.36 + ((w - 2.1) / 4.3) * 0.28 + rnd() * 0.36, 1);
+        const ic = document.createElement('i');
+        ic.className = 'ic';
+        ic.style.cssText = `left:${x.toFixed(2)}%; width:${w.toFixed(2)}px;`
+            + ` height:calc(var(--ic) * ${h.toFixed(2)}); opacity:${op.toFixed(2)};`
+            + ` transform:rotate(${lean.toFixed(1)}deg);`;
+        wrap.appendChild(ic);
+        x += 1.9 + rnd() * 3.6;
+    }
+    return wrap;
+}
+
+function applyFrozenIce(header, isFrozen) {
+    const name = header.querySelector('.section-name');
+    const wrap = name && name.parentElement;
+    if (!wrap || !wrap.classList.contains('ice-wrap')) return;
+    const built = !!wrap.querySelector('.ice-slab');
+    if (!isFrozen) {
+        if (built) wrap.querySelectorAll('.icicles, .ice-slab, .ice-drop').forEach((el) => el.remove());
+        return;
+    }
+    if (built) return;
+    // Order is the whole trick: icicles first so their tops bury under the ice,
+    // then the slab, then the wordmark that is already sitting there.
+    wrap.insertBefore(_buildIcicles(), name);
+    const slab = document.createElement('span');
+    slab.className = 'ice-slab';
+    slab.style.clipPath = _CHIPPED_CLIP;
+    wrap.insertBefore(slab, name);
+    for (const [left, delay] of [['34%', '0s'], ['68%', '2.1s']]) {
+        const drop = document.createElement('span');
+        drop.className = 'ice-drop';
+        drop.style.left = left;
+        drop.style.animationDelay = delay;
+        wrap.appendChild(drop);
+    }
+}
+
 function _tickElementFire(el, now, minGapMs, isOrb, particleStyle) {
     let layer = el.__fireLayer;
     if (!layer || layer.parentNode !== el) {
@@ -2786,6 +2864,7 @@ function updateUI(data) {
     ]) {
         if (!header) continue;
         header.classList.toggle('frozen', !!isFrozen);
+        applyFrozenIce(header, !!isFrozen);
         const name = header.querySelector('.section-name');
         if (name) name.title = isFrozen ? 'On ice — no usage here in a while. Send a prompt to thaw it out.' : '';
     }

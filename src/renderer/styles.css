@@ -972,6 +972,18 @@ body.theme-light .section-eye.on {
 /* Frozen provider â€” the logo sits encased in a block of real ice:
    irregular melt-rounded edges, frost patches, a travelling sheen,
    and jagged icicles hanging off the bottom */
+/* The wrapper the ice is built into. The slab and icicles are real elements
+   inserted by the renderer BEFORE the wordmark, because paint order here is
+   DOM order: icicles, then slab, then letters. They must never use a negative
+   z-index - .widget-container has an opaque background, and a negative-z child
+   paints beneath it, which hides the whole block. */
+.ice-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+/* Frozen provider: the wordmark is frozen INTO a chipped block of ice, with
+   icicles hanging off its underside and the odd bead of meltwater. */
 .section-header.frozen .section-name {
     position: relative;
     filter: saturate(0.55) brightness(1.04);
@@ -979,18 +991,12 @@ body.theme-light .section-eye.on {
     text-shadow:
         0 0 4px rgba(150, 212, 255, 0.6),
         0 0 10px rgba(100, 170, 235, 0.32),
-        0 1px 0 rgba(255, 255, 255, 0.3);
-    animation: frostBreath 7s ease-in-out infinite;
+        0 -1px 0 rgba(255, 255, 255, 0.55),
+        1px 1.5px 0 rgba(38, 88, 145, 0.4),
+        2px 3px 3px rgba(18, 48, 88, 0.34);
 }
 
-@keyframes frostBreath {
-    0%, 100% { filter: saturate(0.55) brightness(1.04); }
-    50%      { filter: saturate(0.46) brightness(1.11); }
-}
-
-/* Ice ON the letters: a duplicate of the wordmark clipped to its own
-   glyphs, carrying a rime wash plus a highlight that travels through the
-   letterforms. The brand colour still shows through from underneath. */
+/* Ice ON the glyphs: a duplicate of the wordmark clipped to its own letters. */
 .section-header.frozen .section-name::before {
     content: attr(data-ice);
     position: absolute;
@@ -999,64 +1005,100 @@ body.theme-light .section-eye.on {
     pointer-events: none;
     white-space: nowrap;
     -webkit-text-stroke: 0;
-    background:
-        linear-gradient(105deg,
-            transparent 34%,
-            rgba(255, 255, 255, 0.72) 44%,
-            rgba(212, 241, 255, 0.28) 51%,
-            transparent 62%),
-        linear-gradient(180deg,
-            rgba(202, 236, 255, 0.46) 0%,
-            rgba(146, 202, 248, 0.24) 52%,
-            rgba(214, 242, 255, 0.38) 100%);
-    background-size: 300% 100%, 100% 100%;
-    background-position: 130% 0, 0 0;
+    background: linear-gradient(180deg,
+        rgba(206, 238, 255, 0.5) 0%,
+        rgba(150, 206, 250, 0.26) 55%,
+        rgba(216, 244, 255, 0.42) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    animation: iceSheen 5.5s ease-in-out infinite;
 }
 
-/* Only the sheen layer moves; the rime wash keeps its place. */
-@keyframes iceSheen {
-    0%   { background-position: 130% 0, 0 0; }
-    60%  { background-position: -70% 0, 0 0; }
-    100% { background-position: -70% 0, 0 0; }
-}
-
-/* Fine icicles hanging off the type, masked to fade at both ends so the
-   strip reads as frost clinging to the letters, not an underline. */
-.section-header.frozen .section-name::after {
-    content: '';
+/* The block. Its chipped outline is a clip-path set by the renderer from a
+   fixed seed, so the silhouette is irregular but never reshuffles. The rim
+   gradients give the sides thickness: lit face left, shadowed face right. */
+.ice-slab {
     position: absolute;
-    left: 2px;
-    right: 2px;
-    top: 100%;
-    margin-top: -2px;
-    height: 6px;
+    inset: -2px -7px -3px -7px;
     pointer-events: none;
-    opacity: 0.72;
-    background: linear-gradient(180deg,
-        rgba(210, 240, 255, 0.9) 0%,
-        rgba(160, 214, 255, 0.4) 60%,
-        transparent 100%);
-    clip-path: polygon(
-        0% 0%, 100% 0%,
-        97% 30%, 94% 5%, 90% 62%, 86% 8%, 82% 36%, 78% 5%,
-        74% 70%, 70% 10%, 66% 40%, 61% 5%, 57% 55%, 52% 9%,
-        48% 32%, 43% 6%, 39% 64%, 34% 8%, 30% 38%, 25% 5%,
-        21% 58%, 17% 9%, 12% 34%, 8% 5%, 4% 48%, 0% 12%
-    );
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
-    mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+    border-radius: 14px 10px 7px 5px / 11px 15px 5px 6px;
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.9) 0px, rgba(216, 243, 255, 0.45) 3.5px,
+                        rgba(170, 215, 250, 0.18) 8px, rgba(255, 255, 255, 0) 15px),
+        linear-gradient(270deg, rgba(148, 200, 245, 0.75) 0px, rgba(52, 104, 166, 0.42) 4.5px,
+                        rgba(70, 125, 185, 0.16) 10px, rgba(255, 255, 255, 0) 17px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0px, rgba(255, 255, 255, 0.16) 4px, transparent 11px),
+        linear-gradient(0deg, rgba(196, 232, 255, 0.5) 0px, rgba(255, 255, 255, 0) 9px),
+        linear-gradient(135deg, rgba(188, 228, 255, 0.30) 0%, rgba(232, 248, 255, 0.14) 42%,
+                        rgba(146, 203, 250, 0.28) 100%);
+    box-shadow:
+        inset 2px 2px 7px rgba(255, 255, 255, 0.5),
+        inset -3px -4px 11px rgba(40, 95, 155, 0.4),
+        inset 0 0 22px rgba(180, 222, 255, 0.2);
+    filter: drop-shadow(2px 3px 3px rgba(16, 42, 78, 0.6));
+}
+
+body.theme-light .ice-slab {
+    filter: drop-shadow(2px 3px 3px rgba(90, 120, 165, 0.42));
+}
+
+/* Icicles hang from the block, not the text, so they run its full width. */
+.icicles {
+    position: absolute;
+    left: -3px;
+    right: -3px;
+    top: calc(100% + 1px);
+    height: 0;
+    pointer-events: none;
+    --ic: 18px;
+}
+
+/* One element per icicle: each gets its own width, length, lean and opacity,
+   and its own left-lit / right-shadowed gradient so it reads as a cone. */
+.ic {
+    position: absolute;
+    top: 0;
+    transform-origin: 50% 0;
+    border-radius: 42% 42% 50% 50% / 9% 9% 97% 97%;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 34%),
+        linear-gradient(90deg,
+            rgba(255, 255, 255, 0.95) 0%, rgba(228, 247, 255, 0.82) 17%,
+            rgba(178, 219, 252, 0.64) 46%, rgba(56, 106, 166, 0.58) 83%,
+            rgba(99, 152, 202, 0.46) 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 52%, rgba(0, 0, 0, 0.6) 84%, rgba(0, 0, 0, 0.22) 100%);
+    mask-image: linear-gradient(180deg, #000 52%, rgba(0, 0, 0, 0.6) 84%, rgba(0, 0, 0, 0.22) 100%);
+    filter: drop-shadow(1px 1.5px 1.2px rgba(18, 48, 88, 0.5));
+}
+
+/* Meltwater: a bead lets go every few seconds. */
+.ice-drop {
+    position: absolute;
+    top: 100%;
+    width: 4px;
+    height: 6px;
+    border-radius: 0 0 50% 50%;
+    background: linear-gradient(180deg, rgba(226, 246, 255, 0.95), rgba(150, 208, 252, 0.75));
+    pointer-events: none;
+    opacity: 0;
+    animation: iceDrip 4.2s ease-in infinite;
+}
+
+@keyframes iceDrip {
+    0%, 55% { transform: translateY(14px) scaleY(0.7); opacity: 0; }
+    62%     { transform: translateY(16px) scaleY(1); opacity: 1; }
+    100%    { transform: translateY(44px) scaleY(1.5); opacity: 0; }
 }
 
 body.theme-light .section-header.frozen .section-name {
     -webkit-text-stroke-color: rgba(120, 180, 230, 0.8);
     text-shadow:
         0 0 4px rgba(135, 195, 240, 0.65),
-        0 1px 0 rgba(255, 255, 255, 0.8);
+        0 -1px 0 rgba(255, 255, 255, 0.9),
+        1px 1.5px 0 rgba(70, 125, 185, 0.35),
+        2px 3px 3px rgba(90, 140, 190, 0.3);
 }
+
 
 
 
@@ -2374,8 +2416,13 @@ body.no-pizazz .section-header.frozen .section-name {
     filter: saturate(0.3) !important;
 }
 
+/* Clown in jail: the ice comes off entirely rather than sitting there frozen
+   mid-drip. Deliberately NOT background:none - .brand-openai IS a clipped
+   gradient over color:transparent, and killing it blanks the wordmark. */
 body.no-pizazz .section-header.frozen .section-name::before,
-body.no-pizazz .section-header.frozen .section-name::after {
+body.no-pizazz .ice-slab,
+body.no-pizazz .icicles,
+body.no-pizazz .ice-drop {
     display: none !important;
 }
 
