@@ -919,6 +919,9 @@ const GOOGLE_OAUTH = {
   scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile'
 };
 
+// The provider's currently-parked sign-in flow, if any: { cancel }.
+const _oauthActiveFlow = { openai: null, google: null };
+
 async function runOAuthConnect(provider) {
   const verifier = b64url(crypto.randomBytes(32));
   const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
@@ -938,14 +941,29 @@ async function runOAuthConnect(provider) {
     throw new Error(`Unknown provider: ${provider}`);
   }
 
-  const { port, resultPromise, close } = await startOAuthCallbackServer({
-    port: provider === 'openai' ? cfg.redirectPort : 0,
-    pathName: cfg.redirectPath,
-    state,
-    logger: (...args) => debugLog(...args)
-  });
+  let server;
+  try {
+    server = await startOAuthCallbackServer({
+      port: provider === 'openai' ? cfg.redirectPort : 0,
+      pathName: cfg.redirectPath,
+      state,
+      logger: (...args) => debugLog(...args)
+    });
+  } catch (err) {
+    // OpenAI's redirect port is fixed, so a foreign holder is a dead end the
+    // user can actually act on — name it instead of parroting EADDRINUSE.
+    if (provider === 'openai' && /EADDRINUSE|busy/i.test(err.message)) {
+      throw new Error('Port 1455 is in use — close any pending "codex login" in a terminal or browser tab, then try again');
+    }
+    throw err;
+  }
+  const { port, resultPromise, close, cancel } = server;
+  // Register so a fresh Connect click can supersede this flow while it sits
+  // parked waiting for the browser (up to 5 minutes).
+  _oauthActiveFlow[provider] = { cancel };
   const redirectUri = `http://localhost:${port}${cfg.redirectPath}`;
 
+  try {
   const authParams = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
@@ -1004,6 +1022,11 @@ async function runOAuthConnect(provider) {
     callback.complete({ ok: false, message: 'The provider token exchange failed. Return to Burnwatch and try again.' });
     throw error;
   }
+  } finally {
+    if (_oauthActiveFlow[provider] && _oauthActiveFlow[provider].cancel === cancel) {
+      _oauthActiveFlow[provider] = null;
+    }
+  }
 }
 
 // Fresh widget-owned access token, refreshing (and persisting rotations) as needed
@@ -1049,22 +1072,23 @@ async function getOAuthAccessToken(provider) {
   }
 }
 
-// One flow per provider at a time — a double-click would otherwise race two
-// callback servers onto the same port (OpenAI's redirect port is fixed).
-const _oauthConnectInFlight = { openai: false, google: false };
+// One flow per provider at a time, but a NEW click supersedes a parked one:
+// the user who closed the browser tab (or picked the wrong account) retries
+// immediately, and used to hit a silent "already in progress" dead end for the
+// rest of the old flow's 5-minute window — which read as a broken button.
 ipcMain.handle('oauth-connect', async (event, provider) => {
-  if (_oauthConnectInFlight[provider]) {
-    return { ok: false, error: 'A sign-in for this provider is already in progress' };
+  if (_oauthActiveFlow[provider]) {
+    debugLog(`[OAuth:${provider}] Superseding a parked sign-in flow`);
+    _oauthActiveFlow[provider].cancel('Superseded by a new sign-in attempt');
+    _oauthActiveFlow[provider] = null;
+    await new Promise((r) => setTimeout(r, 200)); // let the fixed port close
   }
-  _oauthConnectInFlight[provider] = true;
   try {
     const result = await runOAuthConnect(provider);
     return { ok: true, ...result };
   } catch (err) {
     debugLog(`[OAuth:${provider}] Connect failed:`, err.message);
     return { ok: false, error: err.message };
-  } finally {
-    _oauthConnectInFlight[provider] = false;
   }
 });
 

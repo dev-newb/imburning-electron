@@ -127,6 +127,16 @@ function startOAuthCallbackServer({ port, pathName, state, timeoutMs = 5 * 60 * 
       rejectResult(error);
       rejectListen(new Error(`Callback port busy: ${error.message}`));
     });
+    // A fresh Connect click supersedes a still-parked flow: settle it, free the
+    // port (OpenAI's is fixed), and let the caller start over immediately —
+    // otherwise every retry within the 5-minute window dies on EADDRINUSE.
+    const cancel = (reason) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      closeAll();
+      rejectResult(new Error(reason || 'Login cancelled'));
+    };
     v4.listen(port, '127.0.0.1', () => {
       listening = true;
       const boundPort = v4.address().port;
@@ -134,7 +144,7 @@ function startOAuthCallbackServer({ port, pathName, state, timeoutMs = 5 * 60 * 
       servers.push(v6);
       v6.on('error', (error) => logger('[OAuth] ::1 twin bind skipped:', error.message));
       try { v6.listen(boundPort, '::1'); } catch (error) { logger('[OAuth] ::1 twin bind failed:', error.message); }
-      resolveListen({ port: boundPort, resultPromise, close: closeAll });
+      resolveListen({ port: boundPort, resultPromise, close: closeAll, cancel });
     });
   });
 }

@@ -58,6 +58,19 @@ test('a busy port rejects the listen instead of hanging the flow', async () => {
   first.close();
 });
 
+test('cancel settles a parked flow and frees its fixed port for a retry', async () => {
+  const first = await startOAuthCallbackServer({ port: 0, pathName: '/callback', state: 'a', timeoutMs: 60000 });
+  first.cancel('Superseded by a new sign-in attempt');
+  await assert.rejects(first.resultPromise, /Superseded/);
+  // The whole point: a fresh Connect click can rebind the same port at once,
+  // instead of dying on EADDRINUSE for the rest of the old 5-minute window.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const second = await startOAuthCallbackServer({ port: first.port, pathName: '/callback', state: 'b', timeoutMs: 500 });
+  assert.equal(second.port, first.port);
+  second.cancel();
+  await assert.rejects(second.resultPromise, /cancelled/i);
+});
+
 test('a callback without an authorization code fails the flow explicitly', async () => {
   const callback = await startOAuthCallbackServer({ port: 0, pathName: '/callback', state: 'expected', timeoutMs: 5000 });
   const bad = request(callback.port, '/callback?state=expected');

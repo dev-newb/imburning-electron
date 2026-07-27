@@ -127,7 +127,7 @@ const elements = {
     alwaysOnTopToggle: document.getElementById('alwaysOnTopToggle'),
     warnThreshold: document.getElementById('warnThreshold'),
     dangerThreshold: document.getElementById('dangerThreshold'),
-    themeBtns: document.querySelectorAll('.theme-btn'),
+    themeCycleBtn: document.getElementById('themeCycleBtn'),
     timeFormat: document.getElementById('timeFormat'),
     weeklyDateFormat: document.getElementById('weeklyDateFormat'),
     refreshInterval: document.getElementById('refreshInterval'),
@@ -247,6 +247,7 @@ async function init() {
     const settings = await window.electronAPI.getSettings();
     window._cachedSettings = settings;
     applyTheme(settings.theme);
+    syncThemeCycleBtn(settings.theme);
     if (window.electronAPI.platform === 'darwin') {
         document.getElementById('trayLabel').textContent = 'Hide from Dock';
     }
@@ -583,20 +584,30 @@ function setupEventListeners() {
             errFn(result.error || 'Connection failed');
         }
     };
-    const wireConnect = (btn, errEl, provider) => {
+    const wireConnect = (btn, errEl, provider, extraErrFn) => {
         if (!btn) return;
         btn.addEventListener('click', () => {
             const original = btn.textContent;
             runConnect(provider,
                 () => { btn.disabled = true; btn.textContent = 'Waiting for browser sign-in...'; if (errEl) errEl.textContent = ''; },
                 () => { btn.disabled = false; btn.textContent = original; },
-                (msg) => { if (errEl) errEl.textContent = msg; });
+                (msg) => { if (errEl) errEl.textContent = msg; if (extraErrFn) extraErrFn(msg); });
         });
     };
     wireConnect(elements.connectOpenaiBtn, elements.connectErrorOpenai, 'openai');
     wireConnect(elements.connectGoogleBtn, elements.connectErrorGoogle, 'google');
-    wireConnect(elements.settingsConnectOpenaiBtn, null, 'openai');
-    wireConnect(elements.settingsConnectGoogleBtn, null, 'google');
+    // The Settings buttons report through the login-status line — passing null
+    // here silently swallowed every failure (port busy, refused login, timeout),
+    // which read as "the Connect button does nothing".
+    const settingsErr = (statusEl) => (msg) => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.classList.add('login-status-error');
+    };
+    wireConnect(elements.settingsConnectOpenaiBtn, null, 'openai',
+        settingsErr(elements.openaiLoginStatus));
+    wireConnect(elements.settingsConnectGoogleBtn, null, 'google',
+        settingsErr(elements.googleLoginStatus));
 
     // 'via CLI login' chips double as connect buttons
     const wireChipConnect = (chip, provider) => {
@@ -642,13 +653,18 @@ function setupEventListeners() {
     });
 
     // Theme buttons
-    elements.themeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            elements.themeBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            applyTheme(btn.dataset.theme);
+    // Theme cycle button (leftmost on the toolbar): dark -> light -> system.
+    // Applies immediately and persists on its own — no Settings visit needed.
+    if (elements.themeCycleBtn) {
+        elements.themeCycleBtn.addEventListener('click', async () => {
+            const order = ['dark', 'light', 'system'];
+            const current = (window._cachedSettings && window._cachedSettings.theme) || 'dark';
+            const next = order[(order.indexOf(current) + 1) % order.length];
+            syncThemeCycleBtn(next);
+            applyTheme(next);
+            await _saveSettingsPatch({ theme: next });
         });
-    });
+    }
 
     // Prevent accidental app hiding: enabling "Hide from Taskbar" force-enables
     // the Anthropic tray icons (ensures a tray icon exists to restore from)
@@ -4184,6 +4200,7 @@ async function loadSettings() {
         const cxConn = !!(cxNow && cxNow.connected);
         elements.openaiLoginStatus.textContent = cxConn ? (cxNow.email || 'Connected')
             : (cxNow ? 'Not connected (using CLI login)' : 'Not connected');
+        elements.openaiLoginStatus.classList.remove('login-status-error');
         elements.disconnectOpenaiBtn.style.display = cxConn ? '' : 'none';
         elements.settingsConnectOpenaiBtn.style.display = cxConn ? 'none' : '';
     }
@@ -4192,6 +4209,7 @@ async function loadSettings() {
         const gmConn = !!(gmNow && gmNow.connected);
         elements.googleLoginStatus.textContent = gmConn ? (gmNow.email || 'Connected')
             : (gmNow ? 'Not connected (using CLI login)' : 'Not connected');
+        elements.googleLoginStatus.classList.remove('login-status-error');
         elements.disconnectGoogleBtn.style.display = gmConn ? '' : 'none';
         elements.settingsConnectGoogleBtn.style.display = gmConn ? 'none' : '';
     }
@@ -4204,10 +4222,7 @@ async function loadSettings() {
     warnThreshold = settings.warnThreshold;
     dangerThreshold = settings.dangerThreshold;
 
-    elements.themeBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.theme === settings.theme);
-    });
-
+    syncThemeCycleBtn(settings.theme);
     applyTheme(settings.theme);
     if (window.electronAPI.platform === 'darwin') {
         document.getElementById('trayLabel').textContent = 'Hide from Dock';
@@ -4215,7 +4230,6 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-    const activeThemeBtn = document.querySelector('.theme-btn.active');
     const warn = parseInt(elements.warnThreshold.value) || 75;
     const danger = parseInt(elements.dangerThreshold.value) || 90;
 
@@ -4236,7 +4250,8 @@ async function saveSettings() {
         trayOpenai: elements.eyeOpenai.classList.contains('on'),
         trayGoogle: elements.eyeGoogle.classList.contains('on'),
         sectionCollapsed: window._cachedSettings?.sectionCollapsed || {},
-        theme: activeThemeBtn ? activeThemeBtn.dataset.theme : 'dark',
+        // Theme lives on the toolbar cycle button now, not in this form
+        theme: (window._cachedSettings && window._cachedSettings.theme) || 'dark',
         warnThreshold: warn,
         dangerThreshold: danger,
         timeFormat: elements.timeFormat.value || '12h',
@@ -4304,6 +4319,16 @@ function applyTheme(theme) {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const useDark = theme === 'dark' || (theme === 'system' && prefersDark);
     document.body.classList.toggle('theme-light', !useDark);
+}
+
+// Keep the toolbar cycle button's icon and tooltip on the current mode
+function syncThemeCycleBtn(theme) {
+    const btn = elements.themeCycleBtn;
+    if (!btn) return;
+    const mode = ['dark', 'light', 'system'].includes(theme) ? theme : 'dark';
+    btn.dataset.mode = mode;
+    const nextName = { dark: 'light', light: 'system', system: 'dark' }[mode];
+    btn.title = `Theme: ${mode} — click for ${nextName}`;
 }
 
 // Apply (or clear) the custom widget font colour from settings

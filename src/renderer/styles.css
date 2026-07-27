@@ -1405,32 +1405,9 @@ body.theme-light .threshold-input:focus {
 }
 
 /* Theme Selector */
-.theme-selector {
-    display: flex;
-    gap: 4px;
-}
 
-.theme-btn {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #808080;
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
 
-.theme-btn:hover {
-    color: #c0c0c0;
-    border-color: rgba(255,255,255,0.25);
-}
 
-.theme-btn.active {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.5);
-    color: #a78bfa;
-}
 
 /* Settings Footer */
 .settings-footer {
@@ -2600,6 +2577,7 @@ body.sz4 .usage-section.stretch-bar .usage-bar-group {
 
 /* ---- Toolbar strip (directly under the title bar, never hidden) ---- */
 .bottom-bar {
+    position: relative;
     -webkit-app-region: no-drag;
     display: flex;
     align-items: center;
@@ -3079,4 +3057,37 @@ body.no-pizazz .compact-bar-fill .fx {
     flex: 0 0 auto;
     width: 7px;
     height: 7px;
+}
+
+/* Toolbar theme cycle button: three stacked icons (moon / sun / monitor),
+   one visible per mode, swapping with a springy spin as the modes cycle. */
+/* Pinned to the bar's far left, under the robot in the title bar, while the
+   rest of the toolbar keeps its centered layout. */
+.theme-cycle-btn {
+    position: absolute;
+    left: 6px;
+    top: 3px;
+}
+
+.theme-cycle-btn .th-ico {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: -7px 0 0 -7px;
+    opacity: 0;
+    transform: rotate(-100deg) scale(0.4);
+    transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+}
+
+.theme-cycle-btn[data-mode="dark"] .th-moon,
+.theme-cycle-btn[data-mode="light"] .th-sun,
+.theme-cycle-btn[data-mode="system"] .th-sys {
+    opacity: 1;
+    transform: rotate(0) scale(1);
+}
+
+/* Settings login-status line doubles as the Connect error surface */
+.login-status-error {
+    color: #ef4444 !important;
 }
