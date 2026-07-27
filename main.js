@@ -1401,7 +1401,13 @@ const _burnAlertAt = {};                      // seriesKey -> last alert timesta
 // its 10-min pace falls below HALF the threshold that lit it (hysteresis),
 // or ten quiet minutes pass without re-qualifying. Independent of the alert
 // cooldown — notifications are throttled, the flames are live state.
-const BURN_SETTLE_MS = 10 * 60 * 1000;
+// Heavy use should stay visibly alight well after the spike that lit it —
+// a pool hammered for an hour reads as "on fire" for the session, not for ten
+// minutes. A clear stop still cools it, but over BURN_COOLING_MS rather than
+// instantly, so a pause between prompts doesn't snuff the flames.
+// (Distinct from BURN_COOLDOWN_MS above, which throttles notifications.)
+const BURN_SETTLE_MS = 45 * 60 * 1000;
+const BURN_COOLING_MS = 8 * 60 * 1000;
 const _burningSeries = {};                    // seriesKey -> { until }
 function getBurningSeriesMap() {
   const cutoff = Date.now();
@@ -1469,7 +1475,10 @@ function checkBurnAnomalies() {
     const jump = last.v - first.v;
     if (jump < BURN_MIN_JUMP) {
       // Well below any trigger — a burning series has clearly settled
-      if (_burningSeries[series.key] && jump < BURN_MIN_JUMP / 2) delete _burningSeries[series.key];
+      const cooling = _burningSeries[series.key];
+      if (cooling && jump < BURN_MIN_JUMP / 2) {
+        cooling.until = Math.min(cooling.until, now + BURN_COOLING_MS);
+      }
       continue; // negative = reset, small = normal
     }
 
@@ -1507,7 +1516,13 @@ function checkBurnAnomalies() {
       const settled = adaptiveThreshold != null
         ? jumpRate <= adaptiveThreshold / 2
         : jump < BURN_FALLBACK_JUMP / 2;
-      if (settled) delete _burningSeries[series.key];
+      // Ease off rather than snap out: dropping below the hysteresis line is
+      // normal mid-session (a pause to read, a slower prompt), and deleting
+      // here was the main reason a hard-burning pool went cold almost at once.
+      if (settled) {
+        const entry = _burningSeries[series.key];
+        entry.until = Math.min(entry.until, now + BURN_COOLING_MS);
+      }
     }
     if (!isAnomaly) continue;
 

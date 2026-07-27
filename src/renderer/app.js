@@ -1802,21 +1802,28 @@ function _spawnPixelFlame(layer, x, lifeMs, tall, palette) {
     }
     const f = document.createElement('div');
     f.className = 'fp';
+    const life = Math.round(lifeMs);
     f.style.cssText = `left:${x}px; bottom:1px; width:2px; height:2px; background:transparent;
         box-shadow:${cells.join(',')};
-        animation: pxFlame ${Math.round(lifeMs)}ms steps(7) forwards;`;
+        animation: pxFlame ${life}ms steps(7) forwards;`;
     layer.appendChild(f);
+    // Sprites animate fill:forwards, so nothing retires them on their own.
+    // A layer that never gets torn down — the reset orbs burn permanently —
+    // fills to the cap above and spawning stops, freezing the flame mid-lick.
+    setTimeout(() => f.remove(), life + 80);
 }
 
 function _spawnPixelSmoke(layer, x) {
     if (layer.childElementCount > 110) return;
     const s = document.createElement('div');
     s.className = 'fp';
+    const life = Math.round(_rnd(650, 1100));
     s.style.cssText = `left:${x}px; bottom:${_rnd(8, 13)}px; width:3px; height:3px;
         background:${_pick(['#6a6a78', '#7c7c8a', '#585866'])};
         --dx:${Math.round(_rnd(-2, 3)) * 3}px; --ry:${-Math.round(_rnd(5, 11)) * 3}px;
-        animation: pxSmoke ${Math.round(_rnd(650, 1100))}ms steps(6) forwards;`;
+        animation: pxSmoke ${life}ms steps(6) forwards;`;
     layer.appendChild(s);
+    setTimeout(() => s.remove(), life + 80);
 }
 
 // Style 2 ("particle inferno") building block: micro fire-motes born at the
@@ -1828,11 +1835,13 @@ function _spawnFireParticle(layer, x, palette) {
     p.className = 'fp';
     const size = Math.random() < 0.6 ? 2 : 1;
     const col = _pick([palette.core, palette.bright, palette.bright, palette.mid, palette.mid, palette.deep]);
+    const life = Math.round(_rnd(320, 680));
     p.style.cssText = `left:${x.toFixed(1)}px; bottom:${_rnd(0, 3).toFixed(0)}px; width:${size}px; height:${size}px;
         background:${col}; box-shadow: 0 0 3px ${col};
         --dx:${_rnd(-7, 7).toFixed(0)}px; --ry:${(-_rnd(9, 22)).toFixed(0)}px;
-        animation: fireRise ${Math.round(_rnd(320, 680))}ms ease-out forwards;`;
+        animation: fireRise ${life}ms ease-out forwards;`;
     layer.appendChild(p);
+    setTimeout(() => p.remove(), life + 80);
 }
 
 // Charred-paper ash: tiny grey flakes tumbling DOWN off the burn line
@@ -1840,11 +1849,13 @@ function _spawnAshFlake(layer, x) {
     if (layer.childElementCount > 110) return;
     const a = document.createElement('div');
     a.className = 'fp';
+    const life = Math.round(_rnd(700, 1250));
     a.style.cssText = `left:${x}px; bottom:${_rnd(5, 12)}px; width:2px; height:2px;
         background:${_pick(['#5c5c68', '#4a4a56', '#6e6e7a'])};
         --ax:${_rnd(-12, 12).toFixed(0)}px; --ay:${_rnd(16, 32).toFixed(0)}px; --ar:${_rnd(-160, 160).toFixed(0)}deg;
-        animation: ashFall ${Math.round(_rnd(700, 1250))}ms ease-in forwards;`;
+        animation: ashFall ${life}ms ease-in forwards;`;
     layer.appendChild(a);
+    setTimeout(() => a.remove(), life + 80);
 }
 
 // The sweep itself: a hot front races across the word; every few px it leaves
@@ -1962,9 +1973,12 @@ function _tickElementFire(el, now, minGapMs, isOrb, particleStyle) {
     if (isOrb) {
         if (particleStyle) {
             _spawnFireParticle(layer, width / 2 + _rnd(-3, 3), palette);
-            if (Math.random() < 0.35) _spawnPixelFlame(layer, width / 2 + _rnd(-2, 2), _rnd(240, 380), false, palette);
+            if (Math.random() < 0.5) _spawnPixelFlame(layer, width / 2 + _rnd(-2, 2), _rnd(240, 380), Math.random() < 0.2, palette);
         } else {
-            _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), false, palette);
+            // Overlapping licks with an occasional tall one: a single tongue
+            // repeating on its own reads as a glow rather than a flame.
+            _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), Math.random() < 0.22, palette);
+            if (Math.random() < 0.45) _spawnPixelFlame(layer, width / 2 + _rnd(-3.5, 3.5), _rnd(200, 380), false, palette);
         }
     } else if (particleStyle) {
         // Style 2: a storm of rising motes with the occasional small tongue
@@ -1988,7 +2002,7 @@ function _ambientFireFrame(now) {
     const orbs = document.querySelectorAll('.reset-dot');
     const particleStyle = (window._cachedSettings || {}).flameStyle === 'particle';
     for (const el of bars) _tickElementFire(el, now, particleStyle ? 26 : 60, false, particleStyle);
-    for (const el of orbs) _tickElementFire(el, now, particleStyle ? 140 : 300, true, particleStyle);
+    for (const el of orbs) _tickElementFire(el, now, particleStyle ? 70 : 120, true, particleStyle);
     if (bars.length || orbs.length) {
         requestAnimationFrame(_ambientFireFrame);
     } else {
@@ -2996,6 +3010,14 @@ function updateCompactBars(data) {
         if (hiddenRows['codex_cli_' + lim.key]) continue;
         pools.push({ co: 'openai', cli: true, code: rowCode('codex_' + lim.key, lim.label), name: 'CLI ' + lim.label, pct: clamp(lim.percent), color: CODE_COLORS.codex, burnKey: 'codex_cli_' + lim.key });
     }
+    // OpenAI banked limit-resets have no percentage to fill, so compact shows
+    // the orbs themselves in place of a bar rather than omitting the pool.
+    const compactResets = data.codex?.resetCredits;
+    if (compactResets && compactResets.available > 0
+        && (data.codex?.limits || []).length && !hiddenRows['codex_row_resets']) {
+        pools.push({ co: 'openai', code: 'RST', name: 'Limit Resets', pct: 0,
+            color: CODE_COLORS.codex, orbs: Math.min(compactResets.available, 12) });
+    }
     (data.gemini?.limits || []).forEach((lim, i) => {
         if (hiddenRows['gemini_' + lim.key]) return;
         pools.push({ co: 'google', code: rowCode('gemini_' + lim.key, lim.label), name: lim.label, pct: clamp(lim.percent), color: GEMINI_BLUES[i % GEMINI_BLUES.length], burnKey: 'gemini_' + lim.key });
@@ -3033,6 +3055,25 @@ function updateCompactBars(data) {
 
         const wrap = document.createElement('div');
         wrap.className = 'compact-bar-wrap';
+
+        // The reset bank renders as orbs, not a bar — same markup as the full
+        // view, so it inherits the glimmer and the pixel fire for free.
+        if (p.orbs) {
+            row.classList.add('compact-orbs');
+            const dots = document.createElement('div');
+            dots.className = 'reset-dots' + (p.orbs === 1 ? ' single' : '');
+            for (let i = 0; i < p.orbs; i++) {
+                const dot = document.createElement('span');
+                dot.className = 'reset-dot';
+                dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
+                dots.appendChild(dot);
+            }
+            wrap.appendChild(dots);
+            row.appendChild(wrap);
+            container.appendChild(row);
+            continue;
+        }
+
         const bg = document.createElement('div');
         bg.className = 'compact-bar-bg';
         const fill = document.createElement('div');

@@ -207,11 +207,15 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.match(app, /function computeBurningRowKeys\(data\)/);
   assert.match(app, /_burningRowKeys = computeBurningRowKeys\(data\);/);
   assert.match(app, /--fire-col/);
-  // CSS: heat underlay on full and compact bars, halo on the reset orbs,
-  // and the live pixel-fire loop that actually burns them
+  // CSS: heat underlay on full and compact bars, and the live pixel-fire loop
+  // that actually burns them
   assert.match(css, /\.progress-fill\.on-fire,\s*\.compact-bar-fill\.on-fire/);
-  assert.match(css, /\.reset-dot::after/);
   assert.match(css, /\.ambient-fire/);
+  // The orbs' flame is the pixel engine, never a CSS tongue: a gradient read
+  // as a glow, and with animations off it sat frozen on top of the circle,
+  // making a round orb look deformed. No-pizazz drops the fire layer whole.
+  assert.doesNotMatch(css, /\.reset-dot::(before|after)/);
+  assert.match(css, /body\.no-pizazz \.reset-dot \.fx/);
   assert.match(app, /function _tickElementFire/);
   assert.match(app, /_spawnPixelFlame\(layer, _rnd\(0, width\), _rnd\(240, 460\), Math\.random\(\) < 0\.1, palette\)/);
   // Flame style: persisted on both sides, both engines present, and switched
@@ -222,6 +226,41 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.match(app, /_saveSettingsPatch\(\{ flameStyle: next \}\)/);
   const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /id="flameStyle"/);
+});
+
+test('a dormant provider ices its letters, not a block around the logo', () => {
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+  // The sheen is clipped to a duplicate of the wordmark, so it rides the
+  // glyphs; that duplicate comes from data-ice on each section name.
+  assert.match(css, /content: attr\(data-ice\)/);
+  assert.match(css, /-webkit-background-clip: text/);
+  for (const brand of ['Anthropic', 'OpenAI', 'Google']) {
+    assert.match(html, new RegExp(`data-ice="${brand}"`));
+  }
+  // No pane of ice in front of the logo any more.
+  assert.doesNotMatch(css, /half-melted/);
+  // Thawing must not blank .brand-openai, whose letters ARE a clipped
+  // gradient over color:transparent — killing the background hides them.
+  const thaw = css.slice(css.indexOf('body.no-pizazz .section-header.frozen'));
+  assert.doesNotMatch(thaw.slice(0, 400), /background: none/);
+});
+
+test('compact mode shows the OpenAI reset bank as orbs', () => {
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  assert.match(app, /orbs: Math\.min\(compactResets\.available, 12\)/);
+  assert.match(app, /row\.classList\.add\('compact-orbs'\)/);
+  assert.match(css, /\.compact-row\.compact-orbs \.reset-dots/);
+});
+
+test('a hard-burning pool stays alight well past the spike', () => {
+  const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
+  assert.match(main, /const BURN_SETTLE_MS = 45 \* 60 \* 1000;/);
+  // A quiet window trims the burn to a cooldown rather than deleting it
+  // outright, so a pause between prompts doesn't snuff the flames.
+  assert.match(main, /cooling\.until = Math\.min\(cooling\.until, now \+ BURN_COOLING_MS\)/);
+  assert.doesNotMatch(main, /delete _burningSeries\[series\.key\];/);
 });
 
 test('settings window fits all content and restores the prior window', () => {
