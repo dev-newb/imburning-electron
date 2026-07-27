@@ -228,6 +228,29 @@ test('burn-detector fire is wired end to end in the pool colour', () => {
   assert.doesNotMatch(html, /id="flameStyle"/);
 });
 
+test('flame palette accepts every colour form its callers pass', () => {
+  const src = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const start = src.indexOf('function _toHex(');
+  const end = src.indexOf('// Chunky flame sprite');
+  assert.ok(start > 0 && end > start, 'palette helpers not found');
+  const block = 'const _paletteCache = new Map();\n' + src.slice(start, end);
+  const palette = new Function(block + '\nreturn _firePalette;')();
+  // Full-view bars pass a hex...
+  assert.equal(palette('#d946ef').mid, '#d946ef');
+  // ...and an inline style read back yields rgb(), which used to be rejected
+  // outright, silently painting every compact flame the default orange.
+  assert.equal(palette('rgb(217, 70, 239)').mid, '#d946ef');
+  assert.equal(palette('#e0916f').mid, palette('rgb(224, 145, 111)').mid);
+  // Genuine nonsense still falls back rather than throwing.
+  assert.equal(palette('not-a-colour').mid, '#ff922b');
+});
+
+test('compact bars hand the flame the colour they were painted', () => {
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  assert.match(app, /fill\.style\.setProperty\('--fire-col', barCol\)/);
+  assert.doesNotMatch(app, /setProperty\('--fire-col', fill\.style\.background\)/);
+});
+
 test('a dormant provider ices its letters, not a block around the logo', () => {
   const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
   const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');

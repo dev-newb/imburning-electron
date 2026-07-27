@@ -1759,20 +1759,30 @@ const _pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 // Derive a 4-tone flame palette (deep/mid/bright/core) from any base colour —
 // this is how the burn-alert fire wears each bar's own colour.
 const _paletteCache = new Map();
+// Accept either form a caller might hand us. An inline style read back as
+// `el.style.background` comes out as "rgb(r, g, b)", and silently falling back
+// to the default orange made every compact flame the wrong colour.
+function _toHex(col) {
+    const s = String(col || '').trim();
+    if (/^#?[0-9a-f]{6}$/i.test(s)) return s[0] === '#' ? s : '#' + s;
+    const m = s.match(/^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
+    if (m) return '#' + [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('');
+    return null;
+}
 function _mixHex(hex, target, f) {
     const p = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-    const m = /^#?[0-9a-f]{6}$/i.test(hex) ? (hex[0] === '#' ? hex : '#' + hex) : '#ff922b';
+    const m = _toHex(hex) || '#ff922b';
     const [r1, g1, b1] = p(m);
     const [r2, g2, b2] = p(target);
     const c = (a, b2v) => Math.round(a + (b2v - a) * f).toString(16).padStart(2, '0');
     return '#' + c(r1, r2) + c(g1, g2) + c(b1, b2);
 }
 function _firePalette(base) {
-    const key = String(base || '').trim() || '#ff922b';
+    const key = _toHex(base) || '#ff922b';
     if (!_paletteCache.has(key)) {
         _paletteCache.set(key, {
             deep: _mixHex(key, '#000000', 0.3),
-            mid: key.startsWith('#') ? key : '#ff922b',
+            mid: key,
             bright: _mixHex(key, '#ffffff', 0.45),
             core: _mixHex(key, '#ffffff', 0.78)
         });
@@ -1787,25 +1797,35 @@ function _spawnPixelFlame(layer, x, lifeMs, tall, palette) {
     if (layer.childElementCount > 110) return; // bounded — never floods the DOM
     const P = palette || _PXCOLS;
     const cells = [];
-    const rows = Math.floor(tall ? _rnd(7, 11) : _rnd(4, 7));
+    // 1px cells over a 5-wide grid: the same flame size as the old 2px/3-wide
+    // sprite but at twice the detail, so the tongue can actually taper and
+    // flicker at its edges instead of stepping in chunky 2px blocks.
+    const CELL = 1;
+    const rows = Math.floor(tall ? _rnd(15, 23) : _rnd(9, 15));
     for (let r = 0; r < rows; r++) {
-        for (const c of [-1, 0, 1]) {
-            const edge = Math.abs(c) === 1;
-            if (r === rows - 1 && edge) continue;
-            if (r === rows - 1 && Math.random() < 0.4) continue;
-            if (edge && Math.random() < 0.25) continue;
-            const col = r >= rows - 2 ? (Math.random() < 0.5 ? P.mid : P.bright)
-                : edge ? (Math.random() < 0.5 ? P.deep : P.mid)
-                    : (Math.random() < 0.45 ? P.core : P.bright);
-            cells.push(`${c * 2}px ${-r * 2}px 0 0 ${col}`);
+        const frac = r / rows;                    // 0 at the base, 1 at the tip
+        for (const c of [-2, -1, 0, 1, 2]) {
+            const a = Math.abs(c);
+            // Narrow toward the tip so it comes to a point rather than a slab
+            if (a === 2 && frac > 0.46) continue;
+            if (a === 1 && frac > 0.84) continue;
+            if (r === rows - 1 && a > 0) continue;
+            if (a === 2 && Math.random() < 0.34) continue;
+            if (a === 1 && Math.random() < 0.16) continue;
+            if (r === rows - 1 && Math.random() < 0.35) continue;
+            const col = frac > 0.74 ? (Math.random() < 0.5 ? P.mid : P.bright)
+                : a === 2 ? (Math.random() < 0.6 ? P.deep : P.mid)
+                    : a === 1 ? (Math.random() < 0.5 ? P.deep : P.mid)
+                        : (Math.random() < 0.45 ? P.core : P.bright);
+            cells.push(`${c * CELL}px ${-r * CELL}px 0 0 ${col}`);
         }
     }
     const f = document.createElement('div');
     f.className = 'fp';
     const life = Math.round(lifeMs);
-    f.style.cssText = `left:${x}px; bottom:1px; width:2px; height:2px; background:transparent;
+    f.style.cssText = `left:${x}px; bottom:1px; width:${CELL}px; height:${CELL}px; background:transparent;
         box-shadow:${cells.join(',')};
-        animation: pxFlame ${life}ms steps(7) forwards;`;
+        animation: pxFlame ${life}ms steps(10) forwards;`;
     layer.appendChild(f);
     // Sprites animate fill:forwards, so nothing retires them on their own.
     // A layer that never gets torn down — the reset orbs burn permanently —
@@ -1989,6 +2009,8 @@ function _tickElementFire(el, now, minGapMs, isOrb, particleStyle) {
     } else {
         // Style 1: classic chunky pixel flames
         _spawnPixelFlame(layer, _rnd(0, width), _rnd(240, 460), Math.random() < 0.1, palette);
+        // A second tongue most ticks: one lick at a time read as sparse
+        if (Math.random() < 0.55) _spawnPixelFlame(layer, _rnd(0, width), _rnd(200, 400), false, palette);
         if (Math.random() < 0.1) _spawnPixelSmoke(layer, _rnd(0, width));
     }
 }
@@ -2001,8 +2023,8 @@ function _ambientFireFrame(now) {
     const bars = document.querySelectorAll('.progress-fill.on-fire, .compact-bar-fill.on-fire');
     const orbs = document.querySelectorAll('.reset-dot');
     const particleStyle = (window._cachedSettings || {}).flameStyle === 'particle';
-    for (const el of bars) _tickElementFire(el, now, particleStyle ? 26 : 60, false, particleStyle);
-    for (const el of orbs) _tickElementFire(el, now, particleStyle ? 70 : 120, true, particleStyle);
+    for (const el of bars) _tickElementFire(el, now, particleStyle ? 20 : 42, false, particleStyle);
+    for (const el of orbs) _tickElementFire(el, now, particleStyle ? 55 : 88, true, particleStyle);
     if (bars.length || orbs.length) {
         requestAnimationFrame(_ambientFireFrame);
     } else {
@@ -3079,13 +3101,16 @@ function updateCompactBars(data) {
         const fill = document.createElement('div');
         fill.className = 'compact-bar-fill';
         fill.style.width = `${p.pct}%`;
-        fill.style.background = p.pct >= dangerThreshold ? '#ef4444'
+        const barCol = p.pct >= dangerThreshold ? '#ef4444'
             : p.pct >= warnThreshold ? '#f59e0b' : p.color;
+        fill.style.background = barCol;
         // Compact bars carry the same burn-detector fire, tinted with the
-        // exact colour the fill just received (threshold recolours included)
+        // exact colour the fill just received (threshold recolours included).
+        // Pass the hex we chose, not fill.style.background — reading that back
+        // yields "rgb(r, g, b)", which the palette used to reject outright.
         if (p.burnKey && _burningRowKeys.has(p.burnKey)) {
             fill.classList.add('on-fire');
-            fill.style.setProperty('--fire-col', fill.style.background);
+            fill.style.setProperty('--fire-col', barCol);
         }
         bg.appendChild(fill);
         const pctEl = document.createElement('span');
