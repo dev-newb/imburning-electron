@@ -286,6 +286,22 @@ test('a hard-burning pool stays alight well past the spike', () => {
   assert.doesNotMatch(main, /delete _burningSeries\[series\.key\];/);
 });
 
+test('blueprint toolbar: dashed plans, and the clown is class-driven SVG', () => {
+  const html = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  // Every toolbar icon carries a dashed construction layer; no sprite <img>s left
+  assert.match(html, /class="bpg"/);
+  assert.doesNotMatch(html, /press-up\.png|clown-happy\.png/);
+  // Jail/press state is class toggling now, not src swapping
+  assert.match(app, /btn\.classList\.toggle\('jailed', !on\)/);
+  assert.match(app, /pressBtn\.classList\.toggle\('pressed', compact\)/);
+  assert.doesNotMatch(app, /clown-jail\.png|press-down\.png/);
+  // The jailing animation must survive no-pizazz: the global transition kill
+  // is !important, so the clown rules need their own !important to outrank it
+  assert.match(css, /body\.no-pizazz \.clown-cage \{ transition:[^}]+!important/);
+});
+
 test('settings window fits all content and restores the prior window', () => {
   const main = fs.readFileSync(path.join(repoDir, 'main.js'), 'utf8');
   const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');

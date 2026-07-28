@@ -3029,20 +3029,23 @@ function checkUsageAlerts(data) {
 // crying, and every animation/transition in the app goes dead still.
 function applyPizazz(on) {
     document.body.classList.toggle('no-pizazz', !on);
-    const img = document.getElementById('clownImg');
+    // The clown is an inline SVG now: jailing toggles a class and CSS slams
+    // the bars down, flips the smile, drains his colour and starts the tears.
     const btn = document.getElementById('clownBtn');
-    if (img) img.src = on ? '../../assets/clown-happy.png' : '../../assets/clown-jail.png';
-    if (btn) btn.title = on
-        ? 'Pizazz: ON — click to jail the clown and turn off all visual effects'
-        : 'Pizazz: OFF — the clown weeps behind bars. Click to free him and the sparkles.';
+    if (btn) {
+        btn.classList.toggle('jailed', !on);
+        btn.title = on
+            ? 'Pizazz: ON — click to jail the clown and turn off all visual effects'
+            : 'Pizazz: OFF — the clown weeps behind bars. Click to free him and the sparkles.';
+    }
 }
 
 function applyCompactMode(compact) {
     isCompactMode = compact;
 
     // Press slams down while the widget is crushed
-    const pressImg = document.getElementById('pressImg');
-    if (pressImg) pressImg.src = compact ? '../../assets/press-down.png' : '../../assets/press-up.png';
+    const pressBtn = document.getElementById('compactPressBtn');
+    if (pressBtn) pressBtn.classList.toggle('pressed', compact);
 
     // Add/remove compact-mode class from body for CSS styling
     if (compact) {

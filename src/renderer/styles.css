@@ -3091,3 +3091,90 @@ body.no-pizazz .compact-bar-fill .fx {
 .login-status-error {
     color: #ef4444 !important;
 }
+
+/* =======================================================================
+   Blueprint toolbar. Every icon is a dashed plan plus a solid part, and
+   on hover the solid part does its job: the press descends, refresh spins,
+   the key slides home, the graph line rises to its forecast, the gear
+   meshes. The clown is the one full-colour exception - see below.
+   ======================================================================= */
+.bottom-bar .control-btn { color: #7fb2d9; }
+.bottom-bar .control-btn:hover { color: #bfe3ff; background: rgba(80, 140, 200, 0.18); }
+body.theme-light .bottom-bar .control-btn { color: #33628c; }
+body.theme-light .bottom-bar .control-btn:hover { color: #1d4568; background: rgba(51, 98, 140, 0.12); }
+
+.bpg {
+    stroke-dasharray: 2.5 2;
+    opacity: 0.5;
+}
+
+.bp-press, .bp-key, .bp-line { transition: transform 0.32s ease; }
+
+/* press: hover dips the platen; compact mode holds it down on the plan */
+.press-btn:hover .bp-press { transform: translateY(3px); }
+.press-btn.pressed .bp-press { transform: translateY(5.5px); }
+
+/* refresh: one clean revolution */
+.bp-ref { transform-origin: 50% 50%; transition: transform 0.6s ease; }
+.refresh-btn:hover .bp-ref { transform: rotate(360deg); }
+
+/* auth key slides into its dashed lock */
+.local-login-refresh-btn:hover .bp-key { transform: translateX(2.5px); }
+
+/* graph: the solid line rises to meet its dashed forecast */
+.bp-line { transform: translateY(2.5px); }
+.graph-btn:hover .bp-line { transform: translateY(0); }
+
+/* settings gear meshes a notch */
+.bp-gear { transform-origin: 50% 50%; transition: transform 0.45s ease; }
+.settings-btn:hover .bp-gear { transform: rotate(60deg); }
+
+/* =======================================================================
+   The clown: whiteface in full colour inside the blueprint world.
+   Jailed (pizazz off): bars slam down, the smile flips, dashed cyan tears
+   start, and his colour drains toward the draftsman grey.
+   ======================================================================= */
+.clown-btn svg { overflow: visible; display: block; }
+
+.clown-paint { transition: filter 0.55s ease; }
+.clown-btn.jailed .clown-paint { filter: saturate(0.22) brightness(0.82); }
+
+.clown-mouth { transition: transform 0.35s ease; transform-origin: 12px 15.4px; }
+.clown-btn.jailed .clown-mouth { transform: rotate(180deg) translateY(2.6px); }
+
+.clown-tear {
+    fill: none;
+    stroke: #67e8f9;
+    stroke-width: 1.2;
+    stroke-dasharray: 1.5 2.2;
+    opacity: 0;
+    transition: opacity 0.3s ease 0.3s;
+}
+.clown-btn.jailed .clown-tear { opacity: 0.95; }
+
+.clown-cage {
+    fill: none;
+    stroke: #7fb2d9;
+    stroke-width: 1.3;
+    stroke-linecap: square;
+    transform: translateY(-16px);
+    opacity: 0;
+    transition: transform 0.34s cubic-bezier(0.6, 0, 0.9, 1), opacity 0.18s;
+}
+.clown-btn.jailed .clown-cage { transform: translateY(0); opacity: 1; }
+body.theme-light .clown-cage { stroke: #33628c; }
+
+/* Jailing him turns pizazz OFF, which freezes every transition in the app -
+   including, without these, the very bars locking him up. The last animation
+   allowed to play is the clown being jailed. (Higher specificity than the
+   global body.no-pizazz * kill, with the !important to match.) */
+body.no-pizazz .clown-cage { transition: transform 0.34s cubic-bezier(0.6, 0, 0.9, 1), opacity 0.18s !important; }
+body.no-pizazz .clown-paint {
+    transition: filter 0.55s ease !important;
+    /* The global no-pizazz rules also kill filters app-wide (that is how the
+       frozen logos thaw) - which silently erased the colour drain, since
+       jailed and no-pizazz always co-occur. Re-assert the drained look. */
+    filter: saturate(0.22) brightness(0.82) !important;
+}
+body.no-pizazz .clown-mouth { transition: transform 0.35s ease !important; }
+body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
