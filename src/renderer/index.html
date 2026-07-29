@@ -43,10 +43,10 @@
             <div class="bottom-bar" id="bottomBar">
                 <!-- Theme cycle: dark -> light -> system. Leftmost, under the robot. -->
                 <button class="control-btn theme-cycle-btn" id="themeCycleBtn" data-mode="dark" title="Theme: dark — click for light">
-                    <!-- Blueprint hand: each mode is a solid part plus its dashed construction lines -->
+                    <!-- Half-moon: one bold crescent, no dashed ring — same
+                         treatment as the sun below, so both read at small size -->
                     <svg class="th-ico th-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                        <circle class="bpg" cx="12" cy="12" r="9" />
-                        <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" />
+                        <path d="M20.8 13.6A9.3 9.3 0 1 1 10.4 3.2 7.3 7.3 0 0 0 20.8 13.6z" />
                     </svg>
                     <!-- Sun: small core, long detached rays, no guide ring — the
                          ringed-spoke version read as a second settings gear. -->
@@ -60,12 +60,18 @@
                     </svg>
                 </button>
                 <div class="toolbar-group toolbar-group-play">
-                    <button class="control-btn press-btn" id="compactPressBtn" title="Compact mode — stomp the widget down">
+                    <button class="control-btn press-btn" id="compactPressBtn" title="Compact mode — squeeze the widget down">
+                        <!-- Slinky: coils at full length in normal mode, bunched
+                             down onto the base plate when compact is on. -->
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <path class="bpg" d="M6 9h12M9 9v4h6V9" />
-                            <g class="bp-press"><path d="M4 3h16M9 3v3.5h6V3" /></g>
-                            <path d="M4 20.5h16" />
-                            <path class="bpg" d="M8 16.5h8" />
+                            <path class="sl-plate" d="M4.5 3.5h15" />
+                            <g class="sl-coils">
+                                <ellipse cx="12" cy="7" rx="7.2" ry="1.9" />
+                                <ellipse cx="12" cy="10.4" rx="7.2" ry="1.9" />
+                                <ellipse cx="12" cy="13.8" rx="7.2" ry="1.9" />
+                                <ellipse cx="12" cy="17.2" rx="7.2" ry="1.9" />
+                            </g>
+                            <path d="M4.5 20.5h15" />
                         </svg>
                     </button>
                     <!-- The one full-colour character in the blueprint world. Jailing

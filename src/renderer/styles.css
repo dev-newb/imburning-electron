@@ -3198,27 +3198,28 @@ body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
 .bottom-bar { justify-content: flex-start; gap: 8px; }
 .toolbar-spacer { flex: 1 1 auto; width: auto; min-width: 12px; }
 
-/* Normal-mode sizes: 32px buttons (3px pad + 32 + 3px = 38 bar), art 28 */
-body:not(.compact-mode) .control-btn { width: 32px; height: 32px; }
-body:not(.compact-mode) .control-btn svg { width: 28px; height: 28px; }
-body:not(.compact-mode) .clown-btn svg { width: 30px; height: 30px; }
-body:not(.compact-mode) .theme-cycle-btn .th-ico { width: 28px; height: 28px; margin: -14px 0 0 -14px; }
-body:not(.compact-mode) .bottom-bar { height: 38px; gap: 10px; }
-body:not(.compact-mode) .bottom-bar .sprite-btn img { width: 28px; height: 28px; }
+/* Normal-mode sizes: 26px buttons (3px pad + 26 + 3px = 32 bar), art 22.
+   The four window-control caption buttons keep their size. */
+body:not(.compact-mode) .control-btn { width: 26px; height: 26px; }
+body:not(.compact-mode) .control-btn svg { width: 22px; height: 22px; }
+body:not(.compact-mode) .clown-btn svg { width: 24px; height: 24px; }
+body:not(.compact-mode) .theme-cycle-btn .th-ico { width: 22px; height: 22px; margin: -11px 0 0 -11px; }
+body:not(.compact-mode) .bottom-bar { height: 32px; gap: 10px; }
+body:not(.compact-mode) .bottom-bar .sprite-btn img { width: 22px; height: 22px; }
 body:not(.compact-mode) .toolbar-group { gap: 10px; }
 body:not(.compact-mode) .caption-btn { width: 40px; height: 29px; font-size: 24px; }
 body:not(.compact-mode) .caption-btn svg { width: 25px; height: 25px; }
 body:not(.compact-mode) .section-arrow { width: 18px; height: 18px; }
-body:not(.compact-mode) .section-eye { width: 25px; height: 25px; }
-body:not(.compact-mode) .section-eye svg { width: 22px; height: 22px; }
+body:not(.compact-mode) .section-eye { width: 20px; height: 20px; }
+body:not(.compact-mode) .section-eye svg { width: 18px; height: 18px; }
 
 /* Compact: tighter than stock — buttons shrink to 24px with the art still
    filling them (~80%), the caption cluster pulls in (28x22 buttons), and
    the one-line title gets the room the wider 320px window provides. */
-body.compact-mode .control-btn { width: 24px; height: 24px; }
-body.compact-mode .control-btn svg { width: 19px; height: 19px; }
-body.compact-mode .clown-btn svg { width: 21px; height: 21px; }
-body.compact-mode .theme-cycle-btn .th-ico { width: 19px; height: 19px; margin: -9.5px 0 0 -9.5px; }
+body.compact-mode .control-btn { width: 19px; height: 19px; }
+body.compact-mode .control-btn svg { width: 15px; height: 15px; }
+body.compact-mode .clown-btn svg { width: 17px; height: 17px; }
+body.compact-mode .theme-cycle-btn .th-ico { width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; }
 body.compact-mode .caption-btn { width: 28px; height: 22px; font-size: 15px; }
 body.compact-mode .caption-btn svg { width: 12px; height: 12px; }
 body.compact-mode .title { font-size: 13px; }
@@ -3228,3 +3229,30 @@ body.compact-mode .title span { white-space: nowrap; }
    endpoints so the loop closes without a visible seam. */
 .local-login-refresh-btn:hover .bp-cursor { animation: cursorBlink 0.9s steps(1) infinite; }
 @keyframes cursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* The theme cycle stands apart from the view controls it isn't grouped
+   with — compact and the clown are a pair, the theme button is its own
+   thing, so give it breathing room rather than one undifferentiated run. */
+.theme-cycle-btn { margin-right: 8px; }
+body:not(.compact-mode) .theme-cycle-btn { margin-right: 14px; }
+
+/* Slinky (compact button): coils ride down and bunch onto the base plate
+   as the widget squeezes. Hover previews about half the travel; .pressed
+   (compact actually on) goes all the way down. */
+.sl-plate,
+.sl-coils ellipse { transition: transform 0.34s cubic-bezier(0.4, 0, 0.2, 1); }
+.press-btn:hover .sl-plate { transform: translateY(4.5px); }
+.press-btn:hover .sl-coils ellipse:nth-child(1) { transform: translateY(4px); }
+.press-btn:hover .sl-coils ellipse:nth-child(2) { transform: translateY(2.9px); }
+.press-btn:hover .sl-coils ellipse:nth-child(3) { transform: translateY(1.8px); }
+.press-btn:hover .sl-coils ellipse:nth-child(4) { transform: translateY(0.7px); }
+.press-btn.pressed .sl-plate { transform: translateY(9px); }
+.press-btn.pressed .sl-coils ellipse:nth-child(1) { transform: translateY(8px); }
+.press-btn.pressed .sl-coils ellipse:nth-child(2) { transform: translateY(5.8px); }
+.press-btn.pressed .sl-coils ellipse:nth-child(3) { transform: translateY(3.6px); }
+.press-btn.pressed .sl-coils ellipse:nth-child(4) { transform: translateY(1.4px); }
+
+/* Clown: the head fills the button instead of floating in it. The cage is
+   deliberately left unscaled — the bars still frame the button edges. */
+.clown-paint,
+.clown-tear { transform: scale(1.25); transform-origin: 12px 12.3px; }
