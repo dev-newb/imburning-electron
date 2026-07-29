@@ -3200,6 +3200,13 @@ body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
    side of a centred spacer. Same arrangement in both modes. */
 .theme-cycle-btn { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); margin: 0; }
 .bottom-bar { justify-content: center; gap: 8px; }
+/* Both groups take equal flex, so the fixed spacer between them lands on
+   the bar's exact midpoint; each group's buttons hug the spacer, which is
+   what puts the whole set together in the middle. (The play group has 2
+   buttons and utility has 4, so a centred spacer and a centred *set* can't
+   both be true — the spacer is the one the layout is built around.) */
+.toolbar-group-play { flex: 1 1 0; justify-content: flex-end; }
+.toolbar-group-utility { flex: 1 1 0; justify-content: flex-start; }
 .toolbar-spacer { flex: 0 0 auto; width: 22px; }
 body:not(.compact-mode) .toolbar-spacer { width: 44px; }
 
