@@ -3178,3 +3178,19 @@ body.no-pizazz .clown-paint {
 }
 body.no-pizazz .clown-mouth { transition: transform 0.35s ease !important; }
 body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
+
+/* =======================================================================
+   Bigger controls (local build): the original art, unchanged, just given
+   room — buttons grow 1.5x and the glyph fills ~80% of the button instead
+   of ~55%, leaving a little padding. No new artwork.
+   ======================================================================= */
+.control-btn { width: 42px; height: 42px; }
+.control-btn svg { width: 34px; height: 34px; }
+.clown-btn svg { width: 38px; height: 38px; }
+.theme-cycle-btn .th-ico { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+.bottom-bar .sprite-btn img { width: 33px; height: 33px; }
+.caption-btn { width: 54px; height: 39px; font-size: 28px; }
+.caption-btn svg { width: 30px; height: 30px; }
+.section-arrow { width: 18px; height: 18px; }
+.section-eye { width: 33px; height: 33px; }
+.section-eye svg { width: 27px; height: 27px; }
