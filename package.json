@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.burnwatch.app",
-    "productName": "Burnwatch",
+    "productName": "I'm Burning!",
     "copyright": "Copyright © 2026 Burnwatch (dev-newb) · based on Claude Usage Widget © Slavomir Durej",
     "publish": [
       {
@@ -85,7 +85,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.icns",
+      "icon": "assets/burning-robot.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",

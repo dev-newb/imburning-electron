@@ -12,7 +12,7 @@
 set -u
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-APP_NAME="Burnwatch"
+APP_NAME="I'm Burning!"
 LOG="$HOME/Library/Logs/burnwatch-update.log"
 
 # launchd hands scripts a bare PATH — node/npm/git live in these dirs, so a
@@ -24,7 +24,7 @@ exec >>"$LOG" 2>&1
 echo "=== $(date) ==="
 
 # The app is closed during a rebuild, so progress has to surface somewhere.
-notify() { osascript -e "display notification \"$1\" with title \"Burnwatch\"" >/dev/null 2>&1; }
+notify() { osascript -e "display notification \"$1\" with title \"I'm Burning!\"" >/dev/null 2>&1; }
 
 cd "$REPO_DIR" || { echo "repo not found at $REPO_DIR"; exit 1; }
 command -v npm >/dev/null || { echo "npm not found — install Node.js from nodejs.org"; exit 1; }

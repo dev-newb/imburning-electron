@@ -3183,42 +3183,39 @@ body.no-pizazz .clown-mouth { transition: transform 0.35s ease !important; }
 body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
 
 /* =======================================================================
-   Bigger controls (local build): the original art, unchanged, just given
-   room — buttons grow 1.5x and the glyph fills ~80% of the button instead
-   of ~55%, leaving a little padding. No new artwork. Scoped to normal
-   mode: compact keeps the stock small metrics. The bar grows to seat the
-   42px buttons (3px pad + 42 + 3px = 48) so nothing hangs below the row.
+   Local build: bigger controls, one toolbar layout.
+   Normal mode: buttons ~1.1x stock (42px round dropped 25% to 32) with the
+   original art at ~88% of the button — small padding, edge-to-edge feel.
+   Compact mode: stock 28px buttons, art filled to 22px.
+   BOTH modes share the toolbar convention the markup declares: playful
+   view controls LEFT, utility controls RIGHT — theme button in flow, the
+   spacer flexes, the utility group anchors to the right edge.
    ======================================================================= */
-body:not(.compact-mode) .control-btn { width: 42px; height: 42px; }
-body:not(.compact-mode) .control-btn svg { width: 34px; height: 34px; }
-body:not(.compact-mode) .clown-btn svg { width: 38px; height: 38px; }
-body:not(.compact-mode) .theme-cycle-btn .th-ico { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
-body:not(.compact-mode) .bottom-bar { height: 48px; }
-body:not(.compact-mode) .bottom-bar .sprite-btn img { width: 33px; height: 33px; }
-
-/* Toolbar convention (NORMAL mode only): playful view controls LEFT,
-   utility controls RIGHT — the theme button joins the flow at the far
-   left and the spacer flexes, anchoring the utility group to the right
-   edge. Compact keeps the stock layout untouched: corner theme button,
-   centered cluster, fixed 22px spacer — the original spacing. */
 /* relative, not static: the stacked th-ico icons inside are absolutely
    positioned and need the button itself to stay their containing block.
    Zero the stock left/top offsets so relative doesn't shift it in flow. */
-body:not(.compact-mode) .theme-cycle-btn { position: relative; left: 0; top: 0; }
-body:not(.compact-mode) .bottom-bar { justify-content: flex-start; gap: 12px; }
-body:not(.compact-mode) .toolbar-spacer { flex: 1 1 auto; width: auto; min-width: 12px; }
-body:not(.compact-mode) .toolbar-group { gap: 12px; }
+.theme-cycle-btn { position: relative; left: 0; top: 0; }
+.bottom-bar { justify-content: flex-start; gap: 8px; }
+.toolbar-spacer { flex: 1 1 auto; width: auto; min-width: 12px; }
 
-/* Compact: stock button and bar geometry, but the art fills the button
-   interior (~80%) instead of rattling around at ~55%. */
+/* Normal-mode sizes: 32px buttons (3px pad + 32 + 3px = 38 bar), art 28 */
+body:not(.compact-mode) .control-btn { width: 32px; height: 32px; }
+body:not(.compact-mode) .control-btn svg { width: 28px; height: 28px; }
+body:not(.compact-mode) .clown-btn svg { width: 30px; height: 30px; }
+body:not(.compact-mode) .theme-cycle-btn .th-ico { width: 28px; height: 28px; margin: -14px 0 0 -14px; }
+body:not(.compact-mode) .bottom-bar { height: 38px; gap: 10px; }
+body:not(.compact-mode) .bottom-bar .sprite-btn img { width: 28px; height: 28px; }
+body:not(.compact-mode) .toolbar-group { gap: 10px; }
+body:not(.compact-mode) .caption-btn { width: 40px; height: 29px; font-size: 24px; }
+body:not(.compact-mode) .caption-btn svg { width: 25px; height: 25px; }
+body:not(.compact-mode) .section-arrow { width: 18px; height: 18px; }
+body:not(.compact-mode) .section-eye { width: 25px; height: 25px; }
+body:not(.compact-mode) .section-eye svg { width: 22px; height: 22px; }
+
+/* Compact: stock button and bar geometry, art filled to ~80% */
 body.compact-mode .control-btn svg { width: 22px; height: 22px; }
 body.compact-mode .clown-btn svg { width: 26px; height: 26px; }
 body.compact-mode .theme-cycle-btn .th-ico { width: 22px; height: 22px; margin: -11px 0 0 -11px; }
-body:not(.compact-mode) .caption-btn { width: 54px; height: 39px; font-size: 28px; }
-body:not(.compact-mode) .caption-btn svg { width: 30px; height: 30px; }
-body:not(.compact-mode) .section-arrow { width: 18px; height: 18px; }
-body:not(.compact-mode) .section-eye { width: 33px; height: 33px; }
-body:not(.compact-mode) .section-eye svg { width: 27px; height: 27px; }
 
 /* The CLI-logins prompt cursor blinks while hovered; steps(1) with matching
    endpoints so the loop closes without a visible seam. */

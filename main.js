@@ -1019,7 +1019,7 @@ async function runOAuthConnect(provider) {
     debugLog(`[OAuth:${provider}] Connected`);
     return { email: tokens.email, accountId: tokens.accountId };
   } catch (error) {
-    callback.complete({ ok: false, message: 'The provider token exchange failed. Return to Burnwatch and try again.' });
+    callback.complete({ ok: false, message: "The provider token exchange failed. Return to I'm Burning! and try again." });
     throw error;
   }
   } finally {
@@ -1184,7 +1184,7 @@ function sendAlertWebhook(event, title, message) {
 }
 
 ipcMain.on('alert-webhook', (event, { event: alertEvent, title, message }) => {
-  sendAlertWebhook(alertEvent || 'alert', title || 'Burnwatch', message || '');
+  sendAlertWebhook(alertEvent || 'alert', title || "I'm Burning!", message || '');
 });
 
 // ---- Session-window planner ----
@@ -1329,7 +1329,7 @@ function checkDailyDigest(data) {
 
   store.set('digest.lastShown', today);
   try {
-    new Notification({ title: 'Burnwatch daily digest', body }).show();
+    new Notification({ title: "I'm Burning! daily digest", body }).show();
   } catch (err) {
     console.error('Digest notification failed:', err.message);
   }
@@ -1562,7 +1562,7 @@ function checkBurnAnomalies() {
     try {
       shell.beep();
       new Notification({
-        title: 'Burnwatch — unusual token burn',
+        title: "I'm Burning! — unusual token burn",
         body: alertBody
       }).show();
     } catch (err) {
@@ -1857,7 +1857,7 @@ function createGraphWindow() {
     minWidth: 360,
     minHeight: 240,
     autoHideMenuBar: true,
-    title: 'Burnwatch — Graph',
+    title: "I'm Burning! — Graph",
     icon: path.join(__dirname, process.platform === 'darwin' ? 'assets/icon.icns' : process.platform === 'linux' ? 'assets/logo.png' : 'assets/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
@@ -2562,7 +2562,7 @@ function syncRestoreTray() {
   if (restoreTray && !restoreTray.isDestroyed()) return;
   try {
     restoreTray = new Tray(trayStaticIconPath());
-    restoreTray.setToolTip('Burnwatch');
+    restoreTray.setToolTip("I'm Burning!");
     restoreTray.setContextMenu(buildTrayContextMenu());
     attachTrayToggleClick(restoreTray);
   } catch (error) {
@@ -3273,7 +3273,7 @@ ipcMain.handle('export-history', async (event, format) => {
   const dateTag = `${stamp.getFullYear()}-${String(stamp.getMonth() + 1).padStart(2, '0')}-${String(stamp.getDate()).padStart(2, '0')}`;
   const ext = format === 'json' ? 'json' : 'csv';
   const res = await dialog.showSaveDialog(mainWindow || undefined, {
-    title: 'Export Burnwatch usage history',
+    title: "Export I'm Burning! usage history",
     defaultPath: `burnwatch-usage-${dateTag}.${ext}`,
     filters: [ext === 'json' ? { name: 'JSON', extensions: ['json'] } : { name: 'CSV', extensions: ['csv'] }]
   });
