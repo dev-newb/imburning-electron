@@ -130,6 +130,7 @@ const elements = {
     themeCycleBtn: document.getElementById('themeCycleBtn'),
     timeFormat: document.getElementById('timeFormat'),
     weeklyDateFormat: document.getElementById('weeklyDateFormat'),
+    iconSize: document.getElementById('iconSize'),
     refreshInterval: document.getElementById('refreshInterval'),
     orgSelector: document.getElementById('orgSelector'),
     orgSelectorCol: document.getElementById('orgSelectorCol'),
@@ -254,6 +255,7 @@ async function init() {
     warnThreshold = settings.warnThreshold;
     dangerThreshold = settings.dangerThreshold;
     applyFontColor(settings);
+    applyIconSize(settings.iconSize);
     applySectionStates(settings);
 
     // Restore compact mode from saved settings
@@ -391,7 +393,23 @@ function setupProviderSections() {
 }
 
 // Event Listeners
+// Icon size (Settings → Icon size): standard keeps the original metrics;
+// large/xl switch on a body attribute the stylesheet scales the icon family by.
+function applyIconSize(size) {
+    if (size === 'large' || size === 'xl') document.body.dataset.iconSize = size;
+    else delete document.body.dataset.iconSize;
+}
+
 function setupEventListeners() {
+    // Live-apply icon size so the pick previews without closing Settings
+    if (elements.iconSize) {
+        elements.iconSize.addEventListener('change', async () => {
+            const size = elements.iconSize.value || 'standard';
+            applyIconSize(size);
+            await _saveSettingsPatch({ iconSize: size });
+        });
+    }
+
     elements.refreshBtn.addEventListener('click', async () => {
         debugLog('Refresh button clicked');
         elements.refreshBtn.classList.add('spinning');
@@ -4161,6 +4179,7 @@ async function loadSettings() {
     elements.dangerThreshold.value = settings.dangerThreshold;
     elements.timeFormat.value = settings.timeFormat || '12h';
     elements.weeklyDateFormat.value = settings.weeklyDateFormat || 'date';
+    if (elements.iconSize) elements.iconSize.value = settings.iconSize || 'standard';
     if (elements.refreshInterval) elements.refreshInterval.value = settings.refreshInterval || '300';
     elements.usageAlertsToggle.checked = settings.usageAlerts !== false;
     if (elements.compactModeToggle) elements.compactModeToggle.checked = !!settings.compactMode;
@@ -4259,6 +4278,7 @@ async function saveSettings() {
         dangerThreshold: danger,
         timeFormat: elements.timeFormat.value || '12h',
         weeklyDateFormat: elements.weeklyDateFormat.value || 'date',
+        iconSize: elements.iconSize ? (elements.iconSize.value || 'standard') : 'standard',
         refreshInterval: elements.refreshInterval ? (elements.refreshInterval.value || '300') : '300',
         usageAlerts: elements.usageAlertsToggle.checked,
         compactMode: isCompactMode,

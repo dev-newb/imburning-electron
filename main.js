@@ -3447,6 +3447,7 @@ ipcMain.handle('get-settings', () => {
     pizazz: store.get('settings.pizazz', true),
     sortByUsage: store.get('settings.sortByUsage', false),
     flameStyle: store.get('settings.flameStyle', 'classic'),
+    iconSize: store.get('settings.iconSize', 'standard'),
     hiddenRows: store.get('settings.hiddenRows', {}),
     chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
@@ -3504,6 +3505,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
   if (settings.sortByUsage !== undefined) store.set('settings.sortByUsage', settings.sortByUsage === true);
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
+  if (settings.iconSize !== undefined) store.set('settings.iconSize', ['large', 'xl'].includes(settings.iconSize) ? settings.iconSize : 'standard');
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
   if (settings.chartHiddenSeries !== undefined) {
     store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));

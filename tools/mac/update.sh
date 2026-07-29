@@ -12,7 +12,7 @@
 set -u
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-APP_NAME="Claude-Usage-Widget"
+APP_NAME="Burnwatch"
 LOG="$HOME/Library/Logs/burnwatch-update.log"
 
 # launchd hands scripts a bare PATH — node/npm/git live in these dirs, so a

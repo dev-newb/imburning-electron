@@ -40,8 +40,8 @@
     "fast-uri": "^3.1.4"
   },
   "build": {
-    "appId": "com.claudeusage.widget",
-    "productName": "Claude-Usage-Widget",
+    "appId": "com.burnwatch.app",
+    "productName": "Burnwatch",
     "copyright": "Copyright © 2026 Burnwatch (dev-newb) · based on Claude Usage Widget © Slavomir Durej",
     "publish": [
       {
