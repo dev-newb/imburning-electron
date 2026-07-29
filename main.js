@@ -3434,6 +3434,7 @@ ipcMain.handle('get-settings', () => {
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
     trayOutline: { ...DEFAULT_TRAY_OUTLINE, ...store.get('settings.trayOutline', {}) },
     burnAlerts: store.get('settings.burnAlerts', true),
+    resetFanfare: store.get('settings.resetFanfare', true),
     fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' }),
     webhook: store.get('settings.webhook', { enabled: false, url: '' }),
     dailyDigest: store.get('settings.dailyDigest', true),
@@ -3491,6 +3492,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);
   if (settings.trayOutline) store.set('settings.trayOutline', settings.trayOutline);
   store.set('settings.burnAlerts', settings.burnAlerts !== false);
+  store.set('settings.resetFanfare', settings.resetFanfare !== false);
   if (settings.fontColor) store.set('settings.fontColor', settings.fontColor);
   if (settings.webhook) store.set('settings.webhook', settings.webhook);
   store.set('settings.dailyDigest', settings.dailyDigest !== false);

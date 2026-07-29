@@ -165,6 +165,7 @@ const elements = {
     trayOutlineToggle: document.getElementById('trayOutlineToggle'),
     trayOutlineColor: document.getElementById('trayOutlineColor'),
     burnAlertsToggle: document.getElementById('burnAlertsToggle'),
+    resetFanfareToggle: document.getElementById('resetFanfareToggle'),
     fontColorToggle: document.getElementById('fontColorToggle'),
     fontColorPicker: document.getElementById('fontColorPicker'),
     planNote: document.getElementById('planNote'),
@@ -2919,6 +2920,104 @@ function updateUI(data) {
     }
 
     checkUsageAlerts(data);
+    checkEarlyResets(data);
+}
+
+// ---- Early-reset fanfare -------------------------------------------------
+// A limit dropping to zero is only worth celebrating when it happens BEFORE
+// the provider said it would — an OpenAI reset (banked or applied straight
+// away) or the Anthropic equivalent. A pool rolling over on schedule is just
+// Tuesday. Both states are remembered per refresh so the two can be told
+// apart; the bank count is watched too, since a banked reset arriving is its
+// own good news even before it is spent.
+const EARLY_RESET_FROM = 5;   // was at least this full…
+const EARLY_RESET_TO = 1;     // …and came back essentially empty
+let _resetWatch = null;       // null until seeded — never fires on first load
+let _resetBank = null;
+
+function resetWatchPools(data) {
+    const out = [];
+    const add = (key, pct, resetsAt) => {
+        if (pct == null || !isFinite(pct)) return;
+        out.push({ key, pct, resetsAt: Date.parse(resetsAt || '') });
+    };
+    add('five_hour', data.five_hour?.utilization, data.five_hour?.resets_at);
+    add('seven_day', data.seven_day?.utilization, data.seven_day?.resets_at);
+    for (const key of Object.keys(EXTRA_ROW_CONFIG)) {
+        if (data[key]) add(key, data[key].utilization, data[key].resets_at);
+    }
+    const feeds = [
+        ['codex_', data.codex?.limits], ['codex_cli_', data.codex?.cli?.limits],
+        ['gemini_', data.gemini?.limits], ['gemini_cli_', data.gemini?.cli?.limits]
+    ];
+    for (const [prefix, list] of feeds) {
+        for (const lim of (list || [])) add(prefix + lim.key, lim.percent, lim.resetsAt || lim.resets_at);
+    }
+    return out;
+}
+
+function checkEarlyResets(data) {
+    const pools = resetWatchPools(data);
+    const bank = data.codex?.resetCredits?.available ?? null;
+
+    if (_resetWatch === null) {          // first load: just take the baseline
+        _resetWatch = {};
+        for (const p of pools) _resetWatch[p.key] = p;
+        _resetBank = bank;
+        return;
+    }
+
+    const now = Date.now();
+    let freed = false;
+    for (const p of pools) {
+        const prev = _resetWatch[p.key];
+        _resetWatch[p.key] = p;
+        if (!prev) continue;
+        if (!(prev.pct >= EARLY_RESET_FROM && p.pct <= EARLY_RESET_TO)) continue;
+        // Only early if the reset the provider promised was still in the future
+        if (!isFinite(prev.resetsAt) || prev.resetsAt <= now) continue;
+        freed = true;
+    }
+    const banked = bank != null && _resetBank != null && bank > _resetBank;
+    if (bank != null) _resetBank = bank;
+
+    if (!freed && !banked) return;
+    if ((window._cachedSettings || {}).resetFanfare === false) return;
+    playResetFanfare();
+}
+
+// A plagal (IV-I) cadence — the "amen" the word hallelujah lands on —
+// synthesised rather than shipped, so no audio asset and no licence tangle.
+// Never let a bad audio stack break a refresh: the whole thing is best-effort.
+function playResetFanfare() {
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        if (ctx.state === 'suspended' && ctx.resume) ctx.resume().catch(() => {});
+        const master = ctx.createGain();
+        master.gain.value = 0.9;
+        master.connect(ctx.destination);
+        const t0 = ctx.currentTime + 0.03;
+        const voice = (freq, start, dur, peak) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(peak, start + 0.07);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+            osc.connect(gain);
+            gain.connect(master);
+            osc.start(start);
+            osc.stop(start + dur + 0.05);
+        };
+        const F = [349.23, 440.00, 523.25];             // F major  — "halle-"
+        const C = [261.63, 329.63, 392.00, 523.25];     // C major  — "-lujah"
+        F.forEach((f, i) => voice(f, t0, 0.55, 0.15 - i * 0.02));
+        C.forEach((f, i) => voice(f, t0 + 0.45, 1.35, 0.17 - i * 0.02));
+        setTimeout(() => { try { ctx.close(); } catch (_) {} }, 2400);
+    } catch (_) { /* a missing fanfare must never cost us a refresh */ }
 }
 
 // Fire OS desktop notifications when usage crosses warn/danger thresholds.
@@ -4188,6 +4287,7 @@ async function loadSettings() {
     if (elements.trayOutlineToggle) elements.trayOutlineToggle.checked = settings.trayOutline?.enabled !== false;
     if (elements.trayOutlineColor) elements.trayOutlineColor.value = settings.trayOutline?.color || '#facc15';
     if (elements.burnAlertsToggle) elements.burnAlertsToggle.checked = settings.burnAlerts !== false;
+    if (elements.resetFanfareToggle) elements.resetFanfareToggle.checked = settings.resetFanfare !== false;
     if (elements.fontColorToggle) elements.fontColorToggle.checked = settings.fontColor?.enabled === true;
     if (elements.fontColorPicker) elements.fontColorPicker.value = settings.fontColor?.color || '#e0e0e0';
     if (elements.webhookToggle) elements.webhookToggle.checked = settings.webhook?.enabled === true;
@@ -4277,6 +4377,7 @@ async function saveSettings() {
             color: elements.trayOutlineColor.value
         },
         burnAlerts: elements.burnAlertsToggle.checked,
+        resetFanfare: elements.resetFanfareToggle ? elements.resetFanfareToggle.checked : true,
         fontColor: {
             enabled: elements.fontColorToggle.checked,
             color: elements.fontColorPicker.value
