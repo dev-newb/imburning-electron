@@ -48,10 +48,11 @@
                         <circle class="bpg" cx="12" cy="12" r="9" />
                         <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" />
                     </svg>
+                    <!-- Sun: small core, long detached rays, no guide ring — the
+                         ringed-spoke version read as a second settings gear. -->
                     <svg class="th-ico th-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                        <circle class="bpg" cx="12" cy="12" r="9" />
-                        <circle cx="12" cy="12" r="4" />
-                        <path d="M12 5.4V7M12 17v1.6M5.4 12H7M17 12h1.6M7.3 7.3l1.2 1.2M15.5 15.5l1.2 1.2M7.3 16.7l1.2-1.2M15.5 8.5l1.2-1.2" />
+                        <circle cx="12" cy="12" r="3.8" />
+                        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.2 2.2M16.2 16.2l2.2 2.2M5.6 18.4l2.2-2.2M16.2 7.8l2.2-2.2" />
                     </svg>
                     <svg class="th-ico th-sys" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
                         <rect x="2.5" y="4" width="19" height="12.5" rx="1.5" />
@@ -116,9 +117,15 @@
                         </svg>
                     </button>
                     <button class="control-btn settings-btn" id="settingsBtn" title="Settings">
+                        <!-- A real gear now: toothed ring around a hub, so the
+                             theme button's sun can't be mistaken for it. -->
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <circle class="bpg" cx="12" cy="12" r="8" />
-                            <g class="bp-gear"><circle cx="12" cy="12" r="3.2" /><path d="M12 5.5V8M12 16v2.5M5.5 12H8M16 12h2.5M7.4 7.4l1.8 1.8M14.8 14.8l1.8 1.8M7.4 16.6l1.8-1.8M14.8 9.2l1.8-1.8" /></g>
+                            <circle class="bpg" cx="12" cy="12" r="8.6" />
+                            <g class="bp-gear">
+                                <circle cx="12" cy="12" r="4.6" />
+                                <circle cx="12" cy="12" r="1.6" />
+                                <path d="M12 5.2v2.2M12 16.6v2.2M5.2 12h2.2M16.6 12h2.2M7.2 7.2l1.5 1.5M15.3 15.3l1.5 1.5M7.2 16.8l1.5-1.5M15.3 8.7l1.5-1.5" />
+                            </g>
                         </svg>
                     </button>
                 </div>
