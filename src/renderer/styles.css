@@ -3212,10 +3212,17 @@ body:not(.compact-mode) .section-arrow { width: 18px; height: 18px; }
 body:not(.compact-mode) .section-eye { width: 25px; height: 25px; }
 body:not(.compact-mode) .section-eye svg { width: 22px; height: 22px; }
 
-/* Compact: stock button and bar geometry, art filled to ~80% */
-body.compact-mode .control-btn svg { width: 22px; height: 22px; }
-body.compact-mode .clown-btn svg { width: 26px; height: 26px; }
-body.compact-mode .theme-cycle-btn .th-ico { width: 22px; height: 22px; margin: -11px 0 0 -11px; }
+/* Compact: tighter than stock — buttons shrink to 24px with the art still
+   filling them (~80%), the caption cluster pulls in (28x22 buttons), and
+   the one-line title gets the room the wider 320px window provides. */
+body.compact-mode .control-btn { width: 24px; height: 24px; }
+body.compact-mode .control-btn svg { width: 19px; height: 19px; }
+body.compact-mode .clown-btn svg { width: 21px; height: 21px; }
+body.compact-mode .theme-cycle-btn .th-ico { width: 19px; height: 19px; margin: -9.5px 0 0 -9.5px; }
+body.compact-mode .caption-btn { width: 28px; height: 22px; font-size: 15px; }
+body.compact-mode .caption-btn svg { width: 12px; height: 12px; }
+body.compact-mode .title { font-size: 13px; }
+body.compact-mode .title span { white-space: nowrap; }
 
 /* The CLI-logins prompt cursor blinks while hovered; steps(1) with matching
    endpoints so the loop closes without a visible seam. */

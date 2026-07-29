@@ -3311,13 +3311,14 @@ ipcMain.on('show-notification', (event, { title, body }) => {
 });
 
 // Resize window for compact vs normal mode
-// Compact: 290px wide, normal: 530px wide. Height stays managed by renderer.
+// Compact: 320px wide (was 290 — "I'm Burning!" needs the extra room in the
+// title bar), normal: WIDGET_WIDTH. Height stays managed by renderer.
 ipcMain.on('set-compact-mode', (event, compact) => {
   if (mainWindow) {
     _activeWindowPreset = null;
     _managedPresetWidth = null;
     const bounds = mainWindow.getBounds();
-    const width = compact ? 290 : WIDGET_WIDTH;
+    const width = compact ? 320 : WIDGET_WIDTH;
     _expectedWidth = width;
     // Lower the height floor for compact so its short window is actually
     // reachable (otherwise the 180px portrait minimum clamps it and leaves
