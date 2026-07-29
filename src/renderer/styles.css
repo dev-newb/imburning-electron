@@ -3194,9 +3194,14 @@ body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
 /* relative, not static: the stacked th-ico icons inside are absolutely
    positioned and need the button itself to stay their containing block.
    Zero the stock left/top offsets so relative doesn't shift it in flow. */
-.theme-cycle-btn { position: relative; left: 0; top: 0; }
-.bottom-bar { justify-content: flex-start; gap: 8px; }
-.toolbar-spacer { flex: 1 1 auto; width: auto; min-width: 12px; }
+/* The theme cycle sits alone at the far left, out of flow (top:50% rather
+   than the stock magic 3px, so it centres at any button/bar size), while
+   play (slinky + clown) and utility (refresh/CLI/graph/gear) meet either
+   side of a centred spacer. Same arrangement in both modes. */
+.theme-cycle-btn { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); margin: 0; }
+.bottom-bar { justify-content: center; gap: 8px; }
+.toolbar-spacer { flex: 0 0 auto; width: 22px; }
+body:not(.compact-mode) .toolbar-spacer { width: 44px; }
 
 /* Normal-mode sizes: 26px buttons (3px pad + 26 + 3px = 32 bar), art 22.
    The four window-control caption buttons keep their size. */
@@ -3229,12 +3234,6 @@ body.compact-mode .title span { white-space: nowrap; }
    endpoints so the loop closes without a visible seam. */
 .local-login-refresh-btn:hover .bp-cursor { animation: cursorBlink 0.9s steps(1) infinite; }
 @keyframes cursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
-/* The theme cycle stands apart from the view controls it isn't grouped
-   with — compact and the clown are a pair, the theme button is its own
-   thing, so give it breathing room rather than one undifferentiated run. */
-.theme-cycle-btn { margin-right: 8px; }
-body:not(.compact-mode) .theme-cycle-btn { margin-right: 14px; }
 
 /* Slinky (compact button): coils ride down and bunch onto the base plate
    as the widget squeezes. Hover previews about half the travel; .pressed

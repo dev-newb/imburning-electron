@@ -54,6 +54,7 @@
                         <circle cx="12" cy="12" r="3.8" />
                         <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.2 2.2M16.2 16.2l2.2 2.2M5.6 18.4l2.2-2.2M16.2 7.8l2.2-2.2" />
                     </svg>
+                    <!-- System = follow the macOS appearance setting -->
                     <svg class="th-ico th-sys" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
                         <rect x="2.5" y="4" width="19" height="12.5" rx="1.5" />
                         <path class="bpg" d="M8 21h8M12 16.5V21" />
@@ -63,13 +64,15 @@
                     <button class="control-btn press-btn" id="compactPressBtn" title="Compact mode — squeeze the widget down">
                         <!-- Slinky: coils at full length in normal mode, bunched
                              down onto the base plate when compact is on. -->
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
+                        <!-- Coils are open arcs, not closed ellipses: half the ink,
+                             so the gaps survive at the small compact size. -->
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
                             <path class="sl-plate" d="M4.5 3.5h15" />
                             <g class="sl-coils">
-                                <ellipse cx="12" cy="7" rx="7.2" ry="1.9" />
-                                <ellipse cx="12" cy="10.4" rx="7.2" ry="1.9" />
-                                <ellipse cx="12" cy="13.8" rx="7.2" ry="1.9" />
-                                <ellipse cx="12" cy="17.2" rx="7.2" ry="1.9" />
+                                <path d="M5 6a7 1.8 0 0 0 14 0" />
+                                <path d="M5 9.8a7 1.8 0 0 0 14 0" />
+                                <path d="M5 13.6a7 1.8 0 0 0 14 0" />
+                                <path d="M5 17.4a7 1.8 0 0 0 14 0" />
                             </g>
                             <path d="M4.5 20.5h15" />
                         </svg>
