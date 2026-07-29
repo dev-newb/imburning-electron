@@ -100,10 +100,12 @@
                         </svg>
                     </button>
                     <button class="control-btn local-login-refresh-btn" id="refreshLocalLoginsBtn" title="Refresh local CLI logins and account tokens" aria-label="Refresh local CLI logins">
+                        <!-- Terminal prompt, matching the >_ pill the collapsed
+                             CLI rows use: dashed screen plan, solid prompt. -->
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <rect class="bpg" x="14.5" y="6.5" width="7.5" height="11" rx="1" />
-                            <circle class="bpg" cx="18.2" cy="10.5" r="1.2" />
-                            <g class="bp-key"><circle cx="5" cy="12" r="3" /><path d="M8 12h6.5" /></g>
+                            <rect class="bpg" x="2.5" y="4" width="19" height="16" rx="1.5" />
+                            <g class="bp-key"><path d="M6.5 8.8l4 3.4-4 3.4" /></g>
+                            <path class="bp-cursor" d="M13.5 15.6h5" />
                         </svg>
                     </button>
                     <button class="control-btn graph-btn" id="graphBtn" title="Toggle Usage Graph">

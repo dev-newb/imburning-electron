@@ -2962,9 +2962,12 @@ body.theme-light {
    each bar via --fire-col — continuously along the whole fill. CSS keeps only
    the heat-glow underlay (above) and hosts the spawned layers below. */
 @keyframes flameLick {
+    /* Loop-closed: 100% matches 0% so the flicker cycles without the visible
+       snap it had when the loop ended on a different pose than it began. */
     0%   { transform: scaleY(0.72) skewX(-3deg); }
-    50%  { transform: scaleY(1.12) skewX(2deg); }
-    100% { transform: scaleY(0.9) skewX(-1.5deg); }
+    35%  { transform: scaleY(1.12) skewX(2deg); }
+    70%  { transform: scaleY(0.9) skewX(-1.5deg); }
+    100% { transform: scaleY(0.72) skewX(-3deg); }
 }
 
 .ambient-fire {
@@ -3182,15 +3185,24 @@ body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
 /* =======================================================================
    Bigger controls (local build): the original art, unchanged, just given
    room — buttons grow 1.5x and the glyph fills ~80% of the button instead
-   of ~55%, leaving a little padding. No new artwork.
+   of ~55%, leaving a little padding. No new artwork. Scoped to normal
+   mode: compact keeps the stock small metrics. The bar grows to seat the
+   42px buttons (3px pad + 42 + 3px = 48) so nothing hangs below the row.
    ======================================================================= */
-.control-btn { width: 42px; height: 42px; }
-.control-btn svg { width: 34px; height: 34px; }
-.clown-btn svg { width: 38px; height: 38px; }
-.theme-cycle-btn .th-ico { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
-.bottom-bar .sprite-btn img { width: 33px; height: 33px; }
-.caption-btn { width: 54px; height: 39px; font-size: 28px; }
-.caption-btn svg { width: 30px; height: 30px; }
-.section-arrow { width: 18px; height: 18px; }
-.section-eye { width: 33px; height: 33px; }
-.section-eye svg { width: 27px; height: 27px; }
+body:not(.compact-mode) .control-btn { width: 42px; height: 42px; }
+body:not(.compact-mode) .control-btn svg { width: 34px; height: 34px; }
+body:not(.compact-mode) .clown-btn svg { width: 38px; height: 38px; }
+body:not(.compact-mode) .theme-cycle-btn .th-ico { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+body:not(.compact-mode) .bottom-bar { height: 48px; }
+body:not(.compact-mode) .bottom-bar .sprite-btn img { width: 33px; height: 33px; }
+body:not(.compact-mode) .toolbar-spacer { width: 33px; flex: 0 0 33px; }
+body:not(.compact-mode) .caption-btn { width: 54px; height: 39px; font-size: 28px; }
+body:not(.compact-mode) .caption-btn svg { width: 30px; height: 30px; }
+body:not(.compact-mode) .section-arrow { width: 18px; height: 18px; }
+body:not(.compact-mode) .section-eye { width: 33px; height: 33px; }
+body:not(.compact-mode) .section-eye svg { width: 27px; height: 27px; }
+
+/* The CLI-logins prompt cursor blinks while hovered; steps(1) with matching
+   endpoints so the loop closes without a visible seam. */
+.local-login-refresh-btn:hover .bp-cursor { animation: cursorBlink 0.9s steps(1) infinite; }
+@keyframes cursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
