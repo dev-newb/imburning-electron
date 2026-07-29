@@ -3194,19 +3194,19 @@ body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
 /* relative, not static: the stacked th-ico icons inside are absolutely
    positioned and need the button itself to stay their containing block.
    Zero the stock left/top offsets so relative doesn't shift it in flow. */
-/* The theme cycle sits alone at the far left, out of flow (top:50% rather
-   than the stock magic 3px, so it centres at any button/bar size), while
-   play (slinky + clown) and utility (refresh/CLI/graph/gear) meet either
-   side of a centred spacer. Same arrangement in both modes. */
-.theme-cycle-btn { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); margin: 0; }
-.bottom-bar { justify-content: center; gap: 8px; }
-/* Both groups take equal flex, so the fixed spacer between them lands on
-   the bar's exact midpoint; each group's buttons hug the spacer, which is
-   what puts the whole set together in the middle. (The play group has 2
-   buttons and utility has 4, so a centred spacer and a centred *set* can't
-   both be true — the spacer is the one the layout is built around.) */
-.toolbar-group-play { flex: 1 1 0; justify-content: flex-end; }
-.toolbar-group-utility { flex: 1 1 0; justify-content: flex-start; }
+/* OPTICALLY centred, not centred on the bar: the negative space after the
+   theme cycle and the negative space after the last utility button are
+   equal, so the set looks centred even though the theme button eats into
+   the left. An auto margin on each side of the set splits the free space
+   in two — the left gap is (free/2 + the flex gap), the right is
+   (free/2 + the bar's right padding), and those match.
+   The theme button stays in FLOW for this — position:relative, not static,
+   because its stacked .th-ico children are absolute and need the button as
+   their containing block. Same arrangement in both modes. */
+.theme-cycle-btn { position: relative; left: 0; top: 0; transform: none; margin: 0; }
+.bottom-bar { justify-content: flex-start; gap: 8px; }
+.toolbar-group-play { flex: 0 0 auto; margin-left: auto; }
+.toolbar-group-utility { flex: 0 0 auto; margin-right: auto; }
 .toolbar-spacer { flex: 0 0 auto; width: 22px; }
 body:not(.compact-mode) .toolbar-spacer { width: 44px; }
 
