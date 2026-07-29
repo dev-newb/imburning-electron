@@ -834,7 +834,7 @@ function syncAnthropicAuthControls() {
         elements.logoutBtn.textContent = connected ? 'Log Out' : 'Log In';
         elements.logoutBtn.className = connected ? 'logout-btn' : 'settings-connect-btn';
         elements.logoutBtn.title = connected
-            ? 'Clear Burnwatch\'s Claude.ai login. Other provider accounts are unaffected.'
+            ? "Clear I'm Burning!'s Claude.ai login. Other provider accounts are unaffected."
             : 'Sign in to Claude.ai';
     }
 }
@@ -2945,14 +2945,14 @@ function checkUsageAlerts(data) {
         alertFired.session_danger = true;
         alertFired.session_warn = true; // suppress warn if we jumped straight to danger
         window.electronAPI.showNotification(
-            'Burnwatch',
+            "I'm Burning!",
             `Anthropic Session usage is at ${Math.round(sessionPct)}% — running low`
         );
     // Current Session — warn threshold
     } else if (sessionPct >= warnThreshold && !alertFired.session_warn) {
         alertFired.session_warn = true;
         window.electronAPI.showNotification(
-            'Burnwatch',
+            "I'm Burning!",
             `Anthropic Session usage has reached ${Math.round(sessionPct)}%`
         );
     }
@@ -2962,7 +2962,7 @@ function checkUsageAlerts(data) {
         alertFired.weekly_danger = true;
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
-            'Burnwatch',
+            "I'm Burning!",
             `Anthropic Weekly (all models) usage is at ${Math.round(weeklyPct)}% — running low`
         );
         window.electronAPI.sendAlertWebhook('weekly_danger', 'Claude usage warning',
@@ -2971,7 +2971,7 @@ function checkUsageAlerts(data) {
     } else if (weeklyPct >= warnThreshold && !alertFired.weekly_warn) {
         alertFired.weekly_warn = true;
         window.electronAPI.showNotification(
-            'Burnwatch',
+            "I'm Burning!",
             `Anthropic Weekly (all models) usage has reached ${Math.round(weeklyPct)}%`
         );
     }
@@ -3000,7 +3000,7 @@ function checkUsageAlerts(data) {
                 ? ` — resets ${formatResetsAt(value.resets_at, true, settings.timeFormat || '12h', 'date-day-time')}`
                 : '';
             window.electronAPI.showNotification(
-                'Burnwatch',
+                "I'm Burning!",
                 `Anthropic ${label} limit is maxed out${resetStr}`
             );
             window.electronAPI.sendAlertWebhook('scoped_maxed', 'Claude limit maxed',
@@ -3009,7 +3009,7 @@ function checkUsageAlerts(data) {
             alertFired[`${key}_danger`] = true;
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
-                'Burnwatch',
+                "I'm Burning!",
                 `Anthropic ${label} usage is at ${Math.round(pct)}% — running low`
             );
             window.electronAPI.sendAlertWebhook('scoped_danger', 'Claude usage warning',
@@ -3017,7 +3017,7 @@ function checkUsageAlerts(data) {
         } else if (pct >= warnThreshold && !alertFired[`${key}_warn`]) {
             alertFired[`${key}_warn`] = true;
             window.electronAPI.showNotification(
-                'Burnwatch',
+                "I'm Burning!",
                 `Anthropic ${label} usage has reached ${Math.round(pct)}%`
             );
         }
@@ -4402,9 +4402,9 @@ window.addEventListener('focus', () => {
 // Start the application. A renderer initialization error must never leave the
 // widget displaying an unexplained permanent spinner.
 init().catch((error) => {
-    console.error('Burnwatch initialization failed:', error);
+    console.error("I'm Burning! initialization failed:", error);
     const message = elements.loadingContainer?.querySelector('p');
-    if (message) message.textContent = `Burnwatch could not start: ${error.message || 'Unknown error'}`;
+    if (message) message.textContent = `I'm Burning! could not start: ${error.message || 'Unknown error'}`;
 });
 window.addEventListener('beforeunload', () => {
     stopAutoUpdate();
