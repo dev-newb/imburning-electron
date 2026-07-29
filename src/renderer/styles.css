@@ -3129,17 +3129,6 @@ body.theme-light .bottom-bar .control-btn:hover { color: #1d4568; background: rg
 .bp-gear { transform-origin: 50% 50%; transition: transform 0.45s ease; }
 .settings-btn:hover .bp-gear { transform: rotate(60deg); }
 
-/* Caption buttons (title bar) join the blueprint: the minimise line settles
-   into the tray, wide/tall trade solid part for dashed plan, the X meshes. */
-.caption-btn svg { display: block; }
-.bp-min { transition: transform 0.32s ease; }
-.caption-minimize:hover .bp-min { transform: translateY(2px); }
-.bp-x { transform-origin: 50% 50%; transition: transform 0.4s ease; }
-.caption-close:hover .bp-x { transform: rotate(90deg); }
-.bp-wide, .bp-tall { transition: transform 0.32s ease; transform-origin: 50% 50%; }
-.preset-btn:hover .bp-wide { transform: scaleX(1.06); }
-.preset-btn:hover .bp-tall { transform: scaleY(1.06); }
-
 /* =======================================================================
    The clown: whiteface in full colour inside the blueprint world.
    Jailed (pizazz off): bars slam down, the smile flips, dashed cyan tears
@@ -3189,29 +3178,3 @@ body.no-pizazz .clown-paint {
 }
 body.no-pizazz .clown-mouth { transition: transform 0.35s ease !important; }
 body.no-pizazz .clown-tear { transition: opacity 0.3s ease 0.3s !important; }
-
-/* =======================================================================
-   Icon size (Settings → Icon size). Standard keeps the original metrics;
-   large (2×) and xl (2.5×) scale the icon family — title-bar captions,
-   toolbar buttons, section chevrons and eye toggles — for legibility.
-   Buttons grow with their glyphs so hit targets keep up.
-   ======================================================================= */
-body[data-icon-size="large"] .caption-btn { width: 52px; height: 40px; }
-body[data-icon-size="large"] .caption-btn svg { width: 28px; height: 28px; }
-body[data-icon-size="large"] .control-btn { width: 52px; height: 52px; }
-body[data-icon-size="large"] .control-btn svg { width: 32px; height: 32px; }
-body[data-icon-size="large"] .clown-btn svg { width: 44px; height: 44px; }
-body[data-icon-size="large"] .theme-cycle-btn .th-ico { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
-body[data-icon-size="large"] .section-arrow { width: 24px; height: 24px; }
-body[data-icon-size="large"] .section-eye { width: 40px; height: 40px; }
-body[data-icon-size="large"] .section-eye svg { width: 30px; height: 30px; }
-
-body[data-icon-size="xl"] .caption-btn { width: 60px; height: 48px; }
-body[data-icon-size="xl"] .caption-btn svg { width: 35px; height: 35px; }
-body[data-icon-size="xl"] .control-btn { width: 64px; height: 64px; }
-body[data-icon-size="xl"] .control-btn svg { width: 40px; height: 40px; }
-body[data-icon-size="xl"] .clown-btn svg { width: 55px; height: 55px; }
-body[data-icon-size="xl"] .theme-cycle-btn .th-ico { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
-body[data-icon-size="xl"] .section-arrow { width: 30px; height: 30px; }
-body[data-icon-size="xl"] .section-eye { width: 48px; height: 48px; }
-body[data-icon-size="xl"] .section-eye svg { width: 38px; height: 38px; }

@@ -28,33 +28,14 @@
                     <span>Burnwatch</span>
                 </div>
                 <div class="title-caption">
-                    <!-- Caption buttons speak the same blueprint language as the
-                         toolbar: a dashed construction guide plus a solid part
-                         that performs its job on hover. -->
-                    <button class="caption-btn caption-minimize" id="minimizeBtn" title="Minimise to System Tray">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <rect class="bpg" x="3" y="3" width="18" height="14" rx="1.5" />
-                            <g class="bp-min"><path d="M6 20.5h12" /></g>
-                        </svg>
-                    </button>
+                    <button class="caption-btn caption-minimize" id="minimizeBtn" title="Minimise to System Tray">−</button>
                     <button class="caption-btn preset-btn" id="wideBtn" title="Wide layout — spread the sections into side-by-side columns">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <rect class="bpg" x="7" y="2" width="10" height="20" rx="1.5" />
-                            <rect class="bp-wide" x="2" y="7" width="20" height="10" rx="1.5" />
-                        </svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="1.5" /></svg>
                     </button>
                     <button class="caption-btn preset-btn" id="tallBtn" title="Tall layout — stack the sections with room to breathe">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <rect class="bpg" x="2" y="7" width="20" height="10" rx="1.5" />
-                            <rect class="bp-tall" x="7" y="2" width="10" height="20" rx="1.5" />
-                        </svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="1.5" /></svg>
                     </button>
-                    <button class="caption-btn caption-close" id="closeBtn" title="Exit Application">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
-                            <circle class="bpg" cx="12" cy="12" r="9" />
-                            <g class="bp-x"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" /></g>
-                        </svg>
-                    </button>
+                    <button class="caption-btn caption-close" id="closeBtn" title="Exit Application">×</button>
                 </div>
             </div>
 
@@ -454,17 +435,6 @@
                                     <option value="date-day-time">Fri Mar 13 + time</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label">Icon size</span>
-                                <select id="iconSize" class="settings-select">
-                                    <option value="standard">Standard</option>
-                                    <option value="large">Large (2×)</option>
-                                    <option value="xl">Extra large (2.5×)</option>
-                                </select>
-                            </div>
-                            <div class="settings-col"></div>
                         </div>
                         <div class="settings-row-2col">
                             <div class="settings-col">
