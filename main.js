@@ -649,13 +649,22 @@ function readCodexResetExpiry() {
           clearTimeout(timer);
           const credits = msg.result?.rateLimitResetCredits?.credits;
           if (!Array.isArray(credits) || !credits.length) return finish(null);
-          // Soonest expiry among credits that are still usable
-          const times = credits
-            .filter((c) => !c.status || String(c.status).toLowerCase() === 'available')
-            .map((c) => c.expiresAt)
-            .filter((t) => typeof t === 'number' && isFinite(t) && t > 0)
-            .sort((a, b) => a - b);
-          return finish(times.length ? { expiresAt: times[0] * 1000, count: credits.length } : null);
+          // Every banked reset expires on its OWN schedule, so keep them
+          // individually — one orb in the UI per credit, each with its own
+          // expiry. Collapsing to a single "soonest" was lossy and ambiguous.
+          const list = credits
+            .filter((c) => c && (!c.status || String(c.status).toLowerCase() === 'available'))
+            .map((c) => ({
+              id: typeof c.id === 'string' ? c.id : null,
+              status: typeof c.status === 'string' ? c.status : null,
+              resetType: typeof c.resetType === 'string' ? c.resetType : null,
+              title: typeof c.title === 'string' ? c.title : null,
+              description: typeof c.description === 'string' ? c.description : null,
+              grantedAt: Number.isFinite(c.grantedAt) && c.grantedAt > 0 ? c.grantedAt * 1000 : null,
+              expiresAt: Number.isFinite(c.expiresAt) && c.expiresAt > 0 ? c.expiresAt * 1000 : null
+            }))
+            .sort((a, b) => (a.expiresAt || Infinity) - (b.expiresAt || Infinity));
+          return finish(list.length ? { credits: list } : null);
         }
       }
     });
@@ -720,8 +729,8 @@ async function fetchCodexUsage() {
   const data = await fetchCodexUsageBase();
   if (!data || !data.resetCredits) return data;
   const expiry = await codexResetExpiry();
-  if (expiry && expiry.expiresAt) {
-    data.resetCredits = { ...data.resetCredits, expiresAt: expiry.expiresAt };
+  if (expiry && expiry.credits?.length) {
+    data.resetCredits = { ...data.resetCredits, credits: expiry.credits };
   }
   return data;
 }

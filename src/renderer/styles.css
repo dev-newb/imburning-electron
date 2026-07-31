@@ -3332,3 +3332,28 @@ body.theme-light .sound-filename { color: #6a7694; }
     will-change: transform, opacity;
 }
 body.no-pizazz .maxed-smoke { display: none; }
+
+/* An orb that knows its own expiry is hoverable. Urgency is staged: green
+   while there's runway, amber once under a week, red inside 24 hours — the
+   pulse tightens as it gets worse, so it reads without opening the tooltip. */
+.reset-dot.has-detail { cursor: help; }
+
+.reset-dot.expiring-week {
+    background: #f59e0b;
+    --fire-col: #f59e0b;   /* the pixel flame reads this off the orb */
+    animation: resetExpWeek 1.6s ease-in-out infinite alternate;
+}
+@keyframes resetExpWeek {
+    from { box-shadow: 0 0 3px 1px rgba(245, 158, 11, 0.40); }
+    to   { box-shadow: 0 0 8px 2px rgba(245, 158, 11, 0.75); }
+}
+
+.reset-dot.expiring-soon {
+    background: #ef4444;
+    --fire-col: #ef4444;
+    animation: resetExpSoon 0.85s ease-in-out infinite alternate;
+}
+@keyframes resetExpSoon {
+    from { box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.50); }
+    to   { box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.9); }
+}

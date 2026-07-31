@@ -1139,6 +1139,28 @@ function appendCodexCreditsRow(codexData, key, container, hiddenRows) {
     container.appendChild(row);
 }
 
+// One orb, one banked reset, one popup. Says which of the N it is, when it
+// lapses and how long that leaves — plus whatever label OpenAI attached.
+function describeResetCredit(credit, index, total) {
+    const settings = window._cachedSettings || {};
+    const lines = [`Reset ${index + 1} of ${total}`];
+    if (credit.title) lines[0] += ` — ${credit.title}`;
+    if (credit.expiresAt) {
+        const left = credit.expiresAt - Date.now();
+        const when = formatResetsAt(new Date(credit.expiresAt).toISOString(), true,
+            settings.timeFormat || '12h', 'date-day-time');
+        lines.push(left > 0 ? `Expires ${when} (in ${formatCountdown(left)})` : `Expired ${when}`);
+    } else {
+        lines.push('No expiry reported');
+    }
+    if (credit.grantedAt) {
+        lines.push(`Granted ${formatResetsAt(new Date(credit.grantedAt).toISOString(), true,
+            settings.timeFormat || '12h', 'date-day-time')}`);
+    }
+    if (credit.description) lines.push(credit.description);
+    return lines.join('\n');
+}
+
 function appendCodexResetsRow(codexData, key, container, hiddenRows) {
     const resets = codexData?.resetCredits;
     if (!resets || !(codexData.limits || []).length) return;
@@ -1163,38 +1185,37 @@ function appendCodexResetsRow(codexData, key, container, hiddenRows) {
     const dotsWrap = document.createElement('div');
     const dotCount = Math.min(resets.available, 12);
     dotsWrap.className = 'reset-dots' + (dotCount === 1 ? ' single' : '');
+    // Each banked reset expires on its own schedule, so each orb carries its
+    // OWN credit and its own hover popup. Soonest first (main.js sorts them).
+    const credits = Array.isArray(resets.credits) ? resets.credits : [];
     for (let i = 0; i < dotCount; i++) {
         const dot = document.createElement('span');
         dot.className = 'reset-dot';
         dot.style.animationDelay = `${(i * 1.3 + 0.4).toFixed(1)}s`;
+        const credit = credits[i];
+        if (credit) {
+            dot.classList.add('has-detail');
+            dot.title = describeResetCredit(credit, i, dotCount);
+            // Green while there's time, amber inside a week, red inside a day.
+            const left = credit.expiresAt ? credit.expiresAt - Date.now() : Infinity;
+            if (left <= 24 * 60 * 60 * 1000) dot.classList.add('expiring-soon');
+            else if (left <= 7 * 24 * 60 * 60 * 1000) dot.classList.add('expiring-week');
+        }
         dotsWrap.appendChild(dot);
     }
     barGroup.appendChild(dotsWrap);
     row.appendChild(barGroup);
 
-    // The orbs already say HOW MANY. When the CLI can tell us when the next
-    // one lapses, give the last two columns the meaning their headers claim
-    // — Resets In / Resets At — instead of restating the count.
-    const expiresAt = Number(resets.expiresAt) || 0;
+    // The row keeps the honest total. Expiries are per-orb — several banked
+    // resets lapse at different times, so a single date in these columns
+    // couldn't say which reset it referred to.
     const balLabel = document.createElement('span');
-    const balAmount = document.createElement('span');
-    if (expiresAt > Date.now()) {
-        const settings = window._cachedSettings || {};
-        balLabel.className = 'timer-text';
-        balLabel.textContent = formatCountdown(expiresAt - Date.now());
-        balAmount.className = 'resets-at-text';
-        balAmount.textContent = formatResetsAt(new Date(expiresAt).toISOString(), false,
-            settings.timeFormat || '12h', settings.weeklyDateFormat || 'date');
-        const soon = expiresAt - Date.now() < 24 * 60 * 60 * 1000;
-        if (soon) { balLabel.classList.add('danger'); balAmount.classList.add('danger'); }
-        row.title = `${resets.available} banked reset${resets.available === 1 ? '' : 's'} — the next one expires ${balAmount.textContent}`;
-    } else {
-        balLabel.className = 'timer-text extra-balance-label';
-        balLabel.textContent = 'Resets Available:';
-        balAmount.className = 'resets-at-text extra-balance-amount';
-        balAmount.textContent = String(resets.available);
-    }
+    balLabel.className = 'timer-text extra-balance-label';
+    balLabel.textContent = 'Resets Available:';
     row.appendChild(balLabel);
+    const balAmount = document.createElement('span');
+    balAmount.className = 'resets-at-text extra-balance-amount';
+    balAmount.textContent = String(resets.available);
     row.appendChild(balAmount);
 
     attachHideBtn(row, key, 'Limit Resets');
@@ -2186,16 +2207,20 @@ function _tickElementFire(el, now, minGapMs, isOrb, particleStyle) {
     if (now - layer.__lastSpawn < minGapMs * (0.7 + Math.random() * 0.8)) return;
     layer.__lastSpawn = now;
     const width = Math.max(4, el.offsetWidth - 4);
+    // Bars inset their spawn range by 4px so tongues don't spill past the
+    // ends; an orb is only 8px wide, so that inset drags its flame 2px LEFT
+    // of centre. The sprite is symmetric about x, so aim at the true middle.
+    const centre = isOrb ? el.offsetWidth / 2 : width / 2;
     const palette = _firePalette(getComputedStyle(el).getPropertyValue('--fire-col') || '#ff922b');
     if (isOrb) {
         if (particleStyle) {
-            _spawnFireParticle(layer, width / 2 + _rnd(-3, 3), palette);
-            if (Math.random() < 0.5) _spawnPixelFlame(layer, width / 2 + _rnd(-2, 2), _rnd(240, 380), Math.random() < 0.2, palette);
+            _spawnFireParticle(layer, centre + _rnd(-3, 3), palette);
+            if (Math.random() < 0.5) _spawnPixelFlame(layer, centre + _rnd(-2, 2), _rnd(240, 380), Math.random() < 0.2, palette);
         } else {
             // Overlapping licks with an occasional tall one: a single tongue
             // repeating on its own reads as a glow rather than a flame.
-            _spawnPixelFlame(layer, width / 2 + _rnd(-2.5, 2.5), _rnd(300, 520), Math.random() < 0.22, palette);
-            if (Math.random() < 0.45) _spawnPixelFlame(layer, width / 2 + _rnd(-3.5, 3.5), _rnd(200, 380), false, palette);
+            _spawnPixelFlame(layer, centre + _rnd(-2.5, 2.5), _rnd(300, 520), Math.random() < 0.22, palette);
+            if (Math.random() < 0.45) _spawnPixelFlame(layer, centre + _rnd(-3.5, 3.5), _rnd(200, 380), false, palette);
         }
     } else if (particleStyle) {
         // Style 2: a storm of rising motes with the occasional small tongue
@@ -3305,11 +3330,14 @@ function updateCompactBars(data) {
     const compactResets = data.codex?.resetCredits;
     if (compactResets && compactResets.available > 0
         && (data.codex?.limits || []).length && !hiddenRows['codex_row_resets']) {
-        const rstExpiry = Number(compactResets.expiresAt) || 0;
-        pools.push({ co: 'openai', code: 'RST',
-            name: rstExpiry > Date.now()
-                ? `Limit Resets — next expires in ${formatCountdown(rstExpiry - Date.now())}`
-                : 'Limit Resets',
+        // Compact has no room per orb — summarise every expiry in the tooltip
+        const rstCredits = Array.isArray(compactResets.credits) ? compactResets.credits : [];
+        const rstName = rstCredits.length
+            ? 'Limit Resets\n' + rstCredits.map((c, i) => c.expiresAt
+                ? `${i + 1}. expires in ${formatCountdown(Math.max(c.expiresAt - Date.now(), 0))}`
+                : `${i + 1}. no expiry reported`).join('\n')
+            : 'Limit Resets';
+        pools.push({ co: 'openai', code: 'RST', name: rstName,
             pct: 0, color: CODE_COLORS.codex, orbs: Math.min(compactResets.available, 12) });
     }
     (data.gemini?.limits || []).forEach((lim, i) => {
