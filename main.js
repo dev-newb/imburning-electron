@@ -587,7 +587,94 @@ function readCodexSessionSnapshotUncached() {
 const readCodexSessionSnapshot = memoizeCredentialRead(readCodexSessionSnapshotUncached);
 
 // Primary = the widget's own OpenAI login; CLI creds are fallback + dual source
-async function fetchCodexUsage() {
+// ---- Banked-reset expiry via the Codex CLI's app-server -------------------
+// The HTTP usage endpoint only reports HOW MANY banked resets you hold, never
+// when they lapse. The CLI's app-server (JSON-RPC over stdio) answers
+// account/rateLimits/read with a rateLimitResetCredits.credits[] array whose
+// entries carry expiresAt — so a reset quietly expiring can be surfaced.
+// OpenAI omits that array much of the time, so every caller must cope with
+// null; this is strictly enrichment on top of the HTTP data.
+const CODEX_APPSERVER_TTL_MS = 5 * 60 * 1000;
+let _codexResetExpiryCache = { at: 0, value: null };
+
+function resolveCodexBinary() {
+  const candidates = [
+    '/Applications/Codex.app/Contents/Resources/codex',
+    path.join(os.homedir(), '.local/bin/codex'),
+    path.join(os.homedir(), '.codex/bin/codex'),
+    '/opt/homebrew/bin/codex',
+    '/usr/local/bin/codex'
+  ];
+  for (const candidate of candidates) {
+    try { if (fs.statSync(candidate).isFile()) return candidate; } catch (_) { /* next */ }
+  }
+  return null;
+}
+
+function readCodexResetExpiry() {
+  return new Promise((resolve) => {
+    const bin = resolveCodexBinary();
+    if (!bin) return resolve(null);
+    let child;
+    try {
+      child = require('child_process').spawn(bin, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (err) {
+      debugLog('[Codex] app-server spawn failed:', err.message);
+      return resolve(null);
+    }
+    let buffer = '';
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch (_) {}
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 12000);
+    const send = (msg) => { try { child.stdin.write(JSON.stringify(msg) + '\n'); } catch (_) {} };
+
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        let msg;
+        try { msg = JSON.parse(line); } catch (_) { continue; }
+        if (msg.id === 1) {                       // initialize acknowledged
+          send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+          send({ jsonrpc: '2.0', id: 2, method: 'account/rateLimits/read', params: {} });
+        } else if (msg.id === 2) {
+          clearTimeout(timer);
+          const credits = msg.result?.rateLimitResetCredits?.credits;
+          if (!Array.isArray(credits) || !credits.length) return finish(null);
+          // Soonest expiry among credits that are still usable
+          const times = credits
+            .filter((c) => !c.status || String(c.status).toLowerCase() === 'available')
+            .map((c) => c.expiresAt)
+            .filter((t) => typeof t === 'number' && isFinite(t) && t > 0)
+            .sort((a, b) => a - b);
+          return finish(times.length ? { expiresAt: times[0] * 1000, count: credits.length } : null);
+        }
+      }
+    });
+    child.on('error', () => finish(null));
+    child.on('exit', () => finish(null));
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize',
+           params: { clientInfo: { name: 'imburning', title: "I'm Burning!", version: app.getVersion() } } });
+  });
+}
+
+async function codexResetExpiry() {
+  const now = Date.now();
+  if (now - _codexResetExpiryCache.at < CODEX_APPSERVER_TTL_MS) return _codexResetExpiryCache.value;
+  const value = await readCodexResetExpiry().catch(() => null);
+  _codexResetExpiryCache = { at: now, value };
+  return value;
+}
+
+async function fetchCodexUsageBase() {
   const oauth = await getOAuthAccessToken('openai');
   const cliCandidates = readCodexAuthCandidates();
   const [primary, cliResults] = await Promise.all([
@@ -624,6 +711,19 @@ async function fetchCodexUsage() {
   }
   const snapshot = readCodexSessionSnapshot();
   return snapshot ? { ...snapshot, connected: false, cli: null } : null;
+}
+
+// Enrich the HTTP data with banked-reset expiry, when the CLI can tell us.
+// Purely additive: if the app-server is missing, slow, or omits the credits
+// array, the usage data is returned exactly as the HTTP endpoint gave it.
+async function fetchCodexUsage() {
+  const data = await fetchCodexUsageBase();
+  if (!data || !data.resetCredits) return data;
+  const expiry = await codexResetExpiry();
+  if (expiry && expiry.expiresAt) {
+    data.resetCredits = { ...data.resetCredits, expiresAt: expiry.expiresAt };
+  }
+  return data;
 }
 
 // ---- Gemini (Google) account usage ----

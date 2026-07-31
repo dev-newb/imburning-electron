@@ -703,20 +703,11 @@ function setupEventListeners() {
     wireConnect(elements.settingsConnectGoogleBtn, null, 'google',
         settingsErr(elements.googleLoginStatus));
 
-    // 'via CLI login' chips double as connect buttons
-    const wireChipConnect = (chip, provider) => {
-        if (!chip) return;
-        chip.addEventListener('click', () => {
-            if (!chip.classList.contains('cli')) return; // dual chip is informational
-            const original = chip.textContent;
-            runConnect(provider,
-                () => { chip.textContent = 'waiting for sign-in...'; },
-                () => { if (chip.textContent === 'waiting for sign-in...') chip.textContent = original; },
-                null);
-        });
-    };
-    wireChipConnect(elements.chipOpenai, 'openai');
-    wireChipConnect(elements.chipGoogle, 'google');
+    // The 'via CLI login' chips are purely informational. They used to start
+    // an OAuth sign-in, which implied a CLI login is a lesser state that
+    // wants upgrading — it isn't; plenty of setups are CLI-only by choice.
+    // Signing in with OAuth is still available in Settings for anyone who
+    // wants a widget-owned connection.
 
     const wireDisconnect = (btn, provider) => {
         if (!btn) return;
@@ -1181,13 +1172,29 @@ function appendCodexResetsRow(codexData, key, container, hiddenRows) {
     barGroup.appendChild(dotsWrap);
     row.appendChild(barGroup);
 
+    // The orbs already say HOW MANY. When the CLI can tell us when the next
+    // one lapses, give the last two columns the meaning their headers claim
+    // — Resets In / Resets At — instead of restating the count.
+    const expiresAt = Number(resets.expiresAt) || 0;
     const balLabel = document.createElement('span');
-    balLabel.className = 'timer-text extra-balance-label';
-    balLabel.textContent = 'Resets Available:';
-    row.appendChild(balLabel);
     const balAmount = document.createElement('span');
-    balAmount.className = 'resets-at-text extra-balance-amount';
-    balAmount.textContent = String(resets.available);
+    if (expiresAt > Date.now()) {
+        const settings = window._cachedSettings || {};
+        balLabel.className = 'timer-text';
+        balLabel.textContent = formatCountdown(expiresAt - Date.now());
+        balAmount.className = 'resets-at-text';
+        balAmount.textContent = formatResetsAt(new Date(expiresAt).toISOString(), false,
+            settings.timeFormat || '12h', settings.weeklyDateFormat || 'date');
+        const soon = expiresAt - Date.now() < 24 * 60 * 60 * 1000;
+        if (soon) { balLabel.classList.add('danger'); balAmount.classList.add('danger'); }
+        row.title = `${resets.available} banked reset${resets.available === 1 ? '' : 's'} — the next one expires ${balAmount.textContent}`;
+    } else {
+        balLabel.className = 'timer-text extra-balance-label';
+        balLabel.textContent = 'Resets Available:';
+        balAmount.className = 'resets-at-text extra-balance-amount';
+        balAmount.textContent = String(resets.available);
+    }
+    row.appendChild(balLabel);
     row.appendChild(balAmount);
 
     attachHideBtn(row, key, 'Limit Resets');
@@ -1296,6 +1303,7 @@ function buildExtraRows(data) {
                 } else if (utilization >= warnThreshold) {
                     progressFill.classList.add('warning');
                 }
+                applyMaxedState(progressFill, utilization);
 
                 progressBar.appendChild(progressFill);
                 barGroup.appendChild(progressBar);
@@ -2944,13 +2952,13 @@ function updateUI(data) {
     const cxStatus = data.codex;
     const gmStatus = data.gemini;
     setChip(elements.chipOpenai, cxStatus && !cxStatus.cli && !cxStatus.connected
-        ? { cls: 'cli', text: 'via CLI login', title: 'Reading your codex CLI login. Sign in with ChatGPT for a widget-owned connection.' }
+        ? { cls: 'cli', text: 'via CLI login', title: 'Usage is being read from your Codex CLI login. A widget-owned connection is optional — sign in under Settings if you want one.' }
         : null);
     setChip(elements.chipGoogle, gmStatus && !gmStatus.cli && !gmStatus.connected
-        ? { cls: 'cli', text: 'via CLI login', title: 'Reading your gemini CLI login. Sign in with Google for a widget-owned connection.' }
+        ? { cls: 'cli', text: 'via CLI login', title: 'Usage is being read from your Gemini CLI login. A widget-owned connection is optional — sign in under Settings if you want one.' }
         : null);
     setChip(elements.chipAnthropic, (!data.claude_code || data.claude_code_same_account !== false) && data.anthropic_source === 'cli'
-        ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Reading your claude CLI login. Log in with claude.ai (settings) for full data including Extra Usage and credits.' }
+        ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Usage is being read from your Claude CLI login. Logging in to claude.ai under Settings additionally exposes Extra Usage and credits.' }
         : null);
     // The amber pill IS the CLI subheading now — give it the account detail
     const pillTitle = (sel, t) => { const b = document.querySelector(sel); if (b) b.title = t; };
@@ -3294,8 +3302,12 @@ function updateCompactBars(data) {
     const compactResets = data.codex?.resetCredits;
     if (compactResets && compactResets.available > 0
         && (data.codex?.limits || []).length && !hiddenRows['codex_row_resets']) {
-        pools.push({ co: 'openai', code: 'RST', name: 'Limit Resets', pct: 0,
-            color: CODE_COLORS.codex, orbs: Math.min(compactResets.available, 12) });
+        const rstExpiry = Number(compactResets.expiresAt) || 0;
+        pools.push({ co: 'openai', code: 'RST',
+            name: rstExpiry > Date.now()
+                ? `Limit Resets — next expires in ${formatCountdown(rstExpiry - Date.now())}`
+                : 'Limit Resets',
+            pct: 0, color: CODE_COLORS.codex, orbs: Math.min(compactResets.available, 12) });
     }
     (data.gemini?.limits || []).forEach((lim, i) => {
         if (hiddenRows['gemini_' + lim.key]) return;
@@ -3369,6 +3381,7 @@ function updateCompactBars(data) {
             fill.classList.add('on-fire');
             fill.style.setProperty('--fire-col', barCol);
         }
+        applyMaxedState(fill, p.pct);
         bg.appendChild(fill);
         const pctEl = document.createElement('span');
         pctEl.className = 'compact-pct';
@@ -3557,6 +3570,34 @@ function updateProgressBar(progressElement, percentageElement, value, isWeekly =
     } else if (percentage >= warnThreshold) {
         progressElement.classList.add('warning');
     }
+    applyMaxedState(progressElement, percentage);
+}
+
+// A pool at 100% is spent: the bar goes black and smoulders. Two offset
+// puff layers are mounted inside the fill so the smoke spans its full
+// width; they're torn down again the moment it drops below 100.
+function applyMaxedState(fillElement, percentage) {
+    if (!fillElement) return;
+    const maxed = percentage >= 100;
+    if (maxed === fillElement.classList.contains('maxed')) return;
+    fillElement.classList.toggle('maxed', maxed);
+    fillElement.querySelectorAll('.smoke-layer').forEach((el) => el.remove());
+    if (!maxed) return;
+    for (const cls of ['smoke-layer', 'smoke-layer b']) {
+        const layer = document.createElement('div');
+        layer.className = cls;
+        fillElement.appendChild(layer);
+    }
+}
+
+// "6d 22h" / "4h 29m" / "18m" — the Resets In column's house style, shared so
+// the banked-reset expiry countdown reads identically to every other row.
+function formatCountdown(diffMs) {
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
 }
 
 // Format reset date for the "Resets At" column
@@ -3696,16 +3737,7 @@ function updateTimer(timerElement, textElement, resetsAt, totalMinutes) {
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     // const seconds = Math.floor((diff % (1000 * 60)) / 1000); // Optional seconds
 
-    // Format time display
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        const remainingHours = hours % 24;
-        textElement.textContent = `${days}d ${remainingHours}h`;
-    } else if (hours > 0) {
-        textElement.textContent = `${hours}h ${minutes}m`;
-    } else {
-        textElement.textContent = `${minutes}m`;
-    }
+    textElement.textContent = formatCountdown(diff);
 
     // Calculate progress (elapsed percentage)
     const totalMs = totalMinutes * 60 * 1000;

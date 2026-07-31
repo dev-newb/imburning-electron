@@ -865,25 +865,18 @@ body.theme-light .provider-section {
 }
 
 
-/* Quiet text, no pill — the framed background read as cheap chrome */
-.section-chip.cli {
+/* Quiet text, no pill — the framed background read as cheap chrome.
+   Informational only: a CLI login is a perfectly good end state, not a
+   prompt to upgrade, so the chip no longer looks or behaves clickable. */
+.section-chip.cli,
+.section-chip.cli:hover,
+.section-chip.anthropic-cli,
+.section-chip.anthropic-cli:hover {
     color: #9898a8;
     background: none;
     border: none;
     padding: 2px 0;
-    cursor: pointer;
-    transition: color 0.15s ease;
-}
-
-.section-chip.cli:hover {
-    color: #a78bfa;
-}
-
-/* Anthropic's CLI chip is informational (no OAuth connect there yet) */
-.section-chip.anthropic-cli,
-.section-chip.anthropic-cli:hover {
     cursor: default;
-    color: #9898a8;
 }
 
 .settings-connect-btn {
@@ -3282,3 +3275,73 @@ body.compact-mode .title span { white-space: nowrap; }
 body.theme-light .sound-btn { border-color: rgba(0, 0, 0, 0.16); background: rgba(0, 0, 0, 0.04); color: #35415e; }
 body.theme-light .sound-btn:hover { background: rgba(139, 92, 246, 0.16); border-color: #8b5cf6; color: #1a1a2e; }
 body.theme-light .sound-filename { color: #6a7694; }
+
+/* =======================================================================
+   MAXED OUT (100%). The bar goes black and smoulders — the fire has
+   already been and gone. Two offset puff layers drift up and dissipate;
+   the containers un-clip so the smoke can leave the bar.
+   Declared after the .danger/.warning fills so it wins on equal specificity.
+   ======================================================================= */
+.progress-fill.maxed,
+.compact-bar-fill.maxed {
+    background: linear-gradient(90deg, #241f1d 0%, #0a0a0a 100%) !important;
+    box-shadow: inset 0 0 7px rgba(0, 0, 0, 0.95), 0 0 5px rgba(0, 0, 0, 0.5);
+}
+.progress-bar:has(.progress-fill.maxed),
+.compact-bar-bg:has(.compact-bar-fill.maxed) { overflow: visible; }
+
+.progress-fill.maxed,
+.compact-bar-fill.maxed { position: relative; overflow: visible; }
+
+/* Embers still glowing along the top edge of the dead bar */
+.progress-fill.maxed::after,
+.compact-bar-fill.maxed::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    border-radius: 3px 3px 0 0;
+    background: linear-gradient(90deg,
+        rgba(255, 122, 40, 0) 0%, rgba(255, 138, 50, 0.75) 22%,
+        rgba(255, 96, 30, 0.35) 48%, rgba(255, 150, 60, 0.8) 74%,
+        rgba(255, 110, 35, 0) 100%);
+    animation: emberGlow 2.3s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+@keyframes emberGlow { from { opacity: 0.35; } to { opacity: 0.95; } }
+
+/* The smoke itself — puffs spread across the FULL width of the bar */
+.smoke-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 6;
+    background:
+        radial-gradient(circle at 8% 70%,  rgba(200, 200, 208, 0.50) 0 3.5px, transparent 4.5px),
+        radial-gradient(circle at 24% 55%, rgba(178, 178, 188, 0.44) 0 4.5px, transparent 5.5px),
+        radial-gradient(circle at 41% 72%, rgba(210, 210, 218, 0.40) 0 3px,   transparent 4px),
+        radial-gradient(circle at 58% 52%, rgba(186, 186, 196, 0.46) 0 5px,   transparent 6px),
+        radial-gradient(circle at 74% 68%, rgba(200, 200, 210, 0.38) 0 3.5px, transparent 4.5px),
+        radial-gradient(circle at 90% 58%, rgba(180, 180, 190, 0.42) 0 4px,   transparent 5px);
+    filter: blur(3px);
+    opacity: 0;
+    animation: smokeRise 3.4s linear infinite;
+}
+.smoke-layer.b {
+    animation-delay: 1.7s;
+    background:
+        radial-gradient(circle at 16% 62%, rgba(190, 190, 200, 0.42) 0 4px,   transparent 5px),
+        radial-gradient(circle at 33% 74%, rgba(205, 205, 214, 0.38) 0 3px,   transparent 4px),
+        radial-gradient(circle at 50% 56%, rgba(175, 175, 186, 0.46) 0 4.5px, transparent 5.5px),
+        radial-gradient(circle at 67% 70%, rgba(198, 198, 208, 0.40) 0 3.5px, transparent 4.5px),
+        radial-gradient(circle at 84% 60%, rgba(182, 182, 192, 0.44) 0 4px,   transparent 5px);
+}
+@keyframes smokeRise {
+    0%   { transform: translateY(2px) scaleX(1) scaleY(0.85); opacity: 0; }
+    18%  { opacity: 0.85; }
+    60%  { opacity: 0.5; }
+    100% { transform: translateY(-24px) scaleX(1.18) scaleY(1.9); opacity: 0; }
+}
+/* Pizazz off: keep the black bar and embers, drop the drifting smoke */
+body.no-pizazz .smoke-layer { display: none; }
