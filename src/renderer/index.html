@@ -10,6 +10,7 @@
         style-src 'self' 'unsafe-inline';
         font-src 'self';
         img-src 'self' data:;
+        media-src 'self' data:;
         connect-src 'none';
     ">
     <title>I'm Burning!</title>
@@ -427,11 +428,40 @@
                                 <label class="toggle-switch"><input type="checkbox" id="burnAlertsToggle"><span class="toggle-slider"></span></label>
                             </div>
                         </div>
-                        <div class="settings-row-2col">
-                            <div class="settings-col">
-                                <span class="settings-row-label" title="Play a short fanfare when a limit is cleared before its scheduled reset — an OpenAI banked or immediate reset, or the Anthropic equivalent">Reset fanfare</span>
-                                <label class="toggle-switch"><input type="checkbox" id="resetFanfareToggle"><span class="toggle-slider"></span></label>
+
+                        <!-- Alert sounds: each can be switched off, pointed at a
+                             file of the user's own, volume-adjusted and previewed. -->
+                        <div class="settings-sound-block">
+                            <div class="settings-row-2col">
+                                <div class="settings-col">
+                                    <span class="settings-row-label" title="Plays when a limit clears early — a banked/immediate reset">Early-reset sound</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="soundResetToggle"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div class="settings-col sound-controls">
+                                    <input type="range" id="soundResetVolume" class="sound-vol" min="0" max="100" value="85" title="Volume">
+                                    <button class="sound-btn" id="soundResetTest" title="Preview">▶</button>
+                                    <button class="sound-btn" id="soundResetPick" title="Choose an audio file">Choose…</button>
+                                    <button class="sound-btn" id="soundResetReset" title="Back to the bundled sound">Default</button>
+                                </div>
                             </div>
+                            <div class="sound-filename" id="soundResetName">Default (heavenly choir)</div>
+
+                            <div class="settings-row-2col">
+                                <div class="settings-col">
+                                    <span class="settings-row-label" title="Plays when the burn detector trips on a series">Burn-spike sound</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="soundBurnToggle"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div class="settings-col sound-controls">
+                                    <input type="range" id="soundBurnVolume" class="sound-vol" min="0" max="100" value="85" title="Volume">
+                                    <button class="sound-btn" id="soundBurnTest" title="Preview">▶</button>
+                                    <button class="sound-btn" id="soundBurnPick" title="Choose an audio file">Choose…</button>
+                                    <button class="sound-btn" id="soundBurnReset" title="Back to the bundled sound">Default</button>
+                                </div>
+                            </div>
+                            <div class="sound-filename" id="soundBurnName">Default (fire)</div>
+                        </div>
+                        <div class="settings-row-2col">
+                            <div class="settings-col"></div>
                             <div class="settings-col"></div>
                         </div>
                         <!-- Theme moved to the toolbar: the leftmost cycle button. -->

@@ -84,6 +84,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
+  // Alert sounds
+  pickSoundFile: () => ipcRenderer.invoke('pick-sound-file'),
+  readSoundFile: (filePath) => ipcRenderer.invoke('read-sound-file', filePath),
+
   // Updates
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

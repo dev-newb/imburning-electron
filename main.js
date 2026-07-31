@@ -1919,6 +1919,26 @@ const DEFAULT_TRAY_COLORS = {
 };
 const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
 
+// Alert sounds. path === null means "use the bundled default"; anything else
+// is an absolute path the user picked. Volume is 0..1.
+const DEFAULT_SOUNDS = {
+  reset: { enabled: true, path: null, volume: 0.85 },
+  burn: { enabled: true, path: null, volume: 0.85 }
+};
+function sanitizeSounds(value) {
+  const out = {};
+  for (const key of ['reset', 'burn']) {
+    const v = (value && typeof value === 'object' && value[key]) || {};
+    const vol = Number(v.volume);
+    out[key] = {
+      enabled: v.enabled !== false,
+      path: typeof v.path === 'string' && v.path.trim() ? v.path : null,
+      volume: Number.isFinite(vol) ? Math.min(Math.max(vol, 0), 1) : DEFAULT_SOUNDS[key].volume
+    };
+  }
+  return out;
+}
+
 function hexToRgb(hex, fallback = { r: 0, g: 0, b: 0 }) {
   const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
   if (!match) return fallback;
@@ -3263,6 +3283,36 @@ ipcMain.handle('get-usage-history', async () => {
     .sort((a, b) => a.timestamp - b.timestamp);
 });
 
+// Let the user swap either alert sound for a file of their own.
+ipcMain.handle('pick-sound-file', async () => {
+  const res = await dialog.showOpenDialog(mainWindow || undefined, {
+    title: 'Choose an alert sound',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio', extensions: ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'flac'] }]
+  });
+  if (res.canceled || !res.filePaths?.length) return { ok: false, canceled: true };
+  return { ok: true, path: res.filePaths[0], name: path.basename(res.filePaths[0]) };
+});
+
+// Custom sounds live outside the bundle, so hand the renderer the bytes as a
+// data: URL rather than opening the CSP up to arbitrary file: reads.
+ipcMain.handle('read-sound-file', async (event, filePath) => {
+  try {
+    if (typeof filePath !== 'string' || !filePath) return { ok: false, error: 'No file' };
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return { ok: false, error: 'Not a file' };
+    if (stat.size > 8 * 1024 * 1024) return { ok: false, error: 'File is larger than 8 MB' };
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = { '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.mp3': 'audio/mpeg',
+                   '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.flac': 'audio/flac' }[ext];
+    if (!mime) return { ok: false, error: 'Unsupported audio format' };
+    const buf = await fs.promises.readFile(filePath);
+    return { ok: true, dataUrl: `data:${mime};base64,${buf.toString('base64')}`, name: path.basename(filePath) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // Export the usage history to a CSV or JSON file the user chooses. This is a
 // user-initiated local file save (dialog), never a network upload.
 ipcMain.handle('export-history', async (event, format) => {
@@ -3434,7 +3484,6 @@ ipcMain.handle('get-settings', () => {
     trayColors: { ...DEFAULT_TRAY_COLORS, ...store.get('settings.trayColors', {}) },
     trayOutline: { ...DEFAULT_TRAY_OUTLINE, ...store.get('settings.trayOutline', {}) },
     burnAlerts: store.get('settings.burnAlerts', true),
-    resetFanfare: store.get('settings.resetFanfare', true),
     fontColor: store.get('settings.fontColor', { enabled: false, color: '#e0e0e0' }),
     webhook: store.get('settings.webhook', { enabled: false, url: '' }),
     dailyDigest: store.get('settings.dailyDigest', true),
@@ -3449,6 +3498,7 @@ ipcMain.handle('get-settings', () => {
     pizazz: store.get('settings.pizazz', true),
     sortByUsage: store.get('settings.sortByUsage', false),
     flameStyle: store.get('settings.flameStyle', 'classic'),
+    sounds: { ...DEFAULT_SOUNDS, ...store.get('settings.sounds', {}) },
     hiddenRows: store.get('settings.hiddenRows', {}),
     chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
@@ -3492,7 +3542,6 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.trayColors) store.set('settings.trayColors', settings.trayColors);
   if (settings.trayOutline) store.set('settings.trayOutline', settings.trayOutline);
   store.set('settings.burnAlerts', settings.burnAlerts !== false);
-  store.set('settings.resetFanfare', settings.resetFanfare !== false);
   if (settings.fontColor) store.set('settings.fontColor', settings.fontColor);
   if (settings.webhook) store.set('settings.webhook', settings.webhook);
   store.set('settings.dailyDigest', settings.dailyDigest !== false);
@@ -3507,6 +3556,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
   if (settings.sortByUsage !== undefined) store.set('settings.sortByUsage', settings.sortByUsage === true);
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
+  if (settings.sounds !== undefined) store.set('settings.sounds', sanitizeSounds(settings.sounds));
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
   if (settings.chartHiddenSeries !== undefined) {
     store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));

@@ -165,7 +165,6 @@ const elements = {
     trayOutlineToggle: document.getElementById('trayOutlineToggle'),
     trayOutlineColor: document.getElementById('trayOutlineColor'),
     burnAlertsToggle: document.getElementById('burnAlertsToggle'),
-    resetFanfareToggle: document.getElementById('resetFanfareToggle'),
     fontColorToggle: document.getElementById('fontColorToggle'),
     fontColorPicker: document.getElementById('fontColorPicker'),
     planNote: document.getElementById('planNote'),
@@ -392,7 +391,101 @@ function setupProviderSections() {
 }
 
 // Event Listeners
+// ---- Alert sounds -------------------------------------------------------
+// Two events make noise: a limit clearing EARLY (a banked/immediate reset),
+// and the burn detector tripping. Either can be switched off, pointed at the
+// user's own file, or volume-adjusted in Settings.
+const SOUND_DEFAULTS = {
+    reset: { src: '../../assets/sounds/reset-default.m4a', label: 'Default (heavenly choir)' },
+    burn: { src: '../../assets/sounds/burn-default.m4a', label: 'Default (fire)' }
+};
+const _soundCache = {};          // kind -> resolved src (data: URL for custom files)
+let _soundPlaying = {};          // kind -> Audio, so a repeat retriggers cleanly
+
+function soundCfg(kind) {
+    const s = (window._cachedSettings && window._cachedSettings.sounds) || {};
+    return { enabled: true, path: null, volume: 0.85, ...(s[kind] || {}) };
+}
+async function resolveSoundSrc(kind) {
+    const cfg = soundCfg(kind);
+    if (!cfg.path) return SOUND_DEFAULTS[kind].src;
+    if (_soundCache[kind] && _soundCache[kind].path === cfg.path) return _soundCache[kind].src;
+    const res = await window.electronAPI.readSoundFile(cfg.path);
+    if (!res || !res.ok) {
+        debugLog('[Sound] custom file unreadable, using default:', res && res.error);
+        return SOUND_DEFAULTS[kind].src;
+    }
+    _soundCache[kind] = { path: cfg.path, src: res.dataUrl };
+    return res.dataUrl;
+}
+async function playAlertSound(kind, { force = false } = {}) {
+    const cfg = soundCfg(kind);
+    if (!force && cfg.enabled === false) return;
+    try {
+        const src = await resolveSoundSrc(kind);
+        const prev = _soundPlaying[kind];
+        if (prev) { try { prev.pause(); } catch (_) {} }
+        const audio = new Audio(src);
+        audio.volume = Math.min(Math.max(cfg.volume, 0), 1);
+        _soundPlaying[kind] = audio;
+        await audio.play();
+    } catch (err) {
+        debugLog('[Sound] playback failed:', err && err.message);
+    }
+}
+
+// Burn-spike: fire once when a series newly starts burning.
+let _prevBurningKeys = new Set();
+let _burnWatchSeeded = false;
+function checkBurnSpikeSound(keys) {
+    if (_burnWatchSeeded) {
+        for (const k of keys) {
+            if (!_prevBurningKeys.has(k)) { playAlertSound('burn'); break; }
+        }
+    }
+    _prevBurningKeys = new Set(keys);
+    _burnWatchSeeded = true;
+}
+
+function setupSoundSettings() {
+    const wire = (kind, ids) => {
+        const toggle = document.getElementById(ids.toggle);
+        const vol = document.getElementById(ids.volume);
+        const nameEl = document.getElementById(ids.name);
+        const setName = () => {
+            const cfg = soundCfg(kind);
+            nameEl.textContent = cfg.path ? cfg.path.split('/').pop() : SOUND_DEFAULTS[kind].label;
+            nameEl.title = cfg.path || SOUND_DEFAULTS[kind].label;
+        };
+        const patch = async (changes) => {
+            const sounds = { ...((window._cachedSettings || {}).sounds || {}) };
+            sounds[kind] = { ...soundCfg(kind), ...changes };
+            await _saveSettingsPatch({ sounds });
+            setName();
+        };
+        if (toggle) toggle.addEventListener('change', () => patch({ enabled: toggle.checked }));
+        if (vol) vol.addEventListener('change', () => patch({ volume: vol.value / 100 }));
+        const testBtn = document.getElementById(ids.test);
+        if (testBtn) testBtn.addEventListener('click', () => playAlertSound(kind, { force: true }));
+        const pickBtn = document.getElementById(ids.pick);
+        if (pickBtn) pickBtn.addEventListener('click', async () => {
+            const res = await window.electronAPI.pickSoundFile();
+            if (res && res.ok) { delete _soundCache[kind]; await patch({ path: res.path }); }
+        });
+        const resetBtn = document.getElementById(ids.reset);
+        if (resetBtn) resetBtn.addEventListener('click', async () => {
+            delete _soundCache[kind]; await patch({ path: null });
+        });
+        setName();
+    };
+    wire('reset', { toggle:'soundResetToggle', volume:'soundResetVolume', name:'soundResetName',
+                    test:'soundResetTest', pick:'soundResetPick', reset:'soundResetReset' });
+    wire('burn', { toggle:'soundBurnToggle', volume:'soundBurnVolume', name:'soundBurnName',
+                   test:'soundBurnTest', pick:'soundBurnPick', reset:'soundBurnReset' });
+}
+
 function setupEventListeners() {
+    setupSoundSettings();
     elements.refreshBtn.addEventListener('click', async () => {
         debugLog('Refresh button clicked');
         elements.refreshBtn.classList.add('spinning');
@@ -2804,6 +2897,7 @@ function computeBurningRowKeys(data) {
 function updateUI(data) {
     latestUsageData = normalizeUsageData(data);
     _burningRowKeys = computeBurningRowKeys(data);
+    checkBurnSpikeSound(_burningRowKeys);
 
     showMainContent();
     buildExtraRows(data);
@@ -2982,43 +3076,9 @@ function checkEarlyResets(data) {
     if (bank != null) _resetBank = bank;
 
     if (!freed && !banked) return;
-    if ((window._cachedSettings || {}).resetFanfare === false) return;
-    playResetFanfare();
+    playAlertSound('reset');
 }
 
-// A plagal (IV-I) cadence — the "amen" the word hallelujah lands on —
-// synthesised rather than shipped, so no audio asset and no licence tangle.
-// Never let a bad audio stack break a refresh: the whole thing is best-effort.
-function playResetFanfare() {
-    try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        const ctx = new Ctx();
-        if (ctx.state === 'suspended' && ctx.resume) ctx.resume().catch(() => {});
-        const master = ctx.createGain();
-        master.gain.value = 0.9;
-        master.connect(ctx.destination);
-        const t0 = ctx.currentTime + 0.03;
-        const voice = (freq, start, dur, peak) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.0001, start);
-            gain.gain.exponentialRampToValueAtTime(peak, start + 0.07);
-            gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-            osc.connect(gain);
-            gain.connect(master);
-            osc.start(start);
-            osc.stop(start + dur + 0.05);
-        };
-        const F = [349.23, 440.00, 523.25];             // F major  — "halle-"
-        const C = [261.63, 329.63, 392.00, 523.25];     // C major  — "-lujah"
-        F.forEach((f, i) => voice(f, t0, 0.55, 0.15 - i * 0.02));
-        C.forEach((f, i) => voice(f, t0 + 0.45, 1.35, 0.17 - i * 0.02));
-        setTimeout(() => { try { ctx.close(); } catch (_) {} }, 2400);
-    } catch (_) { /* a missing fanfare must never cost us a refresh */ }
-}
 
 // Fire OS desktop notifications when usage crosses warn/danger thresholds.
 // Only fires once per threshold crossing per session window — not on every refresh.
@@ -4287,7 +4347,12 @@ async function loadSettings() {
     if (elements.trayOutlineToggle) elements.trayOutlineToggle.checked = settings.trayOutline?.enabled !== false;
     if (elements.trayOutlineColor) elements.trayOutlineColor.value = settings.trayOutline?.color || '#facc15';
     if (elements.burnAlertsToggle) elements.burnAlertsToggle.checked = settings.burnAlerts !== false;
-    if (elements.resetFanfareToggle) elements.resetFanfareToggle.checked = settings.resetFanfare !== false;
+    for (const [kind, ids] of [['reset', ['soundResetToggle', 'soundResetVolume']],
+                               ['burn', ['soundBurnToggle', 'soundBurnVolume']]]) {
+        const cfg = { enabled: true, volume: 0.85, ...((settings.sounds || {})[kind] || {}) };
+        const t = document.getElementById(ids[0]); if (t) t.checked = cfg.enabled !== false;
+        const v = document.getElementById(ids[1]); if (v) v.value = Math.round(cfg.volume * 100);
+    }
     if (elements.fontColorToggle) elements.fontColorToggle.checked = settings.fontColor?.enabled === true;
     if (elements.fontColorPicker) elements.fontColorPicker.value = settings.fontColor?.color || '#e0e0e0';
     if (elements.webhookToggle) elements.webhookToggle.checked = settings.webhook?.enabled === true;
@@ -4377,7 +4442,6 @@ async function saveSettings() {
             color: elements.trayOutlineColor.value
         },
         burnAlerts: elements.burnAlertsToggle.checked,
-        resetFanfare: elements.resetFanfareToggle ? elements.resetFanfareToggle.checked : true,
         fontColor: {
             enabled: elements.fontColorToggle.checked,
             color: elements.fontColorPicker.value

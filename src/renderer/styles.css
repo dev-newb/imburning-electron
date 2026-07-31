@@ -3262,3 +3262,23 @@ body.compact-mode .title span { white-space: nowrap; }
    deliberately left unscaled — the bars still frame the button edges. */
 .clown-paint,
 .clown-tear { transform: scale(1.25); transform-origin: 12px 12.3px; }
+
+/* Alert-sound settings rows: volume, preview, file picker, reset-to-default */
+.settings-sound-block { margin: 2px 0 6px; }
+.sound-controls { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.sound-vol { width: 74px; accent-color: #8b5cf6; flex: 0 0 auto; cursor: pointer; }
+.sound-btn {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: #c7d3ea; border-radius: 6px; padding: 3px 8px;
+    font-size: 11px; line-height: 1.4; cursor: pointer; white-space: nowrap;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.sound-btn:hover { background: rgba(139, 92, 246, 0.22); border-color: #8b5cf6; color: #fff; }
+.sound-filename {
+    font-size: 11px; color: #8a8a9a; margin: -2px 0 8px 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.theme-light .sound-btn { border-color: rgba(0, 0, 0, 0.16); background: rgba(0, 0, 0, 0.04); color: #35415e; }
+body.theme-light .sound-btn:hover { background: rgba(139, 92, 246, 0.16); border-color: #8b5cf6; color: #1a1a2e; }
+body.theme-light .sound-filename { color: #6a7694; }
