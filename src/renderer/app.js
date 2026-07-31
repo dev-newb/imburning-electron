@@ -396,8 +396,8 @@ function setupProviderSections() {
 // and the burn detector tripping. Either can be switched off, pointed at the
 // user's own file, or volume-adjusted in Settings.
 const SOUND_DEFAULTS = {
-    reset: { src: '../../assets/sounds/reset-default.m4a', label: 'Default (heavenly choir)' },
-    burn: { src: '../../assets/sounds/burn-default.m4a', label: 'Default (fire)' }
+    reset: { src: '../../assets/sounds/reset-default.mp3', label: 'Default (heavenly choir)' },
+    burn: { src: '../../assets/sounds/burn-default.wav', label: 'Default (fire)' }
 };
 const _soundCache = {};          // kind -> resolved src (data: URL for custom files)
 let _soundPlaying = {};          // kind -> Audio, so a repeat retriggers cleanly
