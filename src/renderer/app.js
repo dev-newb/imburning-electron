@@ -1354,6 +1354,7 @@ function buildExtraRows(data) {
                 progressFill.classList.add('on-fire');
                 progressFill.style.setProperty('--fire-col', CODE_COLORS[config.color] || '#8b8fa3');
             }
+            applyMaxedState(progressFill, utilization);
             progressBar.appendChild(progressFill);
             barGroup.appendChild(progressBar);
 
@@ -2218,10 +2219,12 @@ function _ambientFireFrame(now) {
     }
     const bars = document.querySelectorAll('.progress-fill.on-fire, .compact-bar-fill.on-fire');
     const orbs = document.querySelectorAll('.reset-dot');
+    const maxed = document.querySelectorAll('.progress-fill.maxed, .compact-bar-fill.maxed');
     const particleStyle = (window._cachedSettings || {}).flameStyle === 'particle';
     for (const el of bars) _tickElementFire(el, now, particleStyle ? 20 : 42, false, particleStyle);
     for (const el of orbs) _tickElementFire(el, now, particleStyle ? 55 : 88, true, particleStyle);
-    if (bars.length || orbs.length) {
+    for (const el of maxed) _tickMaxedSmoke(el, now);
+    if (bars.length || orbs.length || maxed.length) {
         requestAnimationFrame(_ambientFireFrame);
     } else {
         _scheduleAmbientFire(600);
@@ -3581,13 +3584,48 @@ function applyMaxedState(fillElement, percentage) {
     const maxed = percentage >= 100;
     if (maxed === fillElement.classList.contains('maxed')) return;
     fillElement.classList.toggle('maxed', maxed);
-    fillElement.querySelectorAll('.smoke-layer').forEach((el) => el.remove());
-    if (!maxed) return;
-    for (const cls of ['smoke-layer', 'smoke-layer b']) {
-        const layer = document.createElement('div');
-        layer.className = cls;
-        fillElement.appendChild(layer);
+    if (!maxed) {
+        fillElement.querySelectorAll('.maxed-smoke').forEach((el) => el.remove());
+        fillElement.__smokeLayer = null;
     }
+}
+
+// Charred-bar smoke, drawn with the same pixel sprites the fire uses so it
+// matches the app's pixel-art language. Greys are flipped per theme — pale
+// smoke disappears against the light theme's near-white panel.
+function _spawnMaxedSmoke(layer, x) {
+    if (layer.childElementCount > 90) return;
+    const light = document.body.classList.contains('theme-light');
+    const palette = light
+        ? ['#4a4a56', '#5c5c6a', '#38384a', '#6a6a78']
+        : ['#8e8e9e', '#a2a2b2', '#76768a', '#b4b4c2'];
+    const size = Math.random() < 0.55 ? 3 : 2;
+    const s = document.createElement('div');
+    s.className = 'fp';
+    const life = Math.round(_rnd(900, 1500));
+    s.style.cssText = `left:${x}px; bottom:${_rnd(0, 4)}px; width:${size}px; height:${size}px;
+        background:${_pick(palette)}; opacity:${(0.55 + Math.random() * 0.4).toFixed(2)};
+        --dx:${Math.round(_rnd(-3, 4)) * 3}px; --ry:${-Math.round(_rnd(6, 12)) * 3}px;
+        animation: pxSmoke ${life}ms steps(7) forwards;`;
+    layer.appendChild(s);
+    setTimeout(() => s.remove(), life + 90);
+}
+
+function _tickMaxedSmoke(el, now) {
+    let layer = el.__smokeLayer;
+    if (!layer || layer.parentNode !== el) {
+        layer = document.createElement('div');
+        layer.className = 'maxed-smoke';
+        el.appendChild(layer);
+        el.__smokeLayer = layer;
+        layer.__lastSpawn = 0;
+    }
+    if (now - layer.__lastSpawn < 70 * (0.6 + Math.random() * 0.9)) return;
+    layer.__lastSpawn = now;
+    const width = Math.max(4, el.offsetWidth - 4);
+    // Spread across the whole width — a spent bar smoulders end to end
+    const count = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < count; i++) _spawnMaxedSmoke(layer, _rnd(0, width));
 }
 
 // "6d 22h" / "4h 29m" / "18m" — the Resets In column's house style, shared so

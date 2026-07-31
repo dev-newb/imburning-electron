@@ -3310,38 +3310,25 @@ body.theme-light .sound-filename { color: #6a7694; }
 }
 @keyframes emberGlow { from { opacity: 0.35; } to { opacity: 0.95; } }
 
-/* The smoke itself — puffs spread across the FULL width of the bar */
-.smoke-layer {
+/* Smoke uses the same pixel sprites the bars burn with, but its host layer
+   deliberately does NOT carry the .fx class: `.usage-section .fx { inset:0 }`
+   is two classes and would beat this rule, collapsing the layer to the bar's
+   own ~6px box and dumping the sprites below it. Anchored with bottom:100%
+   the layer sits entirely ABOVE the bar, so sprites rise off the char. */
+.maxed-smoke {
     position: absolute;
-    inset: 0;
+    left: 0; right: 0;
+    bottom: 100%;
+    height: 38px;
     pointer-events: none;
     overflow: visible;
     z-index: 6;
-    background:
-        radial-gradient(circle at 8% 70%,  rgba(200, 200, 208, 0.50) 0 3.5px, transparent 4.5px),
-        radial-gradient(circle at 24% 55%, rgba(178, 178, 188, 0.44) 0 4.5px, transparent 5.5px),
-        radial-gradient(circle at 41% 72%, rgba(210, 210, 218, 0.40) 0 3px,   transparent 4px),
-        radial-gradient(circle at 58% 52%, rgba(186, 186, 196, 0.46) 0 5px,   transparent 6px),
-        radial-gradient(circle at 74% 68%, rgba(200, 200, 210, 0.38) 0 3.5px, transparent 4.5px),
-        radial-gradient(circle at 90% 58%, rgba(180, 180, 190, 0.42) 0 4px,   transparent 5px);
-    filter: blur(3px);
-    opacity: 0;
-    animation: smokeRise 3.4s linear infinite;
+    contain: layout style;
 }
-.smoke-layer.b {
-    animation-delay: 1.7s;
-    background:
-        radial-gradient(circle at 16% 62%, rgba(190, 190, 200, 0.42) 0 4px,   transparent 5px),
-        radial-gradient(circle at 33% 74%, rgba(205, 205, 214, 0.38) 0 3px,   transparent 4px),
-        radial-gradient(circle at 50% 56%, rgba(175, 175, 186, 0.46) 0 4.5px, transparent 5.5px),
-        radial-gradient(circle at 67% 70%, rgba(198, 198, 208, 0.40) 0 3.5px, transparent 4.5px),
-        radial-gradient(circle at 84% 60%, rgba(182, 182, 192, 0.44) 0 4px,   transparent 5px);
+.maxed-smoke .fp {
+    position: absolute;
+    pointer-events: none;
+    transform-origin: 50% 100%;
+    will-change: transform, opacity;
 }
-@keyframes smokeRise {
-    0%   { transform: translateY(2px) scaleX(1) scaleY(0.85); opacity: 0; }
-    18%  { opacity: 0.85; }
-    60%  { opacity: 0.5; }
-    100% { transform: translateY(-24px) scaleX(1.18) scaleY(1.9); opacity: 0; }
-}
-/* Pizazz off: keep the black bar and embers, drop the drifting smoke */
-body.no-pizazz .smoke-layer { display: none; }
+body.no-pizazz .maxed-smoke { display: none; }
