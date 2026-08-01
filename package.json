@@ -112,9 +112,9 @@
       "artifactName": "ImBurning-${version}-linux-${arch}.${ext}"
     }
   },
-  "homepage": "https://github.com/dev-newb/burnwatch",
+  "homepage": "https://github.com/dev-newb/imburning",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dev-newb/burnwatch.git"
+    "url": "https://github.com/dev-newb/imburning.git"
   }
 }
