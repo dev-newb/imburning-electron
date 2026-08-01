@@ -19,6 +19,12 @@ LOG="$HOME/Library/Logs/burnwatch-update.log"
 # script that works in Terminal fails under launchd without this line.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
+# A locally built app needs no Developer ID: it never gets a quarantine flag,
+# so Gatekeeper never inspects it. Real signing only invites failure here —
+# a machine holding two identically-named certs makes codesign abort as
+# "ambiguous" and kills the build. Ad-hoc unless the caller asks otherwise.
+export CSC_IDENTITY_AUTO_DISCOVERY="${CSC_IDENTITY_AUTO_DISCOVERY:-false}"
+
 mkdir -p "$(dirname "$LOG")"
 exec >>"$LOG" 2>&1
 echo "=== $(date) ==="
@@ -52,6 +58,22 @@ elif [ ! -d "$APP_DEST" ]; then
     needs_build=1
 else
     echo "already up to date"
+fi
+
+# A fresh clone is ALREADY sitting on the newest tag, so the branch above
+# never fires and its npm install never runs — the first build would then be
+# attempted with no node_modules at all. Install whenever they're missing.
+if [ "$needs_build" = 1 ] && [ ! -d node_modules ]; then
+    echo "installing dependencies"
+    npm install --silent || { echo "npm install failed"; notify "Install failed (npm install)"; exit 1; }
+fi
+
+# npm 11's allow-scripts gate silently skips electron's postinstall, leaving
+# node_modules/electron without its binary. Fetch it explicitly if absent.
+if [ "$needs_build" = 1 ] && [ -d node_modules/electron ] && [ ! -d node_modules/electron/dist ]; then
+    echo "fetching the electron binary (postinstall was skipped)"
+    node node_modules/electron/install.js || {
+        echo "electron download failed"; notify "Install failed (electron download)"; exit 1; }
 fi
 
 if [ "$needs_build" = 1 ]; then
