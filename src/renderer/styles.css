@@ -571,7 +571,11 @@ body.theme-light .graph-btn.active {
     font-family: inherit;
     text-align: center;
     white-space: nowrap;
-    width: 72px;
+    /* Fill the grid track rather than pinning 72px. The hard width matched
+       only the widest rung of the size ladder: once landscape/sz3 narrowed
+       this column to 36px the cell kept its 72px, overflowed to the right
+       and sat 18px off the "IN" header it is supposed to sit under. */
+    width: 100%;
 }
 
 .timer-text.extra-spending,
@@ -3357,3 +3361,12 @@ body.no-pizazz .maxed-smoke { display: none; }
     from { box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.50); }
     to   { box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.9); }
 }
+
+/* Grid children default to min-width:auto, so a cell whose content is wider
+   than its track refuses to shrink and overflows to the RIGHT — dragging its
+   centre off the header's. Measured in landscape/sz3: the Resets-In cell ran
+   166..238 inside a 166..202 track, putting it 18px right of the "IN" header.
+   Letting every cell shrink to its track keeps each column centred on its
+   own header at every rung of the size ladder. */
+.usage-section > *,
+.usage-headers > * { min-width: 0; }
