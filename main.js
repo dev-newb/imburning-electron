@@ -754,12 +754,36 @@ function getGeminiOAuthClient() {
       nvmVersionRoots.push(path.join(versionsDir, version, 'lib', 'node_modules'));
     }
   } catch {}
+  // Any directory matching <base>/*/lib/node_modules — covers standalone node
+  // tarballs (~/.local/opt/node-v24…), fnm and volta version dirs, which a
+  // fixed list can never enumerate.
+  const globVersionRoots = (base, tail) => {
+    const out = [];
+    try {
+      for (const entry of fs.readdirSync(base)) {
+        const candidate = path.join(base, entry, ...tail);
+        try { if (fs.statSync(candidate).isDirectory()) out.push(candidate); } catch {}
+      }
+    } catch {}
+    return out;
+  };
+  const home = os.homedir();
   const npmPrefixes = [
     process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules') : null,
+    // Homebrew — the default global root on Apple Silicon and Intel Macs
+    '/opt/homebrew/lib/node_modules',
     '/usr/local/lib/node_modules',
     '/usr/lib/node_modules',
-    path.join(os.homedir(), '.npm-global', 'lib', 'node_modules'),
-    ...nvmVersionRoots
+    path.join(home, '.npm-global', 'lib', 'node_modules'),
+    path.join(home, '.local', 'lib', 'node_modules'),
+    path.join(home, '.local', 'opt', 'node', 'lib', 'node_modules'),
+    path.join(home, '.bun', 'install', 'global', 'node_modules'),
+    ...nvmVersionRoots,
+    ...globVersionRoots(path.join(home, '.local', 'opt'), ['lib', 'node_modules']),
+    ...globVersionRoots(path.join(home, '.local', 'share', 'fnm', 'node-versions'),
+                        ['installation', 'lib', 'node_modules']),
+    ...globVersionRoots(path.join(home, '.volta', 'tools', 'image', 'node'),
+                        ['lib', 'node_modules'])
   ].filter(Boolean);
   for (const prefix of npmPrefixes) {
     const root = path.join(prefix, '@google', 'gemini-cli');

@@ -1,7 +1,7 @@
 {
   "name": "claude-usage-widget",
-  "version": "2.6.0",
-  "description": "Burnwatch — desktop widget tracking AI usage across Anthropic, OpenAI and Google",
+  "version": "2.7.0",
+  "description": "Burnwatch \u2014 desktop widget tracking AI usage across Anthropic, OpenAI and Google",
   "main": "main.js",
   "scripts": {
     "test": "node --test",
@@ -20,7 +20,7 @@
   ],
   "author": "devnewb",
   "license": "MIT",
-  "copyright": "Copyright © 2026 Burnwatch (dev-newb). Based on Claude Usage Widget © Slavomir Durej (MIT).",
+  "copyright": "Copyright \u00a9 2026 Burnwatch (dev-newb). Based on Claude Usage Widget \u00a9 Slavomir Durej (MIT).",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
@@ -42,7 +42,7 @@
   "build": {
     "appId": "com.burnwatch.app",
     "productName": "I'm Burning!",
-    "copyright": "Copyright © 2026 Burnwatch (dev-newb) · based on Claude Usage Widget © Slavomir Durej",
+    "copyright": "Copyright \u00a9 2026 Burnwatch (dev-newb) \u00b7 based on Claude Usage Widget \u00a9 Slavomir Durej",
     "publish": [
       {
         "provider": "github",
@@ -58,7 +58,7 @@
       "icon": "assets/icon.ico"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-win-portable.${ext}",
+      "artifactName": "ImBurning-${version}-win-portable.${ext}",
       "unpackDirName": "claude-usage-widget"
     },
     "nsis": {
@@ -66,7 +66,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "${productName}-${version}-win-Setup.${ext}"
+      "artifactName": "ImBurning-${version}-win-Setup.${ext}"
     },
     "files": [
       "**/*",
@@ -91,11 +91,11 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSHumanReadableCopyright": "Copyright © 2026 Burnwatch (dev-newb) · based on Claude Usage Widget © Slavomir Durej"
+        "NSHumanReadableCopyright": "Copyright \u00a9 2026 Burnwatch (dev-newb) \u00b7 based on Claude Usage Widget \u00a9 Slavomir Durej"
       }
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-macOS-${arch}.dmg"
+      "artifactName": "ImBurning-${version}-macOS-${arch}.dmg"
     },
     "linux": {
       "target": [
@@ -109,7 +109,7 @@
       ],
       "icon": "assets/logo.png",
       "category": "Utility",
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+      "artifactName": "ImBurning-${version}-linux-${arch}.${ext}"
     }
   },
   "homepage": "https://github.com/dev-newb/burnwatch",
