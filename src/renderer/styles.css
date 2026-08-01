@@ -3370,3 +3370,15 @@ body.no-pizazz .maxed-smoke { display: none; }
    own header at every rung of the size ladder. */
 .usage-section > *,
 .usage-headers > * { min-width: 0; }
+
+/* Once the bar itself is hidden (sz1 and narrower) the cell holds only the
+   percentage. Right-aligning it left it sitting off the centred "USED"
+   header above; with nothing else in the cell, centre it so the number
+   lines up with its own column heading. */
+body.sz1 .usage-bar-group,
+body.lbl-code .usage-bar-group { justify-content: center; }
+
+/* sz4 drops the Resets-At VALUE (.resets-at-text) but the header cell is a
+   .col-header, so the header kept five children against a four-column grid
+   and the fifth wrapped onto its own line at the far left. Drop it too. */
+body.sz4 .usage-headers > :last-child { display: none; }
