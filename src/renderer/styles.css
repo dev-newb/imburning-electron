@@ -2222,7 +2222,13 @@ body.lbl-abbr .usage-label::after {
 }
 
 /* Row labels compress to short colour-matched codes (full name in tooltip) */
-body.lbl-code .usage-label, body.lbl-code .expand-section .usage-label { font-size: 0; }
+/* font-size:0 hides the full label, but letter-spacing is NOT scaled by it:
+   the invisible text kept 0.5px per character and shoved the ::after code
+   right by a length-dependent amount — "Claude Session (5h)" (19 chars)
+   pushed 9.5px, "Fable (7d)" (10) only 5px, so codes in the same column
+   started at different x. It also stole room, clipping CLA 5H to "CLA 5".
+   Zeroing it here costs nothing: the ::after sets its own tracking. */
+body.lbl-code .usage-label, body.lbl-code .expand-section .usage-label { font-size: 0; letter-spacing: 0; word-spacing: 0; }
 body.lbl-code .usage-label > * { display: none; }
 body.lbl-code .usage-label::after {
     content: attr(data-code);
