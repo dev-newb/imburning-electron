@@ -555,7 +555,7 @@ function setupEventListeners() {
             window.electronAPI.applyWindowPreset(goWide ? 'wide' : 'reset');
             elements.wideBtn.classList.toggle('active', goWide);
             if (elements.tallBtn) elements.tallBtn.classList.remove('active');
-            _fitPresetIfGraphHidden();
+            _fitPresetHeight();
             _fitWidePresetWithGraph();
             if (goWide) setTimeout(syncLandscapeCliWidth, 180);
         });
@@ -567,7 +567,7 @@ function setupEventListeners() {
             window.electronAPI.applyWindowPreset(goTall ? 'tall' : 'reset');
             elements.tallBtn.classList.toggle('active', goTall);
             if (elements.wideBtn) elements.wideBtn.classList.remove('active');
-            _fitPresetIfGraphHidden();
+            _fitPresetHeight();
         });
     }
 
@@ -1527,19 +1527,26 @@ function syncGraphLayoutState() {
     document.body.classList.toggle('graph-off', !_graphIsInline());
 }
 
-function _fitPresetIfGraphHidden() {
-    if (_activePreset === null || _graphIsInline()) return;
+function _fitPresetHeight() {
+    if (_activePreset === null) return;
     // Wait for Electron's preset bounds and the resulting CSS reflow before
     // measuring the provider rows. A preset switch (wide→tall) triggers a
     // large reflow that can outlast one timer, so the fit runs in several
     // idempotent passes — each re-checks state in case the chart was enabled
     // mid-transition. (One 120ms pass used to measure mid-reflow and leave
     // the reserved-graph void the tall preset was reported with.)
+    //
+    // This used to bail out entirely whenever the graph was inline, on the
+    // assumption the chart would take up the slack. It can't: .graph-section
+    // is a fixed 220px, so the preset's flat 1150px height left everything
+    // below the chart as dead space. Fit in both cases — measuring the full
+    // scrollHeight when the chart is shown so its band is counted, and the
+    // intrinsic row height when it isn't.
     for (const delay of [150, 450, 900]) {
         setTimeout(() => {
-            if (_activePreset === null || _graphIsInline()) return;
+            if (_activePreset === null) return;
             syncGraphLayoutState();
-            _forceFitHeight({ fitPreset: true, intrinsic: true });
+            _forceFitHeight({ fitPreset: true, intrinsic: !_graphIsInline() });
         }, delay);
     }
 }
