@@ -1539,14 +1539,19 @@ function _fitPresetHeight() {
     // This used to bail out entirely whenever the graph was inline, on the
     // assumption the chart would take up the slack. It can't: .graph-section
     // is a fixed 220px, so the preset's flat 1150px height left everything
-    // below the chart as dead space. Fit in both cases — measuring the full
-    // scrollHeight when the chart is shown so its band is counted, and the
-    // intrinsic row height when it isn't.
+    // below the chart as dead space.
+    //
+    // ALWAYS measure intrinsically, graph or no graph. #graphSection is a
+    // child of #mainContent, so _intrinsicMainContentHeight() already counts
+    // its band. scrollHeight cannot be used here: .content is flex-stretched
+    // with overflow-y:auto, so when the content is SHORTER than the window
+    // scrollHeight just reports the stretched box (~the preset height) and
+    // the fit computes a target equal to what it already is — never shrinking.
     for (const delay of [150, 450, 900]) {
         setTimeout(() => {
             if (_activePreset === null) return;
             syncGraphLayoutState();
-            _forceFitHeight({ fitPreset: true, intrinsic: !_graphIsInline() });
+            _forceFitHeight({ fitPreset: true, intrinsic: true });
         }, delay);
     }
 }
