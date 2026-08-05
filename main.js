@@ -582,7 +582,7 @@ function readCodexSessionSnapshotUncached() {
   const selected = snapshots[0];
   if (!selected) return null;
   debugLog('[Codex] Using session snapshot from', selected.source.id);
-  return selected.data;
+  return { ...selected.data, capturedAtMs: selected.mtimeMs };
 }
 const readCodexSessionSnapshot = memoizeCredentialRead(readCodexSessionSnapshotUncached);
 
@@ -686,19 +686,35 @@ async function codexResetExpiry() {
 async function fetchCodexUsageBase() {
   const oauth = await getOAuthAccessToken('openai');
   const cliCandidates = readCodexAuthCandidates();
+  const fetchCli = () => Promise.all(cliCandidates.map(async (candidate) => {
+    const fetched = await fetchCodexWithToken(candidate.accessToken, candidate.accountId);
+    return {
+      candidate,
+      data: fetched && !fetched.accountId && candidate.accountId
+        ? { ...fetched, accountId: candidate.accountId }
+        : fetched
+    };
+  }));
   const [primary, cliResults] = await Promise.all([
     oauth ? fetchCodexWithToken(oauth.accessToken, oauth.accountId) : Promise.resolve(null),
-    Promise.all(cliCandidates.map(async (candidate) => {
-      const fetched = await fetchCodexWithToken(candidate.accessToken, candidate.accountId);
-      return {
-        candidate,
-        data: fetched && !fetched.accountId && candidate.accountId
-          ? { ...fetched, accountId: candidate.accountId }
-          : fetched
-      };
-    }))
+    fetchCli()
   ]);
-  const usableCliResults = cliResults.filter((result) => result.data);
+  let usableCliResults = cliResults.filter((result) => result.data);
+
+  // A single blip (sleep/wake, brief network loss) used to drop straight to
+  // the session-log fallback. One short retry absorbs most transients.
+  if (!primary && !usableCliResults.length && cliCandidates.length) {
+    debugLog('[Codex] live fetch failed for all candidates — retrying once');
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    usableCliResults = (await fetchCli()).filter((result) => result.data);
+  }
+
+  // Remember when live data was last seen (persisted): the session-log
+  // fallback below must never present anything OLDER than this as current.
+  const markLive = () => {
+    const at = store.get('codexLastLiveAt', 0);
+    if (Date.now() - at > 60 * 1000) store.set('codexLastLiveAt', Date.now());
+  };
 
   if (primary) {
     // Prefer a local account that is genuinely different from the widget's
@@ -707,6 +723,7 @@ async function fetchCodexUsageBase() {
     const selected = usableCliResults.find((result) => result.data.accountId
       && primary.accountId && result.data.accountId !== primary.accountId);
     if (selected) debugLog('[Codex] Using local credentials from', selected.candidate.id);
+    markLive();
     return {
       ...primary,
       connected: true,
@@ -716,10 +733,23 @@ async function fetchCodexUsageBase() {
   const selected = usableCliResults[0];
   if (selected) {
     debugLog('[Codex] Using local credentials from', selected.candidate.id);
+    markLive();
     return { ...selected.data, connected: false, cli: null };
   }
+  // Session-log fallback — but only when the snapshot is NEWER than the last
+  // successful live fetch. A snapshot that predates data we have already
+  // shown can only be staler than what the user last saw; serving it once
+  // presented a 5-day-old 11% as current usage. Rejecting it here lets the
+  // provider cache serve its recent last-good LIVE data instead (or show
+  // the section as disconnected, which is at least honest).
   const snapshot = readCodexSessionSnapshot();
-  return snapshot ? { ...snapshot, connected: false, cli: null } : null;
+  if (!snapshot) return null;
+  const lastLiveAt = store.get('codexLastLiveAt', 0);
+  if ((snapshot.capturedAtMs || 0) <= lastLiveAt) {
+    debugLog('[Codex] session snapshot predates last live fetch — suppressed');
+    return null;
+  }
+  return { ...snapshot, connected: false, cli: null };
 }
 
 // Enrich the HTTP data with banked-reset expiry, when the CLI can tell us.
