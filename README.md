@@ -1,12 +1,28 @@
 <p align="center">
-  <img src="assets/burnwatch-hero.png" width="256" alt="Burnwatch — a robot with its head on fire, keeping a gauge on its own burn">
+  <img src="assets/burnwatch-hero.png" width="256" alt="I'm Burning! — a robot with its head on fire, keeping a gauge on its own burn">
 </p>
 
-<h1 align="center">Burnwatch</h1>
+<h1 align="center">I'm Burning!</h1>
 
-**Burnwatch** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
+**I'm Burning!** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
-![Burnwatch — portrait main view: Anthropic, OpenAI, and Google sections, every pool tracked, Fable at 100%](assets/screenshot-main.png)
+> Formerly **Burnwatch**. Based on [Claude Usage Widget](https://github.com/SlavomirDurej) © Slavomir Durej (MIT). The internal package name stays `claude-usage-widget` so upgrades keep your settings.
+
+![I'm Burning! — portrait main view: Anthropic, OpenAI, and Google sections, every pool tracked, a maxed-out Codex bar smoking](assets/screenshots/main-portrait-dark.png)
+
+---
+
+## New in 2.7 — the rename, the sounds, and the smoke
+
+- 🤖 **New name, new face** — the app is now *I'm Burning!*, with the burning pixel robot as its icon in the Dock, Cmd-Tab switcher, and Finder.
+- 🎵 **Alert sounds** — a limit clearing **early** (an OpenAI banked/immediate reset, or the Anthropic equivalent) plays a heavenly choir; a **burn-spike** plays fire. Each sound has its own toggle, volume, and a **file picker** to use any audio of your own (Settings).
+- ⚫ **Maxed-out bars go dark** — a pool at 100% chars black with a glowing ember edge and **pixel smoke drifting off it**. The fire has been and gone; a spent bar never wears live flames.
+- 🔮 **Reset orbs with urgency** — each banked OpenAI limit-reset is its own orb with its own flame: teal while there's runway, **amber inside a week, red inside 24 hours**, with per-orb expiry popups when OpenAI reports them (read via the Codex CLI's app-server).
+
+  ![Banked reset orbs in their three urgency colours](assets/screenshots/reset-orbs.png)
+
+- 🧰 **Toolbar rework** — a slinky for compact mode (it compresses when the widget does), a terminal-prompt icon for CLI-login refresh, a real toothed gear for Settings, and one optically-centred layout in every mode.
+- 🧭 **Honest data only** — if a live fetch hiccups, the widget shows its last good data or says it's disconnected; it will never present an old session-log snapshot as current usage.
 
 ---
 
@@ -14,294 +30,160 @@
 
 Power users end up logged into the **desktop app and the CLI with different accounts** — claude.ai in the browser but another account in the `claude` CLI, ChatGPT desktop plus a second account in `codex`, a Google login here and a different one in `gemini`. Every one of those accounts has its **own limits**, and most trackers only see one of them.
 
-Burnwatch tracks **both accounts per company, simultaneously**:
+I'm Burning! tracks **both accounts per company, simultaneously**:
 
-- 🔑 **Sign in with ChatGPT / Google** (official OAuth), or let Burnwatch read your **CLI logins** — no extra setup
+- 🔑 **Sign in with ChatGPT / Google** (official OAuth), or let it read your **CLI logins** — no extra setup, strictly read-only
 - 🧬 **Same account everywhere?** The views merge automatically — no duplicate rows
-- 🟠 **Different accounts?** An amber **CLI: 2ND ACCT** pill appears and the second account gets its own rows, history series, burn-spike alerts, and tray badge (marked with a terminal-cursor `61▁`)
-- 🖥️ In **wide mode** the two accounts sit **side by side** — one shared model column, a Desktop cluster and a CLI cluster, each under its own labels
-- 🖥️ **No web login? No problem.** If you're signed into the `claude` CLI but not claude.ai, Burnwatch can run the whole Anthropic section straight off that CLI login ("via CLI login") — and if a CLI token is stale, OpenAI usage still shows from the local session-log snapshot.
-- 🔥 Not interested? **Burn the pill away** — pixel fire chars it (Soot & Sparks finish, smoke included) and the rows roll up until you burn it back
+- 🟠 **Different accounts?** An amber **CLI: 2ND ACCT** pill appears and the second account gets its own rows, history series, burn-spike alerts, and tray badge
+- 🖥️ In **wide mode** the two accounts sit **side by side** — one shared model column, a Desktop cluster and a CLI cluster
+- 🖥️ **No web login? No problem.** Signed into the `claude` CLI but not claude.ai? The whole Anthropic section runs straight off that CLI login (*via CLI login*). Google sign-in uses the gemini-cli's public OAuth client, so having `gemini` installed is all it takes.
+- 🔥 Not interested? **Burn the pill away** — pixel fire chars it and the rows roll up until you burn it back
 
-![Burnwatch — wide mode: three companies as columns, Google tracking desktop AND CLI accounts side by side, prediction graph spanning below](assets/screenshot-landscape.png)
-
----
-
-## New in 2.2 & 2.3 — rank by burn, bars on fire, and a hardening pass
-
-- 🔥🚨 **Bars catch fire under burn alerts** *(2.3)* — when the burn detector notices a pool eating tokens unusually fast, that pool's percentage bar burns with live pixel fire **in its own colour** (threshold recolours and Gemini shades included) until the pace settles back below half the trigger. Codex's banked reset orbs idle with a small flame of their own.
-- 🎛️🔥 **Two flame styles, switched by clicking a burning bar** *(2.4)* — click any bar that's on fire to toggle between **Classic pixel** (chunky sprites, the app's signature fire) and **Particle inferno** (a dense storm of rising fire-motes with occasional tongues — busier, more chaotic, more real). The choice sticks.
-
-- 📊 **Sort models by usage** *(Settings, optional)* — inside every company the pools you're burning hardest rise to the top, live: portrait rows, wide-mode dual tables, and compact bars all rank by current %. Session & Weekly stay pinned; credits and reset orbs keep the bottom.
-- 🔥 **The burn got better** — an ember glow rides the fire front, letters flash white-hot as they ignite, ash flakes tumble off freshly charred text, and restored rows return under a golden sheen. It's cheaper too: particle counts are capped and everything stops cold while the window is hidden.
-- 🔐 **Hardening** — the Claude session key now never leaves the main process (the whole login flow runs there), diagnostics never print key material or account identity, and Settings warns when no OS keychain is available for encrypted storage.
-- ⚡ **One parked fetch window** instead of a fresh hidden browser per request — far less process churn, plus real HTTP statuses so an expired session is detected exactly instead of guessed.
-- 🐧 **WSL that behaves** — discovery skips docker-desktop-style utility distros and no longer re-probes (or accidentally boots) distros every few minutes; the rescan button is the explicit refresh.
-- 🧭 **Gemini order** — Pro first, then 3.6 Flash and 3.5 Flash-Lite. Plus day-boundary chart ticks, detached-graph parity (reset marker + clamped projections), a stale-session notice instead of silently stale rows, keyboard & screen-reader accessibility, light-theme fixes, and ~370 lines of dead CSS gone.
+![I'm Burning! — wide mode: three companies as columns with the prediction graph spanning below](assets/screenshots/wide-preset-dark.png)
 
 ---
 
 ## Every pool, all three companies
 
-Each provider meters more than one thing — Burnwatch shows **all of it**:
+Each provider meters more than one thing — I'm Burning! shows **all of it**:
 
-- **Anthropic** — Claude Session (5h), All Claude Models (7d), **Fable (7d)** plus per-model/surface weekly pools when your account has them (Sonnet, Opus, Cowork, Design, OAuth Apps) and any future model-scoped limit (all rendered generically from the API), Extra Usage spend, and prepaid Account Credits
-- **OpenAI** — Codex (7d), the separate **GPT-5.3-Codex-Spark** pool, Code Review (when your account has one), purchased credits, and banked **limit-reset orbs**
+- **Anthropic** — Claude Session (5h), All Claude Models (7d), **Fable (7d)** plus per-model/surface weekly pools when your account has them (Sonnet, Opus, Cowork, Design, OAuth Apps) and any future model-scoped limit, Extra Usage spend, and prepaid Account Credits
+- **OpenAI** — Codex (7d), the separate **GPT-5.3-Codex-Spark** pool, Code Review (when your account has one), purchased credits, and banked **limit-reset orbs** with per-orb expiry
 - **Google** — one row per model **version** (2.5 Pro, 2.5 Flash, 2.5 Flash Lite, 3.1 Flash Lite…), because Google meters each separately, in progressive shades of Google blue
 
-Don't care about a pool? **Hover it and click the minus** — the row **burns away to nothing** (pixel fire, no ash left behind) and the window smoothly closes the gap. Bring it back from the *N hidden* chip and it **fades in under a shower of gold sparkles** as the window grows to fit. Works everywhere, including compact mode.
-
-![Burnwatch — main view: Anthropic, OpenAI, and Google, every pool tracked](assets/screenshot-main.png)
+Don't care about a pool? **Hover it and click the minus** — the row **burns away to nothing** and the window smoothly closes the gap. Bring it back from the *N hidden* chip and it fades in under a shower of gold sparkles.
 
 ---
 
 ## A layout for every window
 
-Burnwatch **reflows in realtime** as you drag — no fixed layouts, no clipped text:
+The widget **reflows in realtime** as you drag — no fixed layouts, no clipped text:
 
-- 📏 **Live resize ladder** — full labels → abbreviated windows ("2.5 Pro (1D)", tooltip explains) → colour-coded chips (`CLA 5H · CDX · SPK · 2.5P`) → countdown text becomes **remaining-time pies** → redundant columns bow out — down to a 200px sliver
-- 🖼️ **Orientation aware** — wider than tall? The three companies line up as **columns** with per-column headers and a shared bottom line above the chart. Stretched tall? Text and the company wordmarks **grow to fill the space**
-- 🖥️↕️ **Wide / Tall presets** — two toolbar buttons snap the window straight into the landscape three-column layout or a tall stacked view, then toggle back to the auto-sized widget — all with the same smooth realtime reflow
-- 🗜️ **Compact mode** (the boot-stomping-a-can button) — one slim bar per pool across all companies, grouped by company colour, fits any corner
+- 📏 **Live resize ladder** — full labels → abbreviated → colour-coded chips (`CLA 5H · CDX · SPK · 2.5P`) → countdown text becomes **remaining-time pies** → redundant columns bow out — down to a 200px sliver
+- 🖼️ **Orientation aware** — wider than tall? The three companies line up as **columns** with per-column headers and the chart spanning below
+- 🖥️↕️ **Wide / Tall presets** — two title-bar buttons snap the window into the landscape three-column layout or a tall stacked view sized to its content, then toggle back to the auto-sized widget
+- 🗜️ **Compact mode** (the slinky button — it compresses when the widget does) — one slim bar per pool across all companies, grouped by company colour, fits any corner:
+
+  <p align="center">
+    <img src="assets/screenshots/compact-dark.png" width="320" alt="Compact mode, dark — one slim bar per pool">
+    <img src="assets/screenshots/compact-light.png" width="320" alt="Compact mode, light">
+  </p>
+
 - 🪟 **Windows Snap** works natively — drag to an edge or Win+Arrow
 - ↕️ The window **grows and contracts with its content**: toggle the graph, burn a group away, hide a tracker — the frame follows
-- 🙈 **Your board, your rules** — collapse any company entirely from its header, hide any single model or pool from a hover, burn away whole account groups; everything restores with a click
-
-<p align="center">
-  <img src="assets/screenshot-narrow.png" width="240" alt="Burnwatch squeezed narrow — colour chips and pie timers">
-  <img src="assets/screenshot-compact.png" width="200" alt="Burnwatch compact mode — one slim bar per pool">
-</p>
 
 ---
 
 ## Make it yours
 
-- 🎨 **Themes** — Dark, Light, or follow the System, plus a custom widget **font colour**
-- 🖌️ **Tray badge colours** — per-company background + number colours, all editable in Settings
-- 🚨 **Critical outline** — badges gain a coloured border the moment a provider's API flags a limit as critical
-- ⏱️ **Refresh interval** — 30s / 1m / 2m / 5m (default 5m); the countdowns keep ticking live in between
-- 📌 **Window behaviour** — launch at startup, always-on-top, hide-from-taskbar, remembered position — all in-app toggles
+- 🎨 **Themes** — Dark, Light, or follow the System (the toolbar button cycles moon → sun → monitor), plus a custom widget **font colour**
+
+  ![Light theme, portrait](assets/screenshots/main-portrait-light.png)
+
+- 🎵 **Alert sounds** — per-sound enable, volume, preview, and *Choose…* to swap in any audio file you like; *Default* brings the bundled ones back
+- 🖌️ **Tray badge colours** — per-company background + number colours, with an optional **critical outline** when a provider flags a limit
+- ⏱️ **Refresh interval** — 15s to 5m (default 5m); countdowns tick live in between
+- 📌 **Window behaviour** — launch at startup, always-on-top, hide-from-taskbar/Dock, remembered position
 - 🧯 **Thresholds** — set your own warn/danger percentages that recolour every bar
+
+![Settings — global options plus one column per company](assets/screenshots/settings-top.png)
 
 ---
 
 ## Watching the burn
 
-⏳ **Burn-rate Forecast** — projects when each pool hits 100%, on the chart and in tooltips, now for **every provider** — Anthropic, Codex, Gemini, and second accounts — not just Anthropic
+⏳ **Burn-rate Forecast** — projects when each pool hits 100%, on the chart and in tooltips, for every provider and second account
 🗓️ **Session Planner** — per-company: finds your heaviest hours and suggests when to start a fresh window
-🔔 **Usage & Burn-spike Alerts** — company-attributed desktop notifications; median+MAD anomaly detection on every tracked series (second accounts included)
-📱 **Phone Alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
-🌅 **Daily Digest** — yesterday's burn, per company, each morning
-📈 **The Prediction Graph** — a 7-day history chart with **dotted burn-rate projections** showing when each pool will hit 100%. Now plots **cross-provider comparison lines** — Anthropic, Codex, Gemini and second accounts share one 0–100% axis — with a **clickable legend** to show or hide any series (your choice sticks). Toggled by the resident **pixel psychic**: eyes-open idle means history only; click him into his eyes-closed trance and the projections appear. **Pop it out** into its own always-on-top window with the corner button. Roomiest in wide mode, where it stretches beneath all three columns
-💾 **History export** — one click dumps your full usage history to **CSV or JSON** (Settings → Export) — a local file save, nothing uploaded
-💾 **Tray badges** — per-company colours (Anthropic blue, Fable red, OpenAI green, Google yellow), customizable, with X-on-red at 99%, terminal-cursor badges for second accounts, and an optional critical-severity outline
-🔄 **Silent auto-update** — new releases download in the background and apply on next launch; you install Burnwatch exactly once
+🔥 **Burn-spike detection** — median+MAD anomaly detection on every tracked series; a pool eating tokens unusually fast catches **live pixel fire in its own colour** until the pace settles. Click a burning bar to switch between **Classic pixel** and **Particle inferno** flame styles
+⚫ **Maxed-out treatment** — at 100% the bar goes black and **smoulders with pixel smoke** until the window resets
+🔔 **Usage & burn-spike alerts** — desktop notifications, plus the fire sound if you keep it on
+🎺 **Early-reset fanfare** — when a limit clears *before* its scheduled time (banked reset spent, provider grace), the choir sings. Resets are rare and glorious; the acknowledgment matches.
+📱 **Phone alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
+📈 **The Prediction Graph** — 7-day history with dotted projections, cross-provider comparison on one 0–100% axis, clickable legend, and a pop-out always-on-top window
+💾 **History export** — full usage history to **CSV or JSON**, a local file save, nothing uploaded
 
 ---
 
 ## The fun parts
 
-🔥 **Pixel fire** — hiding an account group sends a pixel flame across its heading, charring the letters sooty-black with sparks and lingering smoke; reversing heals it letter by letter
-✨ **Reset sparkles** — when a limit window completes, its ring gets a wand-tap burst (owed and paid later if you weren't looking)
+🔥 **Pixel fire** — hiding an account group sends a flame across its heading, charring the letters with sparks and smoke; reversing heals it letter by letter
+✨ **Reset sparkles** — when a limit window completes, its ring gets a wand-tap burst
 🧊 **On ice** — companies you haven't touched in days freeze over, icicles and all
-🟢 **Magic orbs** — banked OpenAI limit-resets glimmer softly
-🤡 **The clown** — click him and he goes to jail, sad and crying, and every animation, glow, and filter in the app goes still. For the resource-conscious and the joyless alike.
+🔮 **Magic orbs** — banked OpenAI limit-resets glimmer, each with its own small flame
+🤡 **The clown** — click him and he goes to jail, sad and crying, and every animation, glow, and filter goes still. For the resource-conscious and the joyless alike:
 
-![Burnwatch — settings: global options plus one column per company](assets/screenshot-settings.png)
+![Pizazz off — the clown jailed, every effect still](assets/screenshots/pizazz-off-dark.png)
 
 ---
 
 ## Installation
 
-> 🔄 **Install once, update never again.** Burnwatch keeps itself current: it checks for new releases on launch (and daily), downloads them **silently in the background**, and applies them the next time the app starts. No more hunting down an installer for every release — the widget you install today is every future version too. (Portable and Linux builds show an update banner with a one-click link instead.)
+### macOS (build from source — the supported path)
 
-### Download Pre-built Release
+One paste. It installs anything missing (git, Node via Homebrew), clones, builds the newest release tag, installs **I'm Burning!.app** to /Applications, launches it, and registers an auto-updater that rebuilds on every future release:
 
-**Windows:**
-1. Download the latest `Claude-Usage-Widget-{version}-win-Setup.exe` (installer) or `Claude-Usage-Widget-{version}-win-portable.exe` (no install needed) from [Releases](../../releases)
-2. Run the installer or portable exe
-3. Launch "Claude Usage Widget" from the Start Menu (installer) or directly (portable)
-4. **To launch at Windows startup (portable only):** Press `Win+R`, type `shell:startup`, and copy the portable `.exe` into that folder. To update, copy the new version in and delete the old one.
-
-**macOS & Linux:**
-
-> Prebuilt macOS and Linux binaries aren't published yet — build from source (it's quick):
-> ```bash
-> git clone https://github.com/dev-newb/burnwatch.git
-> cd burnwatch
-> npm install
-> npm run build:mac     # or: npm run build:linux
-> ```
-> The macOS `.dmg` / Linux `.AppImage` land in `dist/`. macOS builds are **not** signed or notarized, so Gatekeeper may warn "damaged or can't be opened" — clear the quarantine flag once:
-> ```
-> xattr -cr "/Applications/Claude Usage Widget.app"
-> ```
-> Or just run it in dev mode with `npm start`. (Prebuilt macOS/Linux binaries are on the roadmap.)
-
-#### Linux: Desktop Launcher & Autostart (optional, after building)
-
-> Build the AppImage first (see macOS & Linux above). On Ubuntu 22.04+ you may need `sudo apt install libfuse2` to run it.
-
-By default the AppImage runs from wherever you put it. To get a clickable icon in your app launcher (and optionally launch at login), follow these steps.
-
-**1. Place the AppImage somewhere permanent:**
 ```bash
-mkdir -p ~/.local/bin
-mv Claude-Usage-Widget-*.AppImage ~/.local/bin/claude-usage-widget.AppImage
-chmod +x ~/.local/bin/claude-usage-widget.AppImage
+git clone https://github.com/dev-newb/imburning.git ~/imburning && cd ~/imburning && bash tools/mac/install.sh
 ```
 
-**2. Create a desktop entry:**
+- **Requirements:** Node 18+ in `/opt/homebrew/bin` or `/usr/local/bin` (`brew install node`), git. No Xcode needed.
+- **No Gatekeeper prompt** — a locally built app carries no quarantine flag, so there is nothing to bypass and no `xattr` incantation.
+- **Don't move the clone** — the background updater (login + every 6h) rebuilds from it.
+- Watch a build: `tail -f ~/Library/Logs/burnwatch-update.log`
+
+### Windows
+
+1. Download the latest `ImBurning-{version}-win-Setup.exe` (installer, silent auto-update) or `ImBurning-{version}-win-portable.exe` from [Releases](../../releases)
+2. Run it. **Portable autostart:** `Win+R` → `shell:startup` → drop the exe in.
+
+### Linux
+
+Download `ImBurning-{version}-linux-{arch}.AppImage` from [Releases](../../releases) (Ubuntu 22.04+ may need `sudo apt install libfuse2`), or build with `npm run build:linux`.
+
+<details>
+<summary>Desktop launcher & autostart (optional)</summary>
+
 ```bash
-cat > ~/.local/share/applications/claude-usage-widget.desktop << EOF
+mkdir -p ~/.local/bin
+mv ImBurning-*.AppImage ~/.local/bin/imburning.AppImage
+chmod +x ~/.local/bin/imburning.AppImage
+
+cat > ~/.local/share/applications/imburning.desktop << EOF
 [Desktop Entry]
-Name=Burnwatch
+Name=I'm Burning!
 Comment=Track AI usage across Anthropic, OpenAI and Google
-Exec=$HOME/.local/bin/claude-usage-widget.AppImage --no-sandbox
-Icon=$HOME/.local/bin/claude-usage-widget.AppImage
+Exec=$HOME/.local/bin/imburning.AppImage --no-sandbox
+Icon=$HOME/.local/bin/imburning.AppImage
 Terminal=false
 Type=Application
 Categories=Utility;
 StartupNotify=true
 EOF
-```
 
-> **Note:** The `--no-sandbox` flag is required for Electron-based AppImages on most Linux systems due to sandbox namespace restrictions. This is an Electron/Chrome limitation, not specific to this widget.
-
-**3. Register the entry:**
-```bash
 update-desktop-database ~/.local/share/applications/
-```
-
-The widget should now appear in your application launcher. Test it by launching from your app menu before proceeding to autostart.
-
-**4. Autostart at login (optional):**
-```bash
+# autostart at login:
 mkdir -p ~/.config/autostart
-cp ~/.local/share/applications/claude-usage-widget.desktop ~/.config/autostart/
+cp ~/.local/share/applications/imburning.desktop ~/.config/autostart/
 ```
+</details>
 
----
-
-### Build from Source
-
-**Prerequisites:**
-- Node.js 18+ ([Download](https://nodejs.org))
-- npm (comes with Node.js)
+### Build from source (any platform)
 
 ```bash
-git clone https://github.com/dev-newb/burnwatch.git
-cd burnwatch
+git clone https://github.com/dev-newb/imburning.git
+cd imburning
 npm install
-npm start
+npm start          # or: npm run build:mac / build:win / build:linux
 ```
 
-
 ---
 
-## Usage
+## Privacy
 
-### First Launch
-
-1. Launch the widget
-2. Sign in to **Claude.ai** when prompted — a browser window opens, you log in, and Burnwatch captures the session automatically. The Anthropic section fills in immediately.
-3. **OpenAI & Google are optional and automatic:** if you have the `codex` or `gemini` CLI logged in locally, those sections appear on their own. To connect a dedicated account, open **Settings (⚙️) → Sign in with ChatGPT / Sign in with Google**.
-4. Already live in the `claude` CLI but not on the web? Burnwatch can run the Anthropic section straight off your CLI login ("via CLI login") with no browser step.
-
-### Widget Controls
-
-- **Drag** — click and drag the title bar to move the widget
-- **Title bar (top-right)** — **Wide** and **Tall** layout buttons (snap to a landscape three-column or a tall arrangement; click again to return to the auto-sized widget) and the **✕** close button, Windows-style
-- **Toolbar (second strip)** — Minimize to tray · Compact (stomp) · Pizazz clown · Refresh · Graph toggle · Settings
-- **Pop out the graph** — the corner button on the graph opens it in its own always-on-top window (which follows your theme and updates live); the inline graph hides while it's detached
-
-### System Tray
-
-Right-click the tray icon for: Show/Hide, Refresh, Re-login, Settings, Exit.
-
----
-
-## Understanding the Display
-
-Every pool is a row with the same four columns:
-
-| Column | Description |
-|--------|-------------|
-| Session Used | Progress bar, 0–100% of that pool's limit |
-| Elapsed | Circular timer — how far through the window you are (fills toward green, because a reset is good news) |
-| Resets In | Countdown until the window resets |
-| Resets At | The local clock time / date of the reset |
-
-Bars wear each company's colour by default (Anthropic clay, Fable fuchsia, OpenAI green, Google blue). They turn **amber** above your warning threshold (default 75%) and **red** above the danger threshold (default 90%). Elapsed rings and, at narrow widths, the remaining-time pies use the same warm-to-green scale.
-
-Prefer a different look? Settings has **Dark / Light / System themes** and a custom widget **font colour**, plus a configurable **auto-refresh interval** (15s–5min, default 5min; the countdowns tick continuously in between).
-
----
-
-## Privacy & Security
-
-- **Your logins stay on your machine.** The claude.ai session key and any OpenAI/Google OAuth tokens are stored locally and encrypted with the OS keychain (`safeStorage`). Burnwatch never uploads them.
-- **It talks only to each provider's own API, using your own credentials** — `claude.ai` / `api.anthropic.com` (Anthropic), `chatgpt.com` (OpenAI Codex), `cloudcode-pa.googleapis.com` + `oauth2.googleapis.com` (Google Gemini) — plus `api.github.com` to check for its own updates. Nothing about your usage is sent anywhere else.
-- **The one exception is opt-in:** if *you* turn on Phone Alerts and enter an ntfy/webhook URL, Burnwatch POSTs alert text (e.g. "Weekly at 92%") to that URL you chose. Leave it off and no usage data ever leaves the machine.
-- **Read-only with your CLIs.** When reading local `claude`/`codex`/`gemini` CLI logins, Burnwatch only uses short-lived access tokens and never writes back to those files or rotates their refresh tokens.
-- **Logout** clears the session key, cookies, and Electron session storage.
-
----
-
-## Troubleshooting
-
-**"Login Required" keeps appearing** — Your claude.ai session may have expired. Sign in again from the login screen (or Settings → Log Out then back in). OpenAI/Google sections are independent — they keep working from their own logins.
-
-**Widget not updating** — Check internet connection, click refresh manually, or try re-logging in from the tray menu.
-
-**Build errors** — Clean reinstall resolves most issues:
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-If issues persist, open a [Support discussion](../../discussions/categories/support) with your OS, Node.js version, and full error output.
-
----
-
-## Roadmap
-
-**Shipped in 2.0**
-- [x] Multi-account tracking (desktop app + CLI, per company)
-- [x] Every pool across Anthropic, OpenAI and Google
-- [x] Realtime responsive reflow + orientation-aware layouts (portrait / landscape columns / tall / compact)
-- [x] Native Windows Snap
-- [x] Per-company tray badges + second-account badges
-- [x] Burn-rate forecast, session planner, burn-spike + threshold alerts, daily digest, phone/webhook alerts
-- [x] Silent background auto-update
-- [x] Hide any pool, collapse any company, burn away account groups
-- [x] Dark / Light / System themes + full customization
-
-**Shipped in 2.1**
-- [x] Cross-provider comparison lines + per-series legend toggles on the graph
-- [x] Burn-rate forecasts for every provider (Anthropic, Codex, Gemini, second accounts)
-- [x] Detachable graph window with its own always-on-top
-- [x] Wide / Tall one-click window presets
-- [x] Row hide reimagined — burn-away with no residue, sparkle-return
-- [x] One-click usage-history export (CSV/JSON)
-
-**Planned**
-- [ ] Prebuilt macOS & Linux binaries (build-from-source works today)
-- [ ] "Headroom right now" — a chip naming the provider with the most capacity for your next big job
-- [ ] Keyboard shortcuts
-
----
-
-## Credits
-
-Burnwatch is a fork of the original **[Claude Usage Widget](https://github.com/SlavomirDurej/claude-usage-widget)** by **[Slavomir Durej](https://github.com/SlavomirDurej)** — the foundation this multi-provider version is built on. Thanks also to the upstream contributors ([@cwil2072](https://github.com/cwil2072), [@dion-jy](https://github.com/dion-jy), [@goooseman](https://github.com/goooseman), [@sergkuzn](https://github.com/sergkuzn)) whose work (macOS fixes, the usage graph, login-flow and security improvements, Linux packaging docs) carried forward into Burnwatch.
+Your tokens stay on your machine. The widget talks only to the providers' own APIs (claude.ai, chatgpt.com, Google) with credentials you supplied or that your CLIs already hold — CLI credential files are read **read-only**, never modified, never transmitted anywhere else. Diagnostics never print key material. History export is a local file save.
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
-
----
-
-*Built with Electron · [Releases](../../releases) · [Discussions](../../discussions)*
+MIT © 2026 dev-newb · based on **Claude Usage Widget** © Slavomir Durej (MIT)
