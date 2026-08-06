@@ -2254,7 +2254,10 @@ function _ambientFireFrame(now) {
         _scheduleAmbientFire(500);
         return;
     }
-    const bars = document.querySelectorAll('.progress-fill.on-fire, .compact-bar-fill.on-fire');
+    // A maxed bar is charred: it smokes via _tickMaxedSmoke and must not
+    // ALSO wear live flames, even while the burn detector's hysteresis is
+    // still holding the series in its burning state. Maxed wins.
+    const bars = document.querySelectorAll('.progress-fill.on-fire:not(.maxed), .compact-bar-fill.on-fire:not(.maxed)');
     const orbs = document.querySelectorAll('.reset-dot');
     const maxed = document.querySelectorAll('.progress-fill.maxed, .compact-bar-fill.maxed');
     const particleStyle = (window._cachedSettings || {}).flameStyle === 'particle';

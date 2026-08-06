@@ -2948,8 +2948,10 @@ body.theme-light {
     to   { box-shadow: 0 0 11px 3px color-mix(in srgb, var(--fire-col, #ff922b) 80%, transparent); }
 }
 
-.progress-fill.on-fire,
-.compact-bar-fill.on-fire {
+/* :not(.maxed): a spent bar keeps its own ember glow — the heat pulse and
+   flame sprites belong to a pool that is still actively burning DOWN. */
+.progress-fill.on-fire:not(.maxed),
+.compact-bar-fill.on-fire:not(.maxed) {
     overflow: visible;
     animation: barHeatPulse 1.1s ease-in-out infinite alternate;
 }
