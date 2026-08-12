@@ -127,7 +127,7 @@ function normalizeAntigravityModels(json) {
     (isGemini ? gemini : foreign).push(entry);
   }
   const limits = antigravityGroups(gemini, 'Gemini (all models)');
-  const foreignLimits = antigravityGroups(foreign, 'Other models');
+  const foreignLimits = antigravityGroups(foreign, 'Non-Gemini models');
   if (!limits.length && !foreignLimits.length) return null;
   return { source: 'antigravity', limits, foreign: foreignLimits };
 }

@@ -1164,7 +1164,17 @@ async function fetchAntigravityUsage() {
 
   const norm = normalizeAntigravityModels(json);
   if (!norm) return lastGood;
-  const data = { ...norm, connected: true, email: (tok.email || null) };
+  // The Claude / GPT-OSS pools Antigravity meters are real usage on the same
+  // login, so they belong in the section — but under a Google heading they are
+  // surprising, so they arrive hidden and the user unhides them with the same
+  // "N hidden" chip that restores any row they hid themselves.
+  const foreign = (norm.foreign || []).map((l) => ({ ...l, defaultHidden: true }));
+  const data = {
+    ...norm,
+    limits: [...norm.limits, ...foreign],
+    connected: true,
+    email: (tok.email || null)
+  };
   store.set('antigravityLastGood', { at: Date.now(), data });
   return data;
 }
@@ -3851,6 +3861,7 @@ ipcMain.handle('get-settings', () => {
     flameStyle: store.get('settings.flameStyle', 'classic'),
     sounds: { ...DEFAULT_SOUNDS, ...store.get('settings.sounds', {}) },
     hiddenRows: store.get('settings.hiddenRows', {}),
+    hiddenRowsSeeded: store.get('settings.hiddenRowsSeeded', {}),
     chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
 });
@@ -3919,6 +3930,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
   if (settings.sounds !== undefined) store.set('settings.sounds', sanitizeSounds(settings.sounds));
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
+  if (settings.hiddenRowsSeeded !== undefined) store.set('settings.hiddenRowsSeeded', settings.hiddenRowsSeeded || {});
   if (settings.chartHiddenSeries !== undefined) {
     store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));
   }
