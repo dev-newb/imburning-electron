@@ -2264,8 +2264,14 @@ function _ambientFireFrame(now) {
     for (const el of bars) _tickElementFire(el, now, particleStyle ? 20 : 42, false, particleStyle);
     for (const el of orbs) _tickElementFire(el, now, particleStyle ? 55 : 88, true, particleStyle);
     for (const el of maxed) _tickMaxedSmoke(el, now);
-    if (bars.length || orbs.length || maxed.length) {
+    if (bars.length || orbs.length) {
         requestAnimationFrame(_ambientFireFrame);
+    } else if (maxed.length) {
+        // Smoke smoulders on a slow clock. A spent bar can sit maxed for
+        // DAYS, and keeping the 60fps rAF loop alive for it burned ~25%
+        // CPU on an otherwise idle widget. Sprites spawn at ~110ms+
+        // intervals, so a 150ms timer loses nothing visible.
+        _scheduleAmbientFire(150);
     } else {
         _scheduleAmbientFire(600);
     }
@@ -3637,7 +3643,7 @@ function applyMaxedState(fillElement, percentage) {
 // matches the app's pixel-art language. Greys are flipped per theme — pale
 // smoke disappears against the light theme's near-white panel.
 function _spawnMaxedSmoke(layer, x) {
-    if (layer.childElementCount > 90) return;
+    if (layer.childElementCount > 55) return;
     const light = document.body.classList.contains('theme-light');
     const palette = light
         ? ['#4a4a56', '#5c5c6a', '#38384a', '#6a6a78']
@@ -3663,11 +3669,11 @@ function _tickMaxedSmoke(el, now) {
         el.__smokeLayer = layer;
         layer.__lastSpawn = 0;
     }
-    if (now - layer.__lastSpawn < 70 * (0.6 + Math.random() * 0.9)) return;
+    if (now - layer.__lastSpawn < 110 * (0.7 + Math.random() * 0.8)) return;
     layer.__lastSpawn = now;
     const width = Math.max(4, el.offsetWidth - 4);
     // Spread across the whole width — a spent bar smoulders end to end
-    const count = 1 + Math.floor(Math.random() * 3);
+    const count = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < count; i++) _spawnMaxedSmoke(layer, _rnd(0, width));
 }
 
