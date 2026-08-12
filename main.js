@@ -9,7 +9,7 @@ const { finiteOrNull, sampleGapLimitMs, positiveBurn, latestContiguousRun, isExp
 const { clampBoundsToDisplays } = require('./src/window-bounds');
 const { startOAuthCallbackServer } = require('./src/oauth-callback');
 const { sanitizeHiddenSeries, sanitizeFetchOptions, migrateHiddenSeriesLabels } = require('./src/settings-validation');
-const { normalizeGeminiQuota } = require('./src/provider-models');
+const { normalizeGeminiQuota, normalizeAntigravityModels } = require('./src/provider-models');
 const { discoverCredentialHomes, clearCredentialHomeCache } = require('./src/local-credential-sources');
 
 const GITHUB_OWNER = 'dev-newb';
@@ -998,6 +998,190 @@ async function fetchGeminiUsage() {
   }
   if (cliData) return { ...cliData, connected: false, cli: null };
   return null;
+}
+
+// ---- Antigravity (agy CLI) usage ------------------------------------------
+// Antigravity's agent usage — Gemini 3.x Pro included — is metered ONLY by
+// cloudcode-pa's fetchAvailableModels (with an ideType:ANTIGRAVITY marker),
+// never by the plain Code Assist quota the widget's own Google login reads.
+// Credentials live in the macOS keychain (svce=gemini, acct=antigravity),
+// wrapped by Go's keyring lib, and the access token expires ~hourly, so we
+// refresh it ourselves with the agy binary's own OAuth client. The endpoint
+// is strictly rate-limited, so results are persisted as last-good and reused
+// through the (frequent) 403 windows rather than blanking the section.
+const ANTIGRAVITY_PLATFORM = process.platform === 'darwin' ? 'MACOS'
+  : process.platform === 'win32' ? 'WINDOWS' : 'LINUX';
+const ANTIGRAVITY_CLIENT_META = JSON.stringify({
+  ideType: 'ANTIGRAVITY', platform: ANTIGRAVITY_PLATFORM, pluginType: 'GEMINI'
+});
+const ANTIGRAVITY_USER_AGENT = `antigravity-cli/1.0 (${process.platform}; ${process.arch})`;
+// A floor on how often we touch this private endpoint — the normal cadence is
+// the 5-minute provider cache; this only stops repeated manual refreshes from
+// hammering it. Persisted last-good then covers any transient failure.
+const ANTIGRAVITY_MIN_INTERVAL_MS = 60 * 1000;
+const ANTIGRAVITY_LASTGOOD_MAX_MS = 24 * 60 * 60 * 1000; // trust persisted data up to a day
+let _antigravityLastAttempt = 0;
+let _agyClientCache = null;
+
+function readAntigravityKeychainToken() {
+  if (process.platform !== 'darwin') return null; // keychain path is macOS-only for now
+  try {
+    const out = require('child_process')
+      .execFileSync('security', ['find-generic-password', '-s', 'gemini', '-a', 'antigravity', '-w'],
+        { encoding: 'utf8', timeout: 5000 }).trim();
+    if (!out) return null;
+    let payload = out;
+    const m = /^go-keyring-base64:(.*)$/s.exec(out);
+    if (m) payload = Buffer.from(m[1], 'base64').toString('utf8');
+    const obj = JSON.parse(payload);
+    const tk = (obj && obj.token) || obj;
+    if (!tk || !tk.refresh_token) return null;
+    return {
+      accessToken: tk.access_token || null,
+      refreshToken: tk.refresh_token,
+      expiryMs: tk.expiry ? Date.parse(tk.expiry) : 0
+    };
+  } catch (err) {
+    debugLog('[Antigravity] keychain read failed:', err.message);
+    return null;
+  }
+}
+
+function resolveAgyBinary() {
+  const candidates = [
+    path.join(os.homedir(), '.local/bin/agy'),
+    '/opt/homebrew/bin/agy',
+    '/usr/local/bin/agy',
+    path.join(os.homedir(), '.agy/bin/agy')
+  ];
+  for (const c of candidates) {
+    try { if (fs.statSync(c).isFile()) return c; } catch (_) { /* next */ }
+  }
+  return null;
+}
+
+// The agy binary embeds its OAuth client id(s)/secret(s) — scan for them the
+// same way the Gemini path borrows gemini-cli's client, rather than embedding.
+function agyOAuthClients() {
+  if (_agyClientCache) return _agyClientCache;
+  const bin = resolveAgyBinary();
+  if (!bin) return [];
+  try {
+    const text = fs.readFileSync(bin, 'latin1');
+    const ids = [...new Set(text.match(/[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com/g) || [])];
+    const secrets = [...new Set(text.match(/GOCSPX-[A-Za-z0-9_-]{28}/g) || [])];
+    const pairs = [];
+    for (const id of ids) for (const secret of secrets) pairs.push({ id, secret });
+    _agyClientCache = pairs;
+    return pairs;
+  } catch (err) {
+    debugLog('[Antigravity] client scan failed:', err.message);
+    return [];
+  }
+}
+
+function httpsPost(hostname, pathName, headers, body) {
+  return new Promise((resolve) => {
+    const req = https.request({ hostname, path: pathName, method: 'POST',
+      headers: { 'Content-Length': Buffer.byteLength(body), ...headers }, timeout: 15000 },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => resolve({ status: res.statusCode, body: data }));
+      });
+    req.on('error', () => resolve({ status: 0, body: '' }));
+    req.on('timeout', () => { req.destroy(); resolve({ status: 0, body: '' }); });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function refreshAntigravityToken(refreshToken) {
+  for (const { id, secret } of agyOAuthClients()) {
+    const body = new URLSearchParams({
+      client_id: id, client_secret: secret, refresh_token: refreshToken, grant_type: 'refresh_token'
+    }).toString();
+    const res = await httpsPost('oauth2.googleapis.com', '/token',
+      { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': ANTIGRAVITY_USER_AGENT }, body);
+    if (res.status === 200) {
+      try {
+        const j = JSON.parse(res.body);
+        if (j.access_token) return j.access_token;
+      } catch (_) { /* next candidate */ }
+    }
+  }
+  return null;
+}
+
+async function fetchAntigravityModels(accessToken) {
+  // The User-Agent is load-bearing: cloudcode-pa answers 403 PERMISSION_DENIED
+  // to an otherwise identical request that omits it (Node sends none by
+  // default). Verified 2026-08-12 — same token, same body, UA is the only
+  // difference between 403 and 200.
+  const res = await httpsPost('cloudcode-pa.googleapis.com', '/v1internal:fetchAvailableModels',
+    { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json',
+      'Client-Metadata': ANTIGRAVITY_CLIENT_META,
+      'User-Agent': ANTIGRAVITY_USER_AGENT }, '{}');
+  if (res.status !== 200) {
+    debugLog('[Antigravity] fetchAvailableModels HTTP', res.status);
+    return null;
+  }
+  try { return JSON.parse(res.body); } catch { return null; }
+}
+
+// True when an Antigravity login is present to read — gates the "auto" source.
+function antigravityAvailable() {
+  return !!(resolveAgyBinary() && readAntigravityKeychainToken());
+}
+
+async function fetchAntigravityUsage() {
+  const persisted = store.get('antigravityLastGood', null);
+  const lastGood = (persisted && Date.now() - persisted.at < ANTIGRAVITY_LASTGOOD_MAX_MS)
+    ? persisted.data : null;
+
+  // Respect the endpoint's hard rate limit: don't even attempt more than once
+  // per interval — serve last-good in between.
+  if (Date.now() - _antigravityLastAttempt < ANTIGRAVITY_MIN_INTERVAL_MS && lastGood) {
+    return lastGood;
+  }
+  _antigravityLastAttempt = Date.now();
+
+  const tok = readAntigravityKeychainToken();
+  if (!tok) return lastGood;
+
+  // Prefer the stored access token while it's clearly valid; else refresh.
+  let accessToken = (tok.expiryMs && tok.expiryMs - Date.now() > 60 * 1000) ? tok.accessToken : null;
+  if (!accessToken) accessToken = await refreshAntigravityToken(tok.refreshToken);
+  if (!accessToken) return lastGood;
+
+  let json = await fetchAntigravityModels(accessToken);
+  // A stale stored token can still 401 even when unexpired — one refresh retry.
+  if (!json && tok.accessToken === accessToken) {
+    const fresh = await refreshAntigravityToken(tok.refreshToken);
+    if (fresh) json = await fetchAntigravityModels(fresh);
+  }
+  if (!json) return lastGood; // rate-limited / transient — keep showing last-good
+
+  const norm = normalizeAntigravityModels(json);
+  if (!norm) return lastGood;
+  const data = { ...norm, connected: true, email: (tok.email || null) };
+  store.set('antigravityLastGood', { at: Date.now(), data });
+  return data;
+}
+
+// Pick which source feeds the Google section. 'auto' prefers Antigravity when
+// an agy login exists (it's the only surface that shows agent usage), and
+// falls back to the classic Gemini Code Assist quota. 'gemini' and
+// 'antigravity' force one; Gemini is never removed as an option.
+async function fetchGoogleUsage() {
+  const source = store.get('settings.googleSource', 'auto');
+  const wantAntigravity = source === 'antigravity' || (source === 'auto' && antigravityAvailable());
+  if (wantAntigravity) {
+    const ag = await fetchAntigravityUsage();
+    if (ag) return ag;
+    if (source === 'antigravity') return null; // forced: don't silently fall back
+  }
+  return fetchGeminiUsage();
 }
 
 // ---- Official OAuth connect flows (widget-owned logins) ----
@@ -3387,6 +3571,9 @@ ipcMain.on('fit-landscape-width', (event, targetWidth) => {
 function applyAccountToggles(data) {
   const filt = (obj, showDesktop, showCli) => {
     if (!obj) return obj;
+    // Antigravity is one login with no desktop/CLI split — the two account
+    // toggles have nothing to select between, so they leave it alone.
+    if (obj.source === 'antigravity') return obj;
     let out = obj;
     if (!showCli && out.cli) out = { ...out, cli: null };
     if (!showDesktop && out.connected) {
@@ -3654,6 +3841,7 @@ ipcMain.handle('get-settings', () => {
     showCodexCli: store.get('settings.showCodexCli', true),
     showGemini: store.get('settings.showGemini', true),
     showGeminiCli: store.get('settings.showGeminiCli', true),
+    googleSource: store.get('settings.googleSource', 'auto'),
     trayOpenai: store.get('settings.trayOpenai', false),
     trayGoogle: store.get('settings.trayGoogle', false),
     sectionCollapsed: store.get('settings.sectionCollapsed', {}),
@@ -3712,6 +3900,16 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.showCodexCli', settings.showCodexCli !== false);
   store.set('settings.showGemini', settings.showGemini !== false);
   store.set('settings.showGeminiCli', settings.showGeminiCli !== false);
+  if (settings.googleSource !== undefined) {
+    const src = ['auto', 'antigravity', 'gemini'].includes(settings.googleSource) ? settings.googleSource : 'auto';
+    if (src !== store.get('settings.googleSource', 'auto')) {
+      // Switching source invalidates both the provider cache and the rate-limit
+      // backoff — the user expects the new surface to appear on the next tick.
+      _antigravityLastAttempt = 0;
+      delete _providerCache.gemini;
+    }
+    store.set('settings.googleSource', src);
+  }
   if (settings.trayOpenai !== undefined) store.set('settings.trayOpenai', settings.trayOpenai === true);
   if (settings.trayGoogle !== undefined) store.set('settings.trayGoogle', settings.trayGoogle === true);
   if (settings.sectionCollapsed !== undefined) store.set('settings.sectionCollapsed', settings.sectionCollapsed || {});
@@ -4109,7 +4307,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
         ? cachedProviderFetch('codex', fetchCodexUsage, providerFetchOptions)
         : Promise.resolve(null),
       (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
-        ? cachedProviderFetch('gemini', fetchGeminiUsage, providerFetchOptions)
+        ? cachedProviderFetch('gemini', fetchGoogleUsage, providerFetchOptions)
         : Promise.resolve(null)
     ]);
     const hasClaudeUsage = !!(cc && (cc.five_hour?.resets_at || cc.seven_day?.resets_at));
@@ -4150,7 +4348,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     ? cachedProviderFetch('codex', fetchCodexUsage, providerFetchOptions)
     : Promise.resolve(null);
   const geminiPromise = (store.get('settings.showGemini', true) || store.get('settings.showGeminiCli', true))
-    ? cachedProviderFetch('gemini', fetchGeminiUsage, providerFetchOptions)
+    ? cachedProviderFetch('gemini', fetchGoogleUsage, providerFetchOptions)
     : Promise.resolve(null);
 
   // Ensure cookie is set

@@ -178,6 +178,7 @@ const elements = {
     showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
     showGeminiCliToggle: document.getElementById('showGeminiCliToggle'),
+    googleSource: document.getElementById('googleSource'),
     compactSettingsOverlay: document.getElementById('compactSettingsOverlay'),
     closeCompactSettingsBtn: document.getElementById('closeCompactSettingsBtn')
 };
@@ -3003,9 +3004,11 @@ function updateUI(data) {
     setChip(elements.chipOpenai, cxStatus && !cxStatus.cli && !cxStatus.connected
         ? { cls: 'cli', text: 'via CLI login', title: 'Usage is being read from your Codex CLI login. A widget-owned connection is optional — sign in under Settings if you want one.' }
         : null);
-    setChip(elements.chipGoogle, gmStatus && !gmStatus.cli && !gmStatus.connected
-        ? { cls: 'cli', text: 'via CLI login', title: 'Usage is being read from your Gemini CLI login. A widget-owned connection is optional — sign in under Settings if you want one.' }
-        : null);
+    setChip(elements.chipGoogle, gmStatus && gmStatus.source === 'antigravity'
+        ? { cls: 'cli', text: 'via Antigravity', title: 'Usage is being read from your Antigravity (agy) login — the only Google surface that meters agent usage. Switch to the classic Gemini quota under Settings → Google → Usage source.' }
+        : (gmStatus && !gmStatus.cli && !gmStatus.connected
+            ? { cls: 'cli', text: 'via CLI login', title: 'Usage is being read from your Gemini CLI login. A widget-owned connection is optional — sign in under Settings if you want one.' }
+            : null));
     setChip(elements.chipAnthropic, (!data.claude_code || data.claude_code_same_account !== false) && data.anthropic_source === 'cli'
         ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Usage is being read from your Claude CLI login. Logging in to claude.ai under Settings additionally exposes Extra Usage and credits.' }
         : null);
@@ -4482,6 +4485,7 @@ async function loadSettings() {
     if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
     if (elements.showGeminiCliToggle) elements.showGeminiCliToggle.checked = settings.showGeminiCli !== false;
+    if (elements.googleSource) elements.googleSource.value = settings.googleSource || 'auto';
     if (elements.openaiLoginStatus) {
         const cxNow = latestUsageData && latestUsageData.codex;
         const cxConn = !!(cxNow && cxNow.connected);
@@ -4575,6 +4579,7 @@ async function saveSettings() {
         showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
         showGeminiCli: elements.showGeminiCliToggle ? elements.showGeminiCliToggle.checked : true,
+        googleSource: elements.googleSource ? elements.googleSource.value : 'auto',
         openaiExtrasOpen: isOpenaiExtrasOpen,
         projectionsOn: projectionsVisible
     };

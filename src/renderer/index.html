@@ -614,6 +614,12 @@
                                     <label class="toggle-switch"><input type="checkbox" id="showGeminiToggle"><span class="toggle-slider"></span></label>
                                     <span class="settings-row-label" title="Track your gemini CLI's login when it is a different account">CLI account</span>
                                     <label class="toggle-switch"><input type="checkbox" id="showGeminiCliToggle"><span class="toggle-slider"></span></label>
+                                    <span class="settings-row-label" title="Which Google surface to meter. Antigravity is the only one that reports agent usage; Gemini reads the classic Code Assist quota.">Usage source</span>
+                                    <select id="googleSource" class="settings-select">
+                                        <option value="auto">Auto (Antigravity if present)</option>
+                                        <option value="antigravity">Antigravity only</option>
+                                        <option value="gemini">Gemini only</option>
+                                    </select>
                                 </div>
                                 <div class="provider-col-login">
                                     <span class="settings-row-hint" id="googleLoginStatus">Not connected</span>
