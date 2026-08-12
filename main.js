@@ -1097,7 +1097,17 @@ function httpsPost(hostname, pathName, headers, body) {
 }
 
 async function refreshAntigravityToken(refreshToken) {
-  for (const { id, secret } of agyOAuthClients()) {
+  // Try the pair that worked last time first. Scanning the binary yields every
+  // id crossed with every secret, and only one combination is real — without
+  // this, each refresh replays the same two rejected credential attempts
+  // against Google's token endpoint.
+  const known = store.get('antigravityOAuthClient', null);
+  const candidates = agyOAuthClients();
+  if (known) {
+    candidates.sort((a, b) => Number(b.id === known.id && b.secret === known.secret)
+      - Number(a.id === known.id && a.secret === known.secret));
+  }
+  for (const { id, secret } of candidates) {
     const body = new URLSearchParams({
       client_id: id, client_secret: secret, refresh_token: refreshToken, grant_type: 'refresh_token'
     }).toString();
@@ -1106,7 +1116,12 @@ async function refreshAntigravityToken(refreshToken) {
     if (res.status === 200) {
       try {
         const j = JSON.parse(res.body);
-        if (j.access_token) return j.access_token;
+        if (j.access_token) {
+          if (!known || known.id !== id || known.secret !== secret) {
+            store.set('antigravityOAuthClient', { id, secret });
+          }
+          return j.access_token;
+        }
       } catch (_) { /* next candidate */ }
     }
   }
