@@ -1183,7 +1183,14 @@ async function fetchAntigravityUsage() {
   // login, so they belong in the section — but under a Google heading they are
   // surprising, so they arrive hidden and the user unhides them with the same
   // "N hidden" chip that restores any row they hid themselves.
-  const foreign = (norm.foreign || []).map((l) => ({ ...l, defaultHidden: true }));
+  // foreignPool marks a row that is NOT Gemini usage — Claude and GPT-OSS
+  // metered by the same Antigravity login. It renders in the section, but it
+  // must never feed anything that speaks for "Google Gemini": the tray badge,
+  // the history series, burn alerts, forecasts or the digest. Their reset
+  // windows differ from Gemini's, so a max() across both is not even
+  // monotonic — the series dips and jumps as the other pool rolls over,
+  // which reads exactly like a burn spike.
+  const foreign = (norm.foreign || []).map((l) => ({ ...l, defaultHidden: true, foreignPool: true }));
   const data = {
     ...norm,
     limits: [...norm.limits, ...foreign],
@@ -1634,7 +1641,11 @@ function computeFrozenProviders(data) {
   return {
     anthropic: false,
     openai: isProviderFrozen(data.codex?.limits, history, (e) => e.codex),
-    google: isProviderFrozen(data.gemini?.limits, history, (e) => e.gemini)
+    // Judge "frozen" on the Gemini pools only: the series it compares against
+    // (e.gemini) excludes foreignPool rows, so including them here would ask
+    // whether a pool the series never saw has moved.
+    google: isProviderFrozen((data.gemini?.limits || []).filter((l) => !l.foreignPool),
+      history, (e) => e.gemini)
   };
 }
 
@@ -1944,12 +1955,19 @@ function checkBurnAnomalies() {
   }
 }
 
+// Highest percent among a Google pool set, ignoring foreignPool rows — those
+// are another vendor's usage that merely shares the Antigravity login, and
+// they must not appear in anything labelled Gemini.
+function worstGeminiPercent(limits) {
+  return (limits || []).filter((l) => !l.foreignPool)
+    .reduce((worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
+}
+
 async function storeUsageHistory(data) {
   // OpenAI and Google remain valid history sources while Claude is logged out.
   const providerSamples = [
     data.codex?.limits?.[0]?.percent,
-    (data.gemini?.limits || []).reduce(
-      (worst, limit) => (worst == null || limit.percent > worst) ? limit.percent : worst, null),
+    worstGeminiPercent(data.gemini?.limits),
     data.codex?.cli?.limits?.[0]?.percent,
     (data.gemini?.cli?.limits || []).reduce(
       (worst, limit) => (worst == null || limit.percent > worst) ? limit.percent : worst, null)
@@ -1975,8 +1993,11 @@ async function storeUsageHistory(data) {
 
   // External provider samples (single percent each) power their planner hints
   const codexPct = data.codex?.limits?.[0]?.percent;
-  const geminiPct = (data.gemini?.limits || []).reduce(
-    (worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
+  // Gemini's series must be Gemini only: a foreignPool row (Claude/GPT-OSS via
+  // Antigravity) resets on its own schedule, so folding it into this max makes
+  // the series jump when that pool rolls over and the burn detector reads the
+  // jump as a Gemini spike.
+  const geminiPct = worstGeminiPercent(data.gemini?.limits);
 
   // Dual-mode second accounts (CLI logins on different accounts) get their
   // own history series so both pools are genuinely tracked
@@ -3191,7 +3212,10 @@ function syncProviderTray(name, enabled, badge) {
 function syncExternalProviderTrays(usageData) {
   const colors = getTrayColorSettings();
   const fc = usageData?.forecasts || {};
-  const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+  // foreignPool rows belong to another vendor metered by the same login, so
+  // they never speak for this provider's badge.
+  const worstOf = (limits) => (limits || []).filter((l) => !l.foreignPool)
+    .reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
 
   const trayOpenai = store.get('settings.trayOpenai', false);
   const codexLimit = usageData?.codex?.limits?.[0] || null;

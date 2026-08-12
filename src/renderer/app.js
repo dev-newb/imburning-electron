@@ -1358,11 +1358,15 @@ function buildExtraRows(data) {
             }
             row.appendChild(resetsText);
         } else {
-            // Gemini row keys are gemini_m_<model> / gemini_cli_m_<model> —
-            // the "daily" window lives in the label, not the key, so match the
-            // provider prefix too (otherwise the ring/pie use a 5h window)
-            const totalMinutes = key.includes('seven_day') ? 7 * 24 * 60
-                : (key.includes('daily') || key.startsWith('gemini_')) ? 24 * 60 : 5 * 60;
+            // Prefer the window the backend states outright. Guessing it from
+            // the key only works while a prefix implies one window length, and
+            // Google broke that: classic Code Assist buckets are daily, but
+            // Antigravity's pools reset roughly 5-hourly under the same
+            // gemini_ prefix, which made the elapsed ring wrong by ~5x — it
+            // showed a window as nearly over the moment it began.
+            const totalMinutes = value.windowMinutes
+                || (key.includes('seven_day') ? 7 * 24 * 60
+                    : (key.includes('daily') || key.startsWith('gemini_')) ? 24 * 60 : 5 * 60);
 
             const barGroup = document.createElement('div');
             barGroup.className = 'usage-bar-group';
@@ -2919,13 +2923,13 @@ function normalizeUsageData(data) {
         for (const lim of cx.limits) {
             const key = 'codex_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'codex' };
-            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt, windowMinutes: lim.windowMinutes };
         }
         // Dual mode: the codex CLI is a different account - tracked separately
         for (const lim of (cx.cli && cx.cli.limits || [])) {
             const key = 'codex_cli_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: 'CLI ' + lim.label, color: 'codex' };
-            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt, windowMinutes: lim.windowMinutes };
         }
         const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
         delete EXTRA_ROW_CONFIG.extra_usage;
@@ -2939,13 +2943,13 @@ function normalizeUsageData(data) {
         for (const lim of gm.limits) {
             const key = 'gemini_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: lim.label, color: 'gemini' };
-            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt, windowMinutes: lim.windowMinutes };
         }
         // Dual mode: the gemini CLI is a different account - tracked separately
         for (const lim of (gm.cli && gm.cli.limits || [])) {
             const key = 'gemini_cli_' + lim.key;
             if (!EXTRA_ROW_CONFIG[key]) EXTRA_ROW_CONFIG[key] = { label: 'CLI ' + lim.label, color: 'gemini' };
-            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt };
+            data[key] = { utilization: lim.percent, resets_at: lim.resetsAt, windowMinutes: lim.windowMinutes };
         }
         const extraUsage = EXTRA_ROW_CONFIG.extra_usage;
         delete EXTRA_ROW_CONFIG.extra_usage;
@@ -2971,7 +2975,11 @@ function computeBurningRowKeys(data) {
     if (burning.claudeCli) keys.add('cc_seven_day');
     if (burning.codex && data.codex?.limits?.[0]) keys.add('codex_' + data.codex.limits[0].key);
     if (burning.codexCli && data.codex?.cli?.limits?.[0]) keys.add('codex_cli_' + data.codex.cli.limits[0].key);
-    const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+    // foreignPool rows (Claude/GPT-OSS via Antigravity) are another vendor's
+    // usage on the same login — and they ship hidden, so pinning the flame to
+    // one would render it on no visible row at all.
+    const worstOf = (limits) => (limits || []).filter((l) => !l.foreignPool)
+        .reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
     if (burning.gemini) {
         const worst = worstOf(data.gemini?.limits);
         if (worst) keys.add('gemini_' + worst.key);

@@ -85,6 +85,13 @@ function antigravityPriority(label) {
 // eight identical bars for what is really one pool. Grouping by signature also
 // degrades correctly if Google later splits the allowance: distinct quotas
 // simply become distinct rows.
+// Antigravity meters on a rolling ~5-hour window, not the daily one the
+// classic Code Assist buckets use — measured from live resetTime values, which
+// land exactly 5h after the observed snapshot. Stated on every row so the
+// renderer sizes its elapsed ring from data instead of guessing off the key
+// prefix, which cannot tell the two Google surfaces apart.
+const AG_WINDOW_MINUTES = 5 * 60;
+
 function antigravityGroups(entries, familyLabel) {
   const groups = new Map();
   for (const e of entries) {
@@ -103,6 +110,7 @@ function antigravityGroups(entries, familyLabel) {
       label,
       percent: g.percent,
       resetsAt: g.resetsAt,
+      windowMinutes: AG_WINDOW_MINUTES,
       _p: antigravityPriority(names.join(' '))
     };
   }).sort((a, b) => a._p - b._p || a.label.localeCompare(b.label))
@@ -115,12 +123,19 @@ function normalizeAntigravityModels(json) {
   const foreign = [];
   for (const [modelId, m] of Object.entries(models)) {
     const qi = m && m.quotaInfo;
-    if (!qi || qi.remainingFraction == null || !isFinite(qi.remainingFraction)) continue;
+    if (!qi) continue;
     if (/^(chat_|tab_)/i.test(modelId)) continue; // internal editor pseudo-models
     if (!qi.resetTime) continue; // unmetered helpers report a bare fraction of 1
+    // A METERED pool (it has a resetTime) with no remainingFraction is
+    // exhausted, not unknown: this is a proto-backed JSON API, and proto3
+    // omits a scalar sitting at its default — so 0.0 remaining can arrive as
+    // an absent field. Dropping it would hide the row at exactly the moment
+    // the widget exists to warn about, and with every Gemini pool sharing one
+    // allowance, dropping them all reverts the section to a stale snapshot.
+    const remaining = isFinite(qi.remainingFraction) ? qi.remainingFraction : 0;
     const entry = {
       label: antigravityLabel(m.displayName, modelId),
-      percent: Math.round((1 - qi.remainingFraction) * 1000) / 10,
+      percent: Math.round((1 - remaining) * 1000) / 10,
       resetsAt: qi.resetTime
     };
     const isGemini = /^gemini/i.test(modelId) || /gemini/i.test(m.displayName || '');
