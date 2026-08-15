@@ -1736,37 +1736,6 @@ function _sortRowsByUsage() {
     }
 }
 
-// Some rows ship hidden: the Claude / GPT-OSS pools Antigravity meters are
-// real usage, but they arrive under a Google heading where they would surprise
-// anyone who never opened Antigravity. Hide each ONCE, on first sight, and
-// record that in hiddenRowsSeeded so restoring it sticks — after which it
-// behaves like any row the user hid by hand, restored from the "N hidden" chip.
-function seedDefaultHiddenRows(data) {
-    const marks = [];
-    const collect = (prefix, limits) => {
-        for (const limit of (limits || [])) if (limit.defaultHidden) marks.push(prefix + limit.key);
-    };
-    collect('gemini_', data?.gemini?.limits);
-    collect('gemini_cli_', data?.gemini?.cli?.limits);
-    if (!marks.length) return;
-
-    const settings = window._cachedSettings || {};
-    const seeded = { ...(settings.hiddenRowsSeeded || {}) };
-    const hiddenRows = { ...(settings.hiddenRows || {}) };
-    let changed = false;
-    for (const key of marks) {
-        if (seeded[key]) continue;
-        seeded[key] = true;
-        hiddenRows[key] = true;
-        changed = true;
-    }
-    if (!changed) return;
-    // Update the cache synchronously so THIS render already hides them; the
-    // persist can land whenever.
-    window._cachedSettings = { ...settings, hiddenRowsSeeded: seeded, hiddenRows };
-    _saveSettingsPatch({ hiddenRowsSeeded: seeded, hiddenRows });
-}
-
 async function hideRow(key) {
     const hiddenRows = { ...hiddenRowsMap(), [key]: true };
     await _saveSettingsPatch({ hiddenRows });
@@ -2975,11 +2944,7 @@ function computeBurningRowKeys(data) {
     if (burning.claudeCli) keys.add('cc_seven_day');
     if (burning.codex && data.codex?.limits?.[0]) keys.add('codex_' + data.codex.limits[0].key);
     if (burning.codexCli && data.codex?.cli?.limits?.[0]) keys.add('codex_cli_' + data.codex.cli.limits[0].key);
-    // foreignPool rows (Claude/GPT-OSS via Antigravity) are another vendor's
-    // usage on the same login — and they ship hidden, so pinning the flame to
-    // one would render it on no visible row at all.
-    const worstOf = (limits) => (limits || []).filter((l) => !l.foreignPool)
-        .reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+    const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
     if (burning.gemini) {
         const worst = worstOf(data.gemini?.limits);
         if (worst) keys.add('gemini_' + worst.key);
@@ -2992,7 +2957,6 @@ function computeBurningRowKeys(data) {
 }
 
 function updateUI(data) {
-    seedDefaultHiddenRows(data);
     latestUsageData = normalizeUsageData(data);
     _burningRowKeys = computeBurningRowKeys(data);
     checkBurnSpikeSound(_burningRowKeys);

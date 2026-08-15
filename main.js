@@ -1183,20 +1183,10 @@ async function fetchAntigravityUsage() {
   // login, so they belong in the section — but under a Google heading they are
   // surprising, so they arrive hidden and the user unhides them with the same
   // "N hidden" chip that restores any row they hid themselves.
-  // foreignPool marks a row that is NOT Gemini usage — Claude and GPT-OSS
-  // metered by the same Antigravity login. It renders in the section, but it
-  // must never feed anything that speaks for "Google Gemini": the tray badge,
-  // the history series, burn alerts, forecasts or the digest. Their reset
-  // windows differ from Gemini's, so a max() across both is not even
-  // monotonic — the series dips and jumps as the other pool rolls over,
-  // which reads exactly like a burn spike.
-  const foreign = (norm.foreign || []).map((l) => ({ ...l, defaultHidden: true, foreignPool: true }));
-  const data = {
-    ...norm,
-    limits: [...norm.limits, ...foreign],
-    connected: true,
-    email: (tok.email || null)
-  };
+  // Gemini pools only — the normalizer drops Antigravity's Claude and GPT-OSS
+  // allowances outright, so nothing here can mix another vendor's usage into
+  // the Google section or anything computed from it.
+  const data = { ...norm, connected: true, email: (tok.email || null) };
   store.set('antigravityLastGood', { at: Date.now(), data });
   return data;
 }
@@ -1641,11 +1631,7 @@ function computeFrozenProviders(data) {
   return {
     anthropic: false,
     openai: isProviderFrozen(data.codex?.limits, history, (e) => e.codex),
-    // Judge "frozen" on the Gemini pools only: the series it compares against
-    // (e.gemini) excludes foreignPool rows, so including them here would ask
-    // whether a pool the series never saw has moved.
-    google: isProviderFrozen((data.gemini?.limits || []).filter((l) => !l.foreignPool),
-      history, (e) => e.gemini)
+    google: isProviderFrozen(data.gemini?.limits, history, (e) => e.gemini)
   };
 }
 
@@ -1955,12 +1941,9 @@ function checkBurnAnomalies() {
   }
 }
 
-// Highest percent among a Google pool set, ignoring foreignPool rows — those
-// are another vendor's usage that merely shares the Antigravity login, and
-// they must not appear in anything labelled Gemini.
+// Highest percent among a provider's pools.
 function worstGeminiPercent(limits) {
-  return (limits || []).filter((l) => !l.foreignPool)
-    .reduce((worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
+  return (limits || []).reduce((worst, l) => (worst == null || l.percent > worst) ? l.percent : worst, null);
 }
 
 async function storeUsageHistory(data) {
@@ -1993,10 +1976,6 @@ async function storeUsageHistory(data) {
 
   // External provider samples (single percent each) power their planner hints
   const codexPct = data.codex?.limits?.[0]?.percent;
-  // Gemini's series must be Gemini only: a foreignPool row (Claude/GPT-OSS via
-  // Antigravity) resets on its own schedule, so folding it into this max makes
-  // the series jump when that pool rolls over and the burn detector reads the
-  // jump as a Gemini spike.
   const geminiPct = worstGeminiPercent(data.gemini?.limits);
 
   // Dual-mode second accounts (CLI logins on different accounts) get their
@@ -3212,10 +3191,7 @@ function syncProviderTray(name, enabled, badge) {
 function syncExternalProviderTrays(usageData) {
   const colors = getTrayColorSettings();
   const fc = usageData?.forecasts || {};
-  // foreignPool rows belong to another vendor metered by the same login, so
-  // they never speak for this provider's badge.
-  const worstOf = (limits) => (limits || []).filter((l) => !l.foreignPool)
-    .reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
+  const worstOf = (limits) => (limits || []).reduce((worst, l) => (!worst || l.percent > worst.percent) ? l : worst, null);
 
   const trayOpenai = store.get('settings.trayOpenai', false);
   const codexLimit = usageData?.codex?.limits?.[0] || null;
@@ -3900,7 +3876,6 @@ ipcMain.handle('get-settings', () => {
     flameStyle: store.get('settings.flameStyle', 'classic'),
     sounds: { ...DEFAULT_SOUNDS, ...store.get('settings.sounds', {}) },
     hiddenRows: store.get('settings.hiddenRows', {}),
-    hiddenRowsSeeded: store.get('settings.hiddenRowsSeeded', {}),
     chartHiddenSeries: sanitizeHiddenSeries(store.get('settings.chartHiddenSeries', {}))
   };
 });
@@ -3969,7 +3944,6 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
   if (settings.sounds !== undefined) store.set('settings.sounds', sanitizeSounds(settings.sounds));
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
-  if (settings.hiddenRowsSeeded !== undefined) store.set('settings.hiddenRowsSeeded', settings.hiddenRowsSeeded || {});
   if (settings.chartHiddenSeries !== undefined) {
     store.set('settings.chartHiddenSeries', sanitizeHiddenSeries(settings.chartHiddenSeries));
   }

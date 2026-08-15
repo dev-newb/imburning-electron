@@ -120,12 +120,20 @@ function antigravityGroups(entries, familyLabel) {
 function normalizeAntigravityModels(json) {
   const models = (json && json.models) || {};
   const gemini = [];
-  const foreign = [];
   for (const [modelId, m] of Object.entries(models)) {
     const qi = m && m.quotaInfo;
     if (!qi) continue;
     if (/^(chat_|tab_)/i.test(modelId)) continue; // internal editor pseudo-models
     if (!qi.resetTime) continue; // unmetered helpers report a bare fraction of 1
+    // The Google section tracks GOOGLE models. Antigravity's catalogue also
+    // meters Claude and GPT-OSS against a separate allowance, and those are
+    // dropped here rather than downstream — they are Anthropic's and OpenAI's
+    // models, and no filter further along can be forgotten if the rows never
+    // exist. (They previously rode along in this array and, being invisible
+    // to the UI but visible to every reducer over it, drove the Google tray
+    // badge, history series and burn alerts.)
+    const isGemini = /^gemini/i.test(modelId) || /gemini/i.test(m.displayName || '');
+    if (!isGemini) continue;
     // A METERED pool (it has a resetTime) with no remainingFraction is
     // exhausted, not unknown: this is a proto-backed JSON API, and proto3
     // omits a scalar sitting at its default — so 0.0 remaining can arrive as
@@ -138,13 +146,11 @@ function normalizeAntigravityModels(json) {
       percent: Math.round((1 - remaining) * 1000) / 10,
       resetsAt: qi.resetTime
     };
-    const isGemini = /^gemini/i.test(modelId) || /gemini/i.test(m.displayName || '');
-    (isGemini ? gemini : foreign).push(entry);
+    gemini.push(entry);
   }
   const limits = antigravityGroups(gemini, 'Gemini (all models)');
-  const foreignLimits = antigravityGroups(foreign, 'Non-Gemini models');
-  if (!limits.length && !foreignLimits.length) return null;
-  return { source: 'antigravity', limits, foreign: foreignLimits };
+  if (!limits.length) return null;
+  return { source: 'antigravity', limits };
 }
 
 module.exports = { geminiModelLabel, normalizeGeminiQuota, normalizeAntigravityModels };
