@@ -2295,11 +2295,12 @@ const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
 // is an absolute path the user picked. Volume is 0..1.
 const DEFAULT_SOUNDS = {
   reset: { enabled: true, path: null, volume: 0.85 },
-  burn: { enabled: true, path: null, volume: 0.85 }
+  burn: { enabled: true, path: null, volume: 0.85 },
+  banked: { enabled: true, path: null, volume: 0.85 }
 };
 function sanitizeSounds(value) {
   const out = {};
-  for (const key of ['reset', 'burn']) {
+  for (const key of ['reset', 'burn', 'banked']) {
     const v = (value && typeof value === 'object' && value[key]) || {};
     const vol = Number(v.volume);
     out[key] = {

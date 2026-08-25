@@ -398,7 +398,11 @@ function setupProviderSections() {
 // user's own file, or volume-adjusted in Settings.
 const SOUND_DEFAULTS = {
     reset: { src: '../../assets/sounds/reset-default.mp3', label: 'Default (heavenly choir)' },
-    burn: { src: '../../assets/sounds/burn-default.wav', label: 'Default (fire)' }
+    burn: { src: '../../assets/sounds/burn-default.wav', label: 'Default (fire)' },
+    // A banked weekly-limit reset arriving in the OpenAI account. Distinct
+    // from `reset` (a limit clearing early) because it is a different event —
+    // credit landing in the bank, not a window rolling over.
+    banked: { src: '../../assets/sounds/banked-default.mp3', label: 'Default (banked reset)' }
 };
 const _soundCache = {};          // kind -> resolved src (data: URL for custom files)
 let _soundPlaying = {};          // kind -> Audio, so a repeat retriggers cleanly
@@ -483,6 +487,8 @@ function setupSoundSettings() {
                     test:'soundResetTest', pick:'soundResetPick', reset:'soundResetReset' });
     wire('burn', { toggle:'soundBurnToggle', volume:'soundBurnVolume', name:'soundBurnName',
                    test:'soundBurnTest', pick:'soundBurnPick', reset:'soundBurnReset' });
+    wire('banked', { toggle:'soundBankedToggle', volume:'soundBankedVolume', name:'soundBankedName',
+                     test:'soundBankedTest', pick:'soundBankedPick', reset:'soundBankedReset' });
 }
 
 function setupEventListeners() {
@@ -3139,8 +3145,11 @@ function checkEarlyResets(data) {
     const banked = bank != null && _resetBank != null && bank > _resetBank;
     if (bank != null) _resetBank = bank;
 
-    if (!freed && !banked) return;
-    playAlertSound('reset');
+    // A limit clearing early and a banked reset landing are different events,
+    // so they get different sounds. If somehow both happen on one refresh,
+    // the banked one wins — it is the rarer, more notable event.
+    if (banked) { playAlertSound('banked'); return; }
+    if (freed) playAlertSound('reset');
 }
 
 
