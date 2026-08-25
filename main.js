@@ -2915,6 +2915,7 @@ async function clearAnthropicLogin() {
   store.delete('sessionKey_encrypted');
   store.delete('organizationId');
   store.delete('organizations');
+  _anthropicEmailCache = null; // don't carry one account's email into the next
   // Clear all Claude.ai cookies and session storage so nothing lingers
   const cookies = await session.defaultSession.cookies.get({ url: 'https://claude.ai' });
   for (const cookie of cookies) {
@@ -4315,6 +4316,25 @@ function noteAnthropicFetchOutcome(ok) {
   }
 }
 
+// The account email shown under the Anthropic header. Rides the same
+// Cloudflare-bypassing hidden window as the usage fetch, and is cached for the
+// session so it costs one request, not one per refresh. Mirrors the Tauri
+// build's account_email (which reads the same claude.ai/api/account shape).
+let _anthropicEmailCache = null;
+async function fetchAnthropicEmail() {
+  if (_anthropicEmailCache) return _anthropicEmailCache;
+  try {
+    const acct = await fetchViaWindow('https://claude.ai/api/account', { timeoutMs: 10000 });
+    const email = acct?.email_address || acct?.email
+      || acct?.account?.email_address || acct?.account?.email || null;
+    if (email) _anthropicEmailCache = email;
+    return email;
+  } catch (error) {
+    debugLog('Anthropic email fetch failed:', error?.message || error);
+    return null;
+  }
+}
+
 ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   options = sanitizeFetchOptions(options);
   if (options.refreshLocalCredentials === true) resetLocalCredentialCaches();
@@ -4426,6 +4446,10 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     throw new Error('SessionExpired');
   }
   noteAnthropicFetchOutcome(true);
+
+  // Label the Anthropic section with the signed-in account's email (cached).
+  const anthropicEmail = await fetchAnthropicEmail();
+  if (anthropicEmail) data.anthropic_email = anthropicEmail;
 
   let overageResult = { status: 'skipped', reason: 'UI panel not visible' };
   let prepaidResult = { status: 'skipped', reason: 'UI panel not visible' };
