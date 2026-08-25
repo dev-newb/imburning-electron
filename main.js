@@ -3874,6 +3874,7 @@ ipcMain.handle('get-settings', () => {
     subgroupHidden: store.get('settings.subgroupHidden', {}),
     pizazz: store.get('settings.pizazz', true),
     sortByUsage: store.get('settings.sortByUsage', false),
+    hideAccountEmails: store.get('settings.hideAccountEmails', false),
     flameStyle: store.get('settings.flameStyle', 'classic'),
     sounds: { ...DEFAULT_SOUNDS, ...store.get('settings.sounds', {}) },
     hiddenRows: store.get('settings.hiddenRows', {}),
@@ -3942,6 +3943,7 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.subgroupHidden !== undefined) store.set('settings.subgroupHidden', settings.subgroupHidden || {});
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
   if (settings.sortByUsage !== undefined) store.set('settings.sortByUsage', settings.sortByUsage === true);
+  if (settings.hideAccountEmails !== undefined) store.set('settings.hideAccountEmails', settings.hideAccountEmails === true);
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
   if (settings.sounds !== undefined) store.set('settings.sounds', sanitizeSounds(settings.sounds));
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});

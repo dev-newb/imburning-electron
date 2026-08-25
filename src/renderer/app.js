@@ -174,6 +174,7 @@ const elements = {
     webhookUrl: document.getElementById('webhookUrl'),
     dailyDigestToggle: document.getElementById('dailyDigestToggle'),
     sortByUsageToggle: document.getElementById('sortByUsageToggle'),
+    showAccountEmailsToggle: document.getElementById('showAccountEmailsToggle'),
     showCodexToggle: document.getElementById('showCodexToggle'),
     showCodexCliToggle: document.getElementById('showCodexCliToggle'),
     showGeminiToggle: document.getElementById('showGeminiToggle'),
@@ -492,6 +493,16 @@ function setupSoundSettings() {
 }
 
 function setupEventListeners() {
+    // The account-email hide pills hide every account email at once, like the
+    // row-hide pills hide a row. Restored from Settings.
+    document.querySelectorAll('.account-email-hide').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await _saveSettingsPatch({ hideAccountEmails: true });
+            if (latestUsageData) renderAccountEmails(latestUsageData);
+        });
+    });
+
     setupSoundSettings();
     elements.refreshBtn.addEventListener('click', async () => {
         debugLog('Refresh button clicked');
@@ -1739,6 +1750,27 @@ function _sortRowsByUsage() {
         };
         rows.sort((a, b) => pct(b) - pct(a));
         for (const row of rows) container.appendChild(row);
+    }
+}
+
+function renderAccountEmails(data) {
+    const hidden = (window._cachedSettings || {}).hideAccountEmails === true;
+    const pick = {
+        Anthropic: data.anthropic_email || null,
+        Openai: (data.codex && (data.codex.email || (data.codex.cli && data.codex.cli.email))) || null,
+        Google: (data.gemini && (data.gemini.email || (data.gemini.cli && data.gemini.cli.email))) || null
+    };
+    for (const prov of ['Anthropic', 'Openai', 'Google']) {
+        const el = document.getElementById('email' + prov);
+        if (!el) continue;
+        const email = pick[prov];
+        const txt = el.querySelector('.account-email-text');
+        if (email && !hidden) {
+            if (txt) txt.textContent = email;
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
     }
 }
 
@@ -3022,6 +3054,11 @@ function updateUI(data) {
     setChip(elements.chipAnthropic, (!data.claude_code || data.claude_code_same_account !== false) && data.anthropic_source === 'cli'
         ? { cls: 'cli anthropic-cli', text: 'via CLI login', title: 'Usage is being read from your Claude CLI login. Logging in to claude.ai under Settings additionally exposes Extra Usage and credits.' }
         : null);
+    // Per-provider account email under the section header (landscape/tall only,
+    // hideable). Anthropic's comes from the account endpoint; the others carry
+    // their own email in the provider payload, whether signed in through the
+    // app or read from a CLI login on disk.
+    renderAccountEmails(data);
     // The amber pill IS the CLI subheading now — give it the account detail
     const pillTitle = (sel, t) => { const b = document.querySelector(sel); if (b) b.title = t; };
     pillTitle('#sgOpenaiCli .subheading', cxStatus && cxStatus.cli
@@ -4494,6 +4531,7 @@ async function loadSettings() {
     if (elements.webhookUrl) elements.webhookUrl.value = settings.webhook?.url || '';
     if (elements.dailyDigestToggle) elements.dailyDigestToggle.checked = settings.dailyDigest !== false;
     if (elements.sortByUsageToggle) elements.sortByUsageToggle.checked = settings.sortByUsage === true;
+    if (elements.showAccountEmailsToggle) elements.showAccountEmailsToggle.checked = settings.hideAccountEmails !== true;
     if (elements.showCodexToggle) elements.showCodexToggle.checked = settings.showCodex !== false;
     if (elements.showCodexCliToggle) elements.showCodexCliToggle.checked = settings.showCodexCli !== false;
     if (elements.showGeminiToggle) elements.showGeminiToggle.checked = settings.showGemini !== false;
@@ -4588,6 +4626,7 @@ async function saveSettings() {
         },
         dailyDigest: elements.dailyDigestToggle.checked,
         sortByUsage: elements.sortByUsageToggle ? elements.sortByUsageToggle.checked : false,
+        hideAccountEmails: elements.showAccountEmailsToggle ? !elements.showAccountEmailsToggle.checked : false,
         showCodex: elements.showCodexToggle.checked,
         showCodexCli: elements.showCodexCliToggle ? elements.showCodexCliToggle.checked : true,
         showGemini: elements.showGeminiToggle ? elements.showGeminiToggle.checked : true,
