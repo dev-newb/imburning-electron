@@ -6,7 +6,7 @@ A practical map for taking over Burnwatch development. Read this alongside `READ
 
 ## 1. What it is
 
-Burnwatch is an **Electron 28 desktop widget** (Windows / macOS / Linux) that tracks AI usage across **Anthropic, OpenAI, and Google** in real time — every pool, *both accounts per company* (desktop app login **and** the CLI login when they differ). Fork of [SlavomirDurej/claude-usage-widget](https://github.com/SlavomirDurej/claude-usage-widget); lives at **`dev-newb/burnwatch`**, local clone `Documents/claude-usage-widget`, active branch **`feature/fable-usage`** (also the repo default branch).
+Burnwatch is an **Electron 28 desktop widget** (Windows / macOS / Linux) that tracks AI usage across **Anthropic, OpenAI, and Google** in real time — every pool, *both accounts per company* (desktop app login **and** the CLI login when they differ). Fork of [SlavomirDurej/claude-usage-widget](https://github.com/SlavomirDurej/claude-usage-widget); lives at **`dev-newb/imburning-electron`**, local clone `Documents/claude-usage-widget`, active branch **`feature/fable-usage`** (also the repo default branch).
 
 - **Node** 18+, **npm** 9+. Deps: `chart.js`, `electron-store`, `electron-updater`. No test suite — verification is manual/visual (see §5).
 - `name`/`appId`/`productName` are deliberately **unchanged** from upstream (`claude-usage-widget` / `com.claudeusage.widget` / `Claude-Usage-Widget`) so the `%APPDATA%\claude-usage-widget` userData dir and the electron-updater channel keep working across the rename to Burnwatch. Only display strings say "Burnwatch".
@@ -68,7 +68,7 @@ assets/                    icons, tray badges, PNG sprites (press/clown/psychic)
 1. Bump `package.json` version.
 2. Commit + push `feature/fable-usage`.
 3. `npm run build:win`.
-4. `gh release create vX.Y.Z --repo dev-newb/burnwatch --target feature/fable-usage --title "…" --notes-file notes.md dist/Claude-Usage-Widget-X.Y.Z-win-Setup.exe dist/…Setup.exe.blockmap dist/…portable.exe dist/latest.yml`
+4. `gh release create vX.Y.Z --repo dev-newb/imburning-electron --target feature/fable-usage --title "…" --notes-file notes.md dist/Claude-Usage-Widget-X.Y.Z-win-Setup.exe dist/…Setup.exe.blockmap dist/…portable.exe dist/latest.yml`
 5. Installed widgets auto-update on next launch. (If you ship a broken build: fix, **delete the bad GH release**, ship a hotfix, and purge `%LOCALAPPDATA%\claude-usage-widget-updater\pending`.)
 
 ---

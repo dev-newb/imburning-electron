@@ -1,6 +1,6 @@
 # Release Process
 
-For maintainers. Burnwatch releases are **built locally and published with the GitHub CLI** — there
+For maintainers. I'm Burning! releases are **built locally and published with the GitHub CLI** — there
 is no GitHub Actions tag-based release pipeline, no CHANGELOG file to maintain, and no code-signing
 step. Only **Windows** binaries are published; macOS/Linux are build-from-source for now.
 
@@ -8,7 +8,7 @@ step. Only **Windows** binaries are published; macOS/Linux are build-from-source
 
 - A working Windows build environment (Node.js 18+, `npm install` done).
 - The [GitHub CLI](https://cli.github.com/) (`gh`) authenticated with push/release rights on
-  `dev-newb/burnwatch`.
+  `dev-newb/imburning-electron`.
 
 ## Steps
 
@@ -39,7 +39,7 @@ step. Only **Windows** binaries are published; macOS/Linux are build-from-source
 5. **Create the GitHub Release** and attach those four files:
    ```bash
    gh release create vX.Y.Z \
-     --repo dev-newb/burnwatch \
+     --repo dev-newb/imburning-electron \
      --target feature/fable-usage \
      --title "vX.Y.Z" \
      dist/Claude-Usage-Widget-*-win-Setup.exe \

@@ -1,10 +1,10 @@
 # Installation Instructions
 
-Burnwatch is an Electron desktop widget that tracks AI usage across **Anthropic, OpenAI, and
+I'm Burning! is an Electron desktop widget that tracks AI usage across **Anthropic, OpenAI, and
 Google**, with multi-account support. Prebuilt binaries are currently published for **Windows
 only**; macOS and Linux users build from source (prebuilt macOS/Linux binaries are planned).
 
-> Note on names: the app is **Burnwatch**, but its internal package and build product name remain
+> Note on names: the app is **I'm Burning!**, but its internal package and build product name remain
 > `Claude-Usage-Widget`. That is deliberate — it keeps the existing settings directory and the
 > auto-update channel intact. So installer filenames and install paths still read
 > `Claude-Usage-Widget`.
@@ -15,16 +15,16 @@ only**; macOS and Linux users build from source (prebuilt macOS/Linux binaries a
 
 **Option 1: Installer (recommended)**
 1. Download `Claude-Usage-Widget-{version}-win-Setup.exe` from
-   [Releases](https://github.com/dev-newb/burnwatch/releases).
+   [Releases](https://github.com/dev-newb/imburning-electron/releases).
 2. Run the installer and follow the wizard (you can choose the install directory).
-3. Launch **Burnwatch** from the Start Menu.
+3. Launch **I'm Burning!** from the Start Menu.
 
 The installer build **auto-updates silently**: it checks on launch and once a day, downloads new
 versions in the background, and applies them on the next launch. Install once and forget it.
 
 **Option 2: Portable (no installation)**
 1. Download `Claude-Usage-Widget-{version}-win-portable.exe` from
-   [Releases](https://github.com/dev-newb/burnwatch/releases).
+   [Releases](https://github.com/dev-newb/imburning-electron/releases).
 2. Run it directly from wherever you place it.
 
 Portable builds do **not** auto-update — re-download to upgrade.
@@ -41,8 +41,8 @@ Portable builds do **not** auto-update — re-download to upgrade.
 No prebuilt DMG is published yet. Build it yourself:
 
 ```bash
-git clone https://github.com/dev-newb/burnwatch.git
-cd burnwatch
+git clone https://github.com/dev-newb/imburning-electron.git
+cd imburning-electron
 npm install
 npm run build:mac   # produces a .dmg for arm64 and x64 in dist/
 ```
@@ -66,8 +66,8 @@ xattr -cr "/Applications/Claude Usage Widget.app"
 No prebuilt AppImage is published yet. Build it yourself:
 
 ```bash
-git clone https://github.com/dev-newb/burnwatch.git
-cd burnwatch
+git clone https://github.com/dev-newb/imburning-electron.git
+cd imburning-electron
 npm install
 npm run build:linux   # produces an AppImage for x64 and arm64 in dist/
 ```
@@ -101,7 +101,7 @@ chmod +x ~/.local/bin/burnwatch.AppImage
 **2. Create `~/.local/share/applications/burnwatch.desktop`:**
 ```ini
 [Desktop Entry]
-Name=Burnwatch
+Name=I'm Burning!
 Comment=Monitor AI usage (Anthropic, OpenAI, Google)
 Exec=/home/YOUR_USERNAME/.local/bin/burnwatch.AppImage
 Icon=/home/YOUR_USERNAME/.local/share/icons/burnwatch.png
@@ -139,8 +139,8 @@ cp ~/.local/share/applications/burnwatch.desktop ~/.config/autostart/
 **Prerequisites:** Node.js 18+ ([download](https://nodejs.org)) and npm (bundled with Node).
 
 ```bash
-git clone https://github.com/dev-newb/burnwatch.git
-cd burnwatch
+git clone https://github.com/dev-newb/imburning-electron.git
+cd imburning-electron
 npm install
 npm start            # run locally
 ```
@@ -196,6 +196,6 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
-Still stuck? Open a [Discussion](https://github.com/dev-newb/burnwatch/discussions) or
-[Issue](https://github.com/dev-newb/burnwatch/issues) with your OS, Node.js version, and the full
+Still stuck? Open a [Discussion](https://github.com/dev-newb/imburning-electron/discussions) or
+[Issue](https://github.com/dev-newb/imburning-electron/issues) with your OS, Node.js version, and the full
 error output.

@@ -1,10 +1,10 @@
-# Contributing to Burnwatch
+# Contributing to I'm Burning!
 
-Thanks for your interest in contributing! Burnwatch is an Electron desktop widget that tracks AI
+Thanks for your interest in contributing! I'm Burning! is an Electron desktop widget that tracks AI
 usage across **Anthropic, OpenAI, and Google**, with multi-account support. This guide covers dev
 setup, the codebase layout, and how to submit changes.
 
-> Naming note: the app is **Burnwatch**, but the internal package name stays `claude-usage-widget`
+> Naming note: the app is **I'm Burning!**, but the internal package name stays `claude-usage-widget`
 > and the electron-builder product name stays `Claude-Usage-Widget` — kept deliberately so the
 > settings directory and auto-update channel don't change. You'll see those literals in code and
 > build artifacts.
@@ -20,7 +20,7 @@ setup, the codebase layout, and how to submit changes.
 1. **Fork and clone** (the default branch is `feature/fable-usage`):
    ```bash
    git clone https://github.com/YOUR_USERNAME/burnwatch.git
-   cd burnwatch
+   cd imburning-electron
    ```
 
 2. **Install dependencies:**
@@ -80,7 +80,7 @@ build-from-source (see [INSTALL.md](INSTALL.md)).
 
 - **Renderer (widget UI):** run `npm run dev`, or set `NODE_ENV=development` — DevTools opens
   automatically. Use the DevTools console and Network tab to inspect the UI and provider API calls.
-- **Main process:** logs print to the terminal where you launched Burnwatch.
+- **Main process:** logs print to the terminal where you launched I'm Burning!.
 - **Verbose logging:** diagnostics are redacted — they never print session-key material or OAuth
   account identity, so the flag is safe to use around real logins. Set `DEBUG_LOG=1` (or pass `--burnwatch-debug`) to enable the main process's verbose
   debug logging:
@@ -93,7 +93,7 @@ build-from-source (see [INSTALL.md](INSTALL.md)).
 
 ### Things worth testing
 
-Burnwatch supports **multiple providers and multiple accounts per provider**, so exercise those
+I'm Burning! supports **multiple providers and multiple accounts per provider**, so exercise those
 paths when you change fetching or the tray:
 
 - Anthropic via a claude.ai session; OpenAI via "Sign in with ChatGPT" or the local `codex` CLI
@@ -118,7 +118,7 @@ paths when you change fetching or the tray:
 3. **Commit** with a clear message (Conventional Commits are welcome — `feat:`, `fix:`, `docs:`,
    `chore:`, `refactor:`).
 4. **Push** to your fork and **open a Pull Request** against
-   [dev-newb/burnwatch](https://github.com/dev-newb/burnwatch) (`feature/fable-usage`). Describe
+   [dev-newb/imburning-electron](https://github.com/dev-newb/imburning-electron) (`feature/fable-usage`). Describe
    what changed, link related issues, and include screenshots for UI changes.
 
 ## Release Process
@@ -127,5 +127,5 @@ For maintainers — see [RELEASE_PROCESS.md](RELEASE_PROCESS.md).
 
 ## Questions?
 
-Open a [Discussion](https://github.com/dev-newb/burnwatch/discussions) or check existing
-[Issues](https://github.com/dev-newb/burnwatch/issues).
+Open a [Discussion](https://github.com/dev-newb/imburning-electron/discussions) or check existing
+[Issues](https://github.com/dev-newb/imburning-electron/issues).

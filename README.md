@@ -2,11 +2,13 @@
   <img src="assets/burnwatch-hero.png" width="256" alt="I'm Burning! — a robot with its head on fire, keeping a gauge on its own burn">
 </p>
 
-<h1 align="center">I'm Burning!</h1>
+<h1 align="center">I'm Burning! (Electron)</h1>
 
 **I'm Burning!** — a standalone desktop widget for **Windows, macOS, and Linux** tracking your AI usage across **Anthropic, OpenAI, and Google** in real-time. *Some tokens just want to watch the world learn.*
 
 > Formerly **Burnwatch**. Based on [Claude Usage Widget](https://github.com/SlavomirDurej) © Slavomir Durej (MIT). The internal package name stays `claude-usage-widget` so upgrades keep your settings.
+
+> **Two builds, one widget.** This is the **Electron** build. A native-webview port, [**I'm Burning! (Tauri)**](https://github.com/dev-newb/imburning-tauri), runs the *same renderer* behind a Rust backend — a ~10 MB binary using the OS webview instead of a bundled Chromium. Feature parity is tracked commit-for-commit; pick whichever runtime you prefer.
 
 ![I'm Burning! — portrait main view: Anthropic, OpenAI, and Google sections, every pool tracked, a maxed-out Codex bar smoking](assets/screenshots/main-portrait-dark.png)
 
@@ -23,6 +25,13 @@
 
 - 🧰 **Toolbar rework** — a slinky for compact mode (it compresses when the widget does), a terminal-prompt icon for CLI-login refresh, a real toothed gear for Settings, and one optically-centred layout in every mode.
 - 🧭 **Honest data only** — if a live fetch hiccups, the widget shows its last good data or says it's disconnected; it will never present an old session-log snapshot as current usage.
+
+### And since then
+
+- 📧 **Account emails under every header** — each provider section names the account it's tracking (signed-in or harvested from your CLI logins), hideable in Settings.
+- 🎵 **A third sound** — a banked OpenAI reset *landing* gets its own distinct alert, separate from a limit clearing early.
+- 🔮 **Orbs everywhere** — the banked-reset orb now renders in every layout, including the wide dual-table where it used to be a bare count.
+- 📐 **Layout polish** — symmetric edge padding, credit/reset pairs centred on their column midline, and every column aligned to its header in all three layouts.
 
 ---
 
@@ -123,7 +132,7 @@ The widget **reflows in realtime** as you drag — no fixed layouts, no clipped 
 One paste. It installs anything missing (git, Node via Homebrew), clones, builds the newest release tag, installs **I'm Burning!.app** to /Applications, launches it, and registers an auto-updater that rebuilds on every future release:
 
 ```bash
-git clone https://github.com/dev-newb/imburning.git ~/imburning && cd ~/imburning && bash tools/mac/install.sh
+git clone https://github.com/dev-newb/imburning-electron.git ~/imburning && cd ~/imburning && bash tools/mac/install.sh
 ```
 
 - **Requirements:** Node 18+ in `/opt/homebrew/bin` or `/usr/local/bin` (`brew install node`), git. No Xcode needed.
@@ -170,7 +179,7 @@ cp ~/.local/share/applications/imburning.desktop ~/.config/autostart/
 ### Build from source (any platform)
 
 ```bash
-git clone https://github.com/dev-newb/imburning.git
+git clone https://github.com/dev-newb/imburning-electron.git
 cd imburning
 npm install
 npm start          # or: npm run build:mac / build:win / build:linux
