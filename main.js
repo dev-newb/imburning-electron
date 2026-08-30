@@ -15,6 +15,18 @@ const { discoverCredentialHomes, clearCredentialHomeCache } = require('./src/loc
 const GITHUB_OWNER = 'dev-newb';
 const GITHUB_REPO = 'burnwatch';
 
+// Profile isolation (ported from upstream): --profile=<name> launches a fully
+// separate instance with its own session, cookies, settings, and history.
+// Must run before ANYTHING reads app.getPath('userData') — including the
+// single-instance lock, so two profiles can run side by side.
+const _profileArg = process.argv.find((a) => a.startsWith('--profile='));
+if (_profileArg) {
+  const profileName = _profileArg.split('=')[1].replace(/[^a-zA-Z0-9_-]/g, '_');
+  if (profileName) {
+    app.setPath('userData', path.join(app.getPath('userData'), 'profiles', profileName));
+  }
+}
+
 // Migration: Handle old encrypted config files from v1.7.0 and earlier
 // Must happen BEFORE creating Store instance to prevent parse errors
 const fs = require('fs');
@@ -2175,6 +2187,9 @@ function createMainWindow() {
   mainWindow.on('move', () => {
     if (positionSaveTimer) clearTimeout(positionSaveTimer);
     positionSaveTimer = setTimeout(() => {
+      // The window can be destroyed between the move and this debounce firing
+      // (close without a tray icon) — getBounds on it then throws.
+      if (!mainWindow || mainWindow.isDestroyed()) return;
       const position = mainWindow.getBounds();
       store.set('windowPosition', { x: position.x, y: position.y });
     }, 300);
@@ -2296,11 +2311,12 @@ const DEFAULT_TRAY_OUTLINE = { enabled: true, color: '#facc15' };
 const DEFAULT_SOUNDS = {
   reset: { enabled: true, path: null, volume: 0.85 },
   burn: { enabled: true, path: null, volume: 0.85 },
-  banked: { enabled: true, path: null, volume: 0.85 }
+  banked: { enabled: true, path: null, volume: 0.85 },
+  wall: { enabled: true, path: null, volume: 0.85 }
 };
 function sanitizeSounds(value) {
   const out = {};
-  for (const key of ['reset', 'burn', 'banked']) {
+  for (const key of ['reset', 'burn', 'banked', 'wall']) {
     const v = (value && typeof value === 'object' && value[key]) || {};
     const vol = Number(v.volume);
     out[key] = {
