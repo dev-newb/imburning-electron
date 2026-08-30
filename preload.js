@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Notifications
   showNotification: (title, body) => ipcRenderer.send('show-notification', { title, body }),
+  setCliAdopted: (provider, adopted) => ipcRenderer.invoke('set-cli-adopted', provider, adopted),
   sendAlertWebhook: (event, title, message) => ipcRenderer.send('alert-webhook', { event, title, message }),
 
   // Compact mode

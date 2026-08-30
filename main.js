@@ -390,6 +390,59 @@ function readCodexAuth() {
   return readCodexAuthCandidates()[0] || null;
 }
 
+// ---- CLI-account adoption (consent) ----------------------------------------
+// CLI-borrowed credentials never feed the stats until the user adopts them.
+// A fresh install DETECTS local CLI logins and offers them (a chip in the
+// section header shows the account); clicking the offer adopts. An install
+// that was already showing CLI-derived data before this feature existed is
+// grandfathered in as fully adopted, so nothing vanishes on upgrade.
+function cliAdoptionState() {
+  const stored = store.get('settings.cliAdopted');
+  if (stored && typeof stored === 'object') {
+    return {
+      anthropic: stored.anthropic === true,
+      openai: stored.openai === true,
+      google: stored.google === true
+    };
+  }
+  const existing = !!store.get('latestUsageData');
+  const seeded = { anthropic: existing, openai: existing, google: existing };
+  store.set('settings.cliAdopted', seeded);
+  return seeded;
+}
+
+function getCodexCliEmail() {
+  try {
+    const source = localCredentialFiles('.codex', 'auth.json')[0];
+    if (!source) return null;
+    const auth = JSON.parse(fs.readFileSync(source.filePath, 'utf-8'));
+    return auth.tokens?.id_token ? (jwtClaims(auth.tokens.id_token).email || null) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Detected-but-unadopted CLI logins, for the renderer's offer chips.
+// Detection is local-only (files/keychain presence + JWT email claims) —
+// no network request runs for an account the user hasn't adopted.
+function detectCliOffers(adopted) {
+  const offers = {};
+  try {
+    if (!adopted.anthropic && readClaudeCodeCredentials().length) {
+      offers.anthropic = { email: null, label: 'Claude Code CLI login' };
+    }
+    if (!adopted.openai && readCodexAuthCandidates().length) {
+      offers.openai = { email: getCodexCliEmail(), label: 'codex CLI login' };
+    }
+    if (!adopted.google && (readGeminiCliCredsFile() || antigravityAvailable())) {
+      offers.google = { email: getGeminiCliEmail(), label: 'gemini CLI login' };
+    }
+  } catch (err) {
+    debugLog('[Adoption] offer detection failed:', err.message);
+  }
+  return offers;
+}
+
 function codexWindowSuffix(windowSeconds) {
   if (windowSeconds == null) return '7d';
   const hours = Math.round(windowSeconds / 3600);
@@ -697,7 +750,10 @@ async function codexResetExpiry() {
 
 async function fetchCodexUsageBase() {
   const oauth = await getOAuthAccessToken('openai');
-  const cliCandidates = readCodexAuthCandidates();
+  // Un-adopted CLI credentials are invisible here: no fallback, no second
+  // account, no session-log snapshot (that is CLI data too).
+  const cliAllowed = cliAdoptionState().openai;
+  const cliCandidates = cliAllowed ? readCodexAuthCandidates() : [];
   const fetchCli = () => Promise.all(cliCandidates.map(async (candidate) => {
     const fetched = await fetchCodexWithToken(candidate.accessToken, candidate.accountId);
     return {
@@ -754,7 +810,7 @@ async function fetchCodexUsageBase() {
   // presented a 5-day-old 11% as current usage. Rejecting it here lets the
   // provider cache serve its recent last-good LIVE data instead (or show
   // the section as disconnected, which is at least honest).
-  const snapshot = readCodexSessionSnapshot();
+  const snapshot = cliAllowed ? readCodexSessionSnapshot() : null;
   if (!snapshot) return null;
   const lastLiveAt = store.get('codexLastLiveAt', 0);
   if ((snapshot.capturedAtMs || 0) <= lastLiveAt) {
@@ -997,7 +1053,7 @@ async function fetchGeminiUsage() {
     primary.email = oauth.email || null;
   }
 
-  const cliToken = await getGeminiAccessToken();
+  const cliToken = cliAdoptionState().google ? await getGeminiAccessToken() : null;
   let cliData = cliToken ? await fetchGeminiWithToken(cliToken) : null;
   if (cliData) {
     cliData.email = getGeminiCliEmail();
@@ -1209,7 +1265,11 @@ async function fetchAntigravityUsage() {
 // 'antigravity' force one; Gemini is never removed as an option.
 async function fetchGoogleUsage() {
   const source = store.get('settings.googleSource', 'auto');
-  const wantAntigravity = source === 'antigravity' || (source === 'auto' && antigravityAvailable());
+  // Antigravity usage rides the agy CLI's keychain credentials wholesale, so
+  // the whole surface is gated on Google CLI adoption.
+  const googleCliAdopted = cliAdoptionState().google;
+  const wantAntigravity = googleCliAdopted
+    && (source === 'antigravity' || (source === 'auto' && antigravityAvailable()));
   if (wantAntigravity) {
     const ag = await fetchAntigravityUsage();
     if (ag) return ag;
@@ -3746,6 +3806,18 @@ ipcMain.handle('export-history', async (event, format) => {
 });
 
 // Show a native OS desktop notification (Windows toast, macOS NC, Linux libnotify)
+// Adopt (or drop) a detected CLI login as a tracked account. The renderer
+// refreshes with forceProviders afterwards; clearing the credential caches
+// here makes that refresh actually re-read the local files.
+ipcMain.handle('set-cli-adopted', (event, provider, adopted) => {
+  if (!['anthropic', 'openai', 'google'].includes(provider)) return { ok: false };
+  const state = cliAdoptionState();
+  state[provider] = adopted === true;
+  store.set('settings.cliAdopted', state);
+  resetLocalCredentialCaches();
+  return { ok: true, state };
+});
+
 ipcMain.on('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
     const n = new Notification({ title, body, silent: false });
@@ -3892,6 +3964,8 @@ ipcMain.handle('get-settings', () => {
     pizazz: store.get('settings.pizazz', true),
     sortByUsage: store.get('settings.sortByUsage', false),
     hideAccountEmails: store.get('settings.hideAccountEmails', false),
+    cliAdopted: cliAdoptionState(),
+    hiddenProviders: store.get('settings.hiddenProviders', {}),
     flameStyle: store.get('settings.flameStyle', 'classic'),
     sounds: { ...DEFAULT_SOUNDS, ...store.get('settings.sounds', {}) },
     hiddenRows: store.get('settings.hiddenRows', {}),
@@ -3961,6 +4035,11 @@ ipcMain.handle('save-settings', (event, settings) => {
   if (settings.pizazz !== undefined) store.set('settings.pizazz', settings.pizazz !== false);
   if (settings.sortByUsage !== undefined) store.set('settings.sortByUsage', settings.sortByUsage === true);
   if (settings.hideAccountEmails !== undefined) store.set('settings.hideAccountEmails', settings.hideAccountEmails === true);
+  if (settings.hiddenProviders !== undefined && typeof settings.hiddenProviders === 'object') {
+    const clean = {};
+    for (const p of ['anthropic', 'openai', 'google']) clean[p] = settings.hiddenProviders[p] === true;
+    store.set('settings.hiddenProviders', clean);
+  }
   if (settings.flameStyle !== undefined) store.set('settings.flameStyle', settings.flameStyle === 'particle' ? 'particle' : 'classic');
   if (settings.sounds !== undefined) store.set('settings.sounds', sanitizeSounds(settings.sounds));
   if (settings.hiddenRows !== undefined) store.set('settings.hiddenRows', settings.hiddenRows || {});
@@ -4357,6 +4436,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   const providerFetchOptions = { force: options.forceProviders === true };
   const sessionKey = readStoredSessionKey();
   const organizationId = store.get('organizationId');
+  const cliAdopted = cliAdoptionState();
 
   if (!sessionKey || !organizationId) {
     // Anthropic CLI fallback: no claude.ai login, but the claude CLI's local
@@ -4364,7 +4444,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     // ("via CLI login"). Extra Usage / credits need the web login and are
     // simply absent in this mode.
     const [cc, codexF, geminiF] = await Promise.all([
-      readClaudeCodeToken()
+      (cliAdopted.anthropic && readClaudeCodeToken())
         ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage, providerFetchOptions)
         : Promise.resolve(null),
       (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
@@ -4375,7 +4455,8 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
         : Promise.resolve(null)
     ]);
     const hasClaudeUsage = !!(cc && (cc.five_hour?.resets_at || cc.seven_day?.resets_at));
-    if (!hasClaudeUsage && !codexF && !geminiF) {
+    const offers = detectCliOffers(cliAdopted);
+    if (!hasClaudeUsage && !codexF && !geminiF && !Object.keys(offers).length) {
       throw new Error('Missing credentials');
     }
     const data = {
@@ -4387,6 +4468,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
     };
     if (codexF) data.codex = codexF;
     if (geminiF) data.gemini = geminiF;
+    data.offers = offers;
     // History records the UNFILTERED accounts: the visibility toggles are a
     // display choice and must never change which account a series records.
     await storeUsageHistory(data); // no organizationId → default history scope
@@ -4405,7 +4487,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
   // Kick off the Claude Code (CLI) and Codex account fetches concurrently
   // with the claude.ai one; each resolves to null on any failure.
-  const claudeCodePromise = store.get('settings.showClaudeCode', true)
+  const claudeCodePromise = (store.get('settings.showClaudeCode', true) && cliAdopted.anthropic)
     ? cachedProviderFetch('claude_code', fetchClaudeCodeUsage, providerFetchOptions)
     : Promise.resolve(null);
   const codexPromise = (store.get('settings.showCodex', true) || store.get('settings.showCodexCli', true))
@@ -4532,6 +4614,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   if (codex) data.codex = codex;
   const gemini = await geminiPromise;
   if (gemini) data.gemini = gemini;
+  data.offers = detectCliOffers(cliAdopted);
 
   // History records the UNFILTERED accounts: the visibility toggles are a
   // display choice and must never change which account a series records
