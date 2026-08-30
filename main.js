@@ -3809,6 +3809,20 @@ ipcMain.handle('export-history', async (event, format) => {
 // Adopt (or drop) a detected CLI login as a tracked account. The renderer
 // refreshes with forceProviders afterwards; clearing the credential caches
 // here makes that refresh actually re-read the local files.
+// Window bounds round-trip for the Settings tall-mode dance: a hand-sized
+// landscape window is captured before Settings forces tall, and restored
+// exactly on close.
+ipcMain.handle('get-window-bounds', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  return mainWindow.getBounds();
+});
+ipcMain.handle('set-window-bounds', (event, b) => {
+  if (!mainWindow || mainWindow.isDestroyed() || !b) return false;
+  const num = (v) => (Number.isFinite(v) ? Math.round(v) : undefined);
+  mainWindow.setBounds({ x: num(b.x), y: num(b.y), width: num(b.width), height: num(b.height) });
+  return true;
+});
+
 ipcMain.handle('set-cli-adopted', (event, provider, adopted) => {
   if (!['anthropic', 'openai', 'google'].includes(provider)) return { ok: false };
   const state = cliAdoptionState();
