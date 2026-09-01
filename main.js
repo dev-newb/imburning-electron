@@ -6,7 +6,7 @@ const Store = require('electron-store');
 const { fetchViaWindow } = require('./src/fetch-via-window');
 const { JsonlHistoryStore, DAY_MS, dedupeEntries } = require('./src/history-store');
 const { finiteOrNull, sampleGapLimitMs, positiveBurn, latestContiguousRun, isExplicitAuthFailure } = require('./src/usage-math');
-const { clampBoundsToDisplays } = require('./src/window-bounds');
+const { recoverBounds, clearsVisibilityThreshold } = require('./src/window-bounds');
 const { startOAuthCallbackServer } = require('./src/oauth-callback');
 const { sanitizeHiddenSeries, sanitizeFetchOptions, migrateHiddenSeriesLabels } = require('./src/settings-validation');
 const { normalizeGeminiQuota, normalizeAntigravityModels } = require('./src/provider-models');
@@ -141,8 +141,11 @@ function orderedDisplays() {
   return [primary, ...screen.getAllDisplays().filter((display) => display.id !== primary.id)];
 }
 
+// Damon's three-branch recovery spec (upstream PR #125 review): snap only a
+// window straddling two live displays; leave a single-display overhang where
+// the user put it; recenter only when nothing shows a substantial piece.
 function recoverWindowBounds(bounds, options = {}) {
-  return clampBoundsToDisplays(bounds, orderedDisplays(), options);
+  return recoverBounds(bounds, orderedDisplays(), options);
 }
 
 function hasTrayIcon() {
@@ -159,9 +162,7 @@ function showMainWindowSmart() {
   const before = mainWindow.getBounds();
   const recovered = recoverWindowBounds(before, {
     fallbackWidth: WIDGET_WIDTH,
-    fallbackHeight: WIDGET_HEIGHT,
-    minWidth: MIN_WIDGET_WIDTH,
-    minHeight: 180
+    fallbackHeight: WIDGET_HEIGHT
   });
   if (before.x !== recovered.x || before.y !== recovered.y
       || before.width !== recovered.width || before.height !== recovered.height) {
@@ -2203,9 +2204,7 @@ function createMainWindow() {
       height: WIDGET_HEIGHT
     }, {
       fallbackWidth: WIDGET_WIDTH,
-      fallbackHeight: WIDGET_HEIGHT,
-      minWidth: MIN_WIDGET_WIDTH,
-      minHeight: 180
+      fallbackHeight: WIDGET_HEIGHT
     });
     windowOptions.x = recovered.x;
     windowOptions.y = recovered.y;
@@ -2290,9 +2289,7 @@ function createGraphWindow() {
     height: saved.height || 400
   }, {
     fallbackWidth: 660,
-    fallbackHeight: 400,
-    minWidth: 360,
-    minHeight: 240
+    fallbackHeight: 400
   });
   graphWindow = new BrowserWindow({
     width: recovered.width,
@@ -2927,14 +2924,12 @@ function generateRedXIcon(bgColor = { r: 220, g: 53, b: 69 }, xColor = { r: 255,
 
 function isMainWindowShownOnScreen() {
   if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return false;
+  // Same visibility threshold as recoverBounds, so the tray toggle and the
+  // recovery paths agree on what "shown" means: a substantial piece visible
+  // on at least one display.
   const bounds = mainWindow.getBounds();
-  const recovered = recoverWindowBounds(bounds, {
-    fallbackWidth: WIDGET_WIDTH,
-    fallbackHeight: WIDGET_HEIGHT,
-    minWidth: MIN_WIDGET_WIDTH,
-    minHeight: 180
-  });
-  return bounds.x === recovered.x && bounds.y === recovered.y;
+  return orderedDisplays().some((display) =>
+    clearsVisibilityThreshold(bounds, display.workArea || display.bounds, 80, 32));
 }
 
 function trayStaticIconPath() {

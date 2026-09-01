@@ -1,32 +1,56 @@
 'use strict';
-
 const test = require('node:test');
-const assert = require('node:assert/strict');
-const { intersects, clampBoundsToDisplays } = require('../src/window-bounds');
+const assert = require('node:assert');
+const { normalizeBounds, visibleArea, clearsVisibilityThreshold, recoverBounds } = require('../src/window-bounds');
 
-const displays = [
-  { workArea: { x: 0, y: 0, width: 1920, height: 1040 } },
-  { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } }
-];
+const MAIN = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+const SIDE = { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } };
 
-test('intersects detects overlapping rectangles', () => {
-  assert.equal(intersects({ x: 10, y: 10, width: 50, height: 50 }, { x: 0, y: 0, width: 20, height: 20 }), true);
-  assert.equal(intersects({ x: 30, y: 30, width: 10, height: 10 }, { x: 0, y: 0, width: 20, height: 20 }), false);
+test('straddling two displays snaps fully onto the one showing more', () => {
+  // 560 wide at x=1520: 400px on MAIN, 160px on SIDE — both clear 80x32
+  const out = recoverBounds({ x: 1520, y: 100, width: 560, height: 400 }, [MAIN, SIDE]);
+  assert.equal(out.x + out.width <= 1920, true, 'fully inside MAIN');
+  assert.equal(out.x >= 0, true);
+  assert.deepEqual({ w: out.width, h: out.height }, { w: 560, h: 400 });
 });
 
-test('valid secondary-display bounds are preserved', () => {
-  assert.deepEqual(
-    clampBoundsToDisplays({ x: 2100, y: 100, width: 660, height: 400 }, displays),
-    { x: 2100, y: 100, width: 660, height: 400 }
-  );
+test('hanging off a single display is left exactly alone', () => {
+  // 300px visible on MAIN, the rest off the left edge into empty space
+  const bounds = { x: -260, y: 100, width: 560, height: 400 };
+  const out = recoverBounds(bounds, [MAIN, SIDE]);
+  assert.deepEqual(out, bounds);
 });
 
-test('offscreen bounds recover to the primary display', () => {
-  const result = clampBoundsToDisplays({ x: 5000, y: 4000, width: 660, height: 400 }, displays);
-  assert.deepEqual(result, { x: 630, y: 320, width: 660, height: 400 });
+test('sliver-only visibility recenters on primary', () => {
+  // 10px visible on MAIN — below the 80px threshold everywhere
+  const out = recoverBounds({ x: -550, y: 100, width: 560, height: 400 }, [MAIN, SIDE]);
+  assert.equal(out.x, Math.round((1920 - 560) / 2));
+  assert.equal(out.y, Math.round((1080 - 400) / 2));
 });
 
-test('oversized bounds are constrained to the work area', () => {
-  const result = clampBoundsToDisplays({ x: 0, y: 0, width: 3000, height: 2000 }, [displays[0]]);
-  assert.deepEqual(result, { x: 0, y: 0, width: 1920, height: 1040 });
+test('fully off-screen recenters on primary', () => {
+  const out = recoverBounds({ x: 5000, y: 5000, width: 560, height: 400 }, [MAIN, SIDE]);
+  assert.equal(out.x, Math.round((1920 - 560) / 2));
+});
+
+test('no displays falls back to origin at fallback size', () => {
+  assert.deepEqual(recoverBounds({ x: 5, y: 5, width: 300, height: 200 }, []),
+    { x: 0, y: 0, width: 560, height: 400 });
+});
+
+test('threshold shrinks for windows smaller than it', () => {
+  // a 40x20 window fully visible clears the (min(80,40) x min(32,20)) gate
+  const bounds = { x: 10, y: 10, width: 40, height: 20 };
+  assert.equal(clearsVisibilityThreshold(bounds, MAIN.workArea, 80, 32), true);
+  assert.deepEqual(recoverBounds(bounds, [MAIN]), bounds);
+});
+
+test('normalizeBounds fills holes from the fallback', () => {
+  assert.deepEqual(normalizeBounds({ x: 3 }, { x: 1, y: 2, width: 30, height: 40 }),
+    { x: 3, y: 2, width: 30, height: 40 });
+});
+
+test('visibleArea clips to the intersection', () => {
+  assert.deepEqual(visibleArea({ x: -100, y: 0, width: 300, height: 50 }, MAIN.workArea),
+    { width: 200, height: 50 });
 });

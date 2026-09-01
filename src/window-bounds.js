@@ -19,58 +19,85 @@ function intersects(a, b) {
     && a.y + a.height > b.y;
 }
 
-function clampBoundsToDisplays(bounds, displays, {
+function visibleArea(rect, area) {
+  const left = Math.max(rect.x, area.x);
+  const top = Math.max(rect.y, area.y);
+  const right = Math.min(rect.x + rect.width, area.x + area.width);
+  const bottom = Math.min(rect.y + rect.height, area.y + area.height);
+  return { width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
+// A display "counts" only when it shows a substantial piece of the window.
+// The same threshold gates every branch of recoverBounds, so a 1px sliver
+// neither pins a window in place nor claims it for a display.
+function clearsVisibilityThreshold(rect, area, minVisibleWidth, minVisibleHeight) {
+  if (!intersects(rect, area)) return false;
+  const visible = visibleArea(rect, area);
+  return visible.width >= Math.min(minVisibleWidth, rect.width)
+      && visible.height >= Math.min(minVisibleHeight, rect.height);
+}
+
+function clampIntoDisplay(rect, area) {
+  const width = Math.min(rect.width, area.width);
+  const height = Math.min(rect.height, area.height);
+  return {
+    width,
+    height,
+    x: Math.min(Math.max(rect.x, area.x), area.x + area.width - width),
+    y: Math.min(Math.max(rect.y, area.y), area.y + area.height - height)
+  };
+}
+
+// Window-position recovery, three testable rules against one visibility
+// threshold (default 80x32):
+//   2+ displays clear it  -> straddling monitors: snap fully onto whichever
+//                            shows more of the window.
+//   exactly 1 clears it   -> substantially visible somewhere: leave it
+//                            exactly where the user put it (hanging off a
+//                            single display's edge is a choice, and the OS
+//                            already offers snapping for people who want it).
+//   0 clear it            -> not meaningfully visible anywhere (sliver-only
+//                            included): recenter on the primary display.
+function recoverBounds(bounds, displays, {
   fallbackWidth = 560,
   fallbackHeight = 400,
-  minWidth = 200,
-  minHeight = 180,
   minVisibleWidth = 80,
   minVisibleHeight = 32
 } = {}) {
   const workAreas = (displays || [])
-    .map((display) => display && (display.workArea || display.bounds))
-    .filter((area) => area && [area.x, area.y, area.width, area.height].every(Number.isFinite));
+    .map((d) => d && (d.workArea || d.bounds))
+    .filter((a) => a && [a.x, a.y, a.width, a.height].every(Number.isFinite));
 
   if (!workAreas.length) {
-    return normalizeBounds(bounds, { x: 0, y: 0, width: fallbackWidth, height: fallbackHeight });
+    return { x: 0, y: 0, width: fallbackWidth, height: fallbackHeight };
+  }
+
+  const normalized = normalizeBounds(bounds, {
+    x: workAreas[0].x, y: workAreas[0].y, width: fallbackWidth, height: fallbackHeight
+  });
+
+  const matches = workAreas.filter((area) =>
+    clearsVisibilityThreshold(normalized, area, minVisibleWidth, minVisibleHeight)
+  );
+
+  if (matches.length >= 2) {
+    const best = matches.reduce((a, b) =>
+      visibleArea(normalized, b).width * visibleArea(normalized, b).height
+        > visibleArea(normalized, a).width * visibleArea(normalized, a).height ? b : a
+    );
+    return clampIntoDisplay(normalized, best);
+  }
+
+  if (matches.length === 1) {
+    return normalized;
   }
 
   const primary = workAreas[0];
-  const normalized = normalizeBounds(bounds, {
-    x: Math.round(primary.x + (primary.width - fallbackWidth) / 2),
-    y: Math.round(primary.y + (primary.height - fallbackHeight) / 2),
-    width: fallbackWidth,
-    height: fallbackHeight
-  });
-  normalized.width = Math.min(Math.max(normalized.width, minWidth), primary.width);
-  normalized.height = Math.min(Math.max(normalized.height, minHeight), primary.height);
-
-  const visibleArea = (rect, area) => {
-    const left = Math.max(rect.x, area.x);
-    const top = Math.max(rect.y, area.y);
-    const right = Math.min(rect.x + rect.width, area.x + area.width);
-    const bottom = Math.min(rect.y + rect.height, area.y + area.height);
-    return { width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+  return {
+    ...normalized,
+    x: Math.round(primary.x + (primary.width - normalized.width) / 2),
+    y: Math.round(primary.y + (primary.height - normalized.height) / 2)
   };
-
-  let target = workAreas.find((area) => {
-    if (!intersects(normalized, area)) return false;
-    const visible = visibleArea(normalized, area);
-    return visible.width >= Math.min(minVisibleWidth, normalized.width)
-      && visible.height >= Math.min(minVisibleHeight, normalized.height);
-  });
-
-  if (!target) {
-    target = primary;
-    normalized.x = Math.round(target.x + (target.width - normalized.width) / 2);
-    normalized.y = Math.round(target.y + (target.height - normalized.height) / 2);
-  }
-
-  normalized.width = Math.min(Math.max(normalized.width, minWidth), target.width);
-  normalized.height = Math.min(Math.max(normalized.height, minHeight), target.height);
-  normalized.x = Math.min(Math.max(normalized.x, target.x), target.x + target.width - normalized.width);
-  normalized.y = Math.min(Math.max(normalized.y, target.y), target.y + target.height - normalized.height);
-  return normalized;
 }
 
-module.exports = { normalizeBounds, intersects, clampBoundsToDisplays };
+module.exports = { normalizeBounds, intersects, visibleArea, clearsVisibilityThreshold, clampIntoDisplay, recoverBounds };
