@@ -3865,7 +3865,7 @@ ipcMain.on('set-compact-mode', (event, compact) => {
 // We size directly (not through the resize-window IPC) so the auto-fit
 // trackers are left untouched — the restored bounds then line up with them.
 let _preSettingsBounds = null;
-ipcMain.on('settings-fit', (event, contentHeight) => {
+ipcMain.on('settings-fit', (event, contentHeight, contentWidth) => {
   if (!mainWindow) return;
   if (!_preSettingsBounds) _preSettingsBounds = mainWindow.getBounds();
   mainWindow.setResizable(false);
@@ -3874,7 +3874,11 @@ ipcMain.on('settings-fit', (event, contentHeight) => {
   const frame = Math.max(0, bounds.height - curContentH);
   const workArea = screen.getDisplayMatching(bounds).workArea;
   const h = Math.max(200, Math.min(Math.round(contentHeight), workArea.height - frame));
-  mainWindow.setContentSize(cw, h);
+  // Settings is a wide panel: it asks for its width too (0 = keep).
+  const w = contentWidth > 0
+    ? Math.max(290, Math.min(Math.round(contentWidth), workArea.width))
+    : cw;
+  mainWindow.setContentSize(w, h);
   const fitted = mainWindow.getBounds();
   const x = Math.min(Math.max(fitted.x, workArea.x), workArea.x + workArea.width - fitted.width);
   const y = Math.min(Math.max(fitted.y, workArea.y), workArea.y + workArea.height - fitted.height);
