@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
   // Alert sounds
+  alertSoundEvent: (event) => ipcRenderer.invoke('alert-sound-event', event),
   pickSoundFile: () => ipcRenderer.invoke('pick-sound-file'),
   readSoundFile: (filePath) => ipcRenderer.invoke('read-sound-file', filePath),
 

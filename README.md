@@ -17,7 +17,7 @@
 ## New in 2.7 — the rename, the sounds, and the smoke
 
 - 🤖 **New name, new face** — the app is now *I'm Burning!*, with the burning pixel robot as its icon in the Dock, Cmd-Tab switcher, and Finder.
-- 🎵 **Alert sounds** — a limit clearing **early** (an OpenAI banked/immediate reset, or the Anthropic equivalent) plays a heavenly choir; a **burn-spike** plays fire. Each sound has its own toggle, volume, and a **file picker** to use any audio of your own (Settings).
+- 🎵 **Alert sounds** — a confirmed scheduled or early usage reset plays a heavenly choir; a **burn-spike** plays fire. Each sound has its own toggle, volume, and a **file picker** to use any audio of your own (Settings).
 - ⚫ **Maxed-out bars go dark** — a pool at 100% chars black with a glowing ember edge and **pixel smoke drifting off it**. The fire has been and gone; a spent bar never wears live flames.
 - 🔮 **Reset orbs with urgency** — each banked OpenAI limit-reset is its own orb with its own flame: teal while there's runway, **amber inside a week, red inside 24 hours**, with per-orb expiry popups when OpenAI reports them (read via the Codex CLI's app-server).
 
@@ -29,7 +29,7 @@
 ### And since then
 
 - 📧 **Account emails under every header** — each provider section names the account it's tracking (signed-in or harvested from your CLI logins), hideable in Settings.
-- 🎵 **A third sound** — a banked OpenAI reset *landing* gets its own distinct alert, separate from a limit clearing early.
+- 🎵 **A third sound** — a banked OpenAI reset *landing* gets its own distinct alert, separate from a confirmed usage reset.
 - 🔮 **Orbs everywhere** — the banked-reset orb now renders in every layout, including the wide dual-table where it used to be a bare count.
 - 📐 **Layout polish** — symmetric edge padding, credit/reset pairs centred on their column midline, and every column aligned to its header in all three layouts.
 
@@ -106,7 +106,7 @@ The widget **reflows in realtime** as you drag — no fixed layouts, no clipped 
 🔥 **Burn-spike detection** — median+MAD anomaly detection on every tracked series; a pool eating tokens unusually fast catches **live pixel fire in its own colour** until the pace settles. Click a burning bar to switch between **Classic pixel** and **Particle inferno** flame styles
 ⚫ **Maxed-out treatment** — at 100% the bar goes black and **smoulders with pixel smoke** until the window resets
 🔔 **Usage & burn-spike alerts** — desktop notifications, plus the fire sound if you keep it on
-🎺 **Early-reset fanfare** — when a limit clears *before* its scheduled time (banked reset spent, provider grace), the choir sings. Resets are rare and glorious; the acknowledgment matches.
+🎺 **Reset fanfare** — scheduled rollovers and early resets play the choir after two fresh provider readings confirm the change. Cached readings, account switches, and temporary zeros stay quiet. The sound can arrive one refresh after the first reset reading.
 📱 **Phone alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
 📈 **The Prediction Graph** — 7-day history with dotted projections, cross-provider comparison on one 0–100% axis, clickable legend, and a pop-out always-on-top window
 💾 **History export** — full usage history to **CSV or JSON**, a local file save, nothing uploaded
@@ -214,3 +214,9 @@ Your tokens stay on your machine. The widget talks only to the providers' own AP
 ## License
 
 MIT © 2026 dev-newb · based on **Claude Usage Widget** © Slavomir Durej (MIT)
+
+### Reset sound diagnostics
+
+Electron and Tauri share a local ten-minute duplicate guard for the same account and reset event, so running both apps produces one alert. Separate accounts still alert independently. Missing reset-credit counts display as unavailable, and both increases and decreases must be confirmed before an increase can announce a new credit.
+
+Sound decisions and playback results are recorded in `~/.imburning-alerts/events.jsonl`, with one rotated backup and a 1 MiB limit per file. The log stores hashed event identities, pool names, numeric readings and reasons, never emails or login tokens. Sound previews bypass duplicate protection; disabled sounds do not claim events.

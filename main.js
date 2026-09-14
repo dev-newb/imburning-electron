@@ -49,6 +49,7 @@ if (identityExit !== null) { app.exit(identityExit); return; }
 // Must happen BEFORE creating Store instance to prevent parse errors
 const fs = require('fs');
 const os = require('os');
+const { alertSoundEvent } = require('./src/alert-events');
 
 // Follow Electron's final userData path, including any --profile redirect.
 const configPath = path.join(app.getPath('userData'), 'config.json');
@@ -519,7 +520,11 @@ function normalizeCodexLive(json) {
   // OpenAI's weekly-limit reset feature: banked resets that can be spent to
   // clear a hit limit early (applicable_available_count = usable right now)
   const resetCredits = json?.rate_limit_reset_credits
-    ? { available: json.rate_limit_reset_credits.available_count ?? 0, applicable: json.rate_limit_reset_credits.applicable_available_count ?? 0 }
+    ? {
+        available: Number.isInteger(json.rate_limit_reset_credits.available_count)
+          && json.rate_limit_reset_credits.available_count >= 0 ? json.rate_limit_reset_credits.available_count : null,
+        applicable: json.rate_limit_reset_credits.applicable_available_count ?? 0
+      }
     : null;
   return {
     source: 'live',
@@ -1243,7 +1248,7 @@ function antigravityAvailable() {
 async function fetchAntigravityUsage() {
   const persisted = store.get('antigravityLastGood', null);
   const lastGood = (persisted && Date.now() - persisted.at < ANTIGRAVITY_LASTGOOD_MAX_MS)
-    ? persisted.data : null;
+    ? { ...persisted.data, observedAt: persisted.at } : null;
 
   // Respect the endpoint's hard rate limit: don't even attempt more than once
   // per interval — serve last-good in between.
@@ -1277,7 +1282,7 @@ async function fetchAntigravityUsage() {
   // Gemini pools only — the normalizer drops Antigravity's Claude and GPT-OSS
   // allowances outright, so nothing here can mix another vendor's usage into
   // the Google section or anything computed from it.
-  const data = { ...norm, connected: true, email: (tok.email || null) };
+  const data = { ...norm, connected: true, email: (tok.email || null), observedAt: Date.now() };
   store.set('antigravityLastGood', { at: Date.now(), data });
   return data;
 }
@@ -1609,7 +1614,11 @@ function cachedProviderFetch(key, fetchFn, { force = false } = {}) {
   });
   return Promise.race([fetchPromise, timeoutPromise]).then((data) => {
     clearTimeout(timeoutId);
-    if (data) { _providerCache[key] = { at: Date.now(), goodAt: Date.now(), data }; return data; }
+    if (data) {
+      data.observedAt ??= Date.now();
+      if (data.cli) data.cli.observedAt = data.observedAt;
+      _providerCache[key] = { at: Date.now(), goodAt: Date.now(), data }; return data;
+    }
     const served = serveStale(entry?.data || null);
     _providerCache[key] = { at: Date.now(), goodAt, data: served };
     return served;
@@ -3797,8 +3806,11 @@ ipcMain.handle('pick-sound-file', async () => {
   return { ok: true, path: res.filePaths[0], name: path.basename(res.filePaths[0]) };
 });
 
-// Custom sounds live outside the bundle, so hand the renderer the bytes as a
-// data: URL rather than opening the CSP up to arbitrary file: reads.
+// Coordinate reset sounds with Tauri and retain bounded local diagnostics.
+ipcMain.handle('alert-sound-event', (_event, request) =>
+  alertSoundEvent(path.join(os.homedir(), '.imburning-alerts'), 'electron', request));
+
+// Custom sounds are passed as data URLs without widening file access in the renderer.
 ipcMain.handle('read-sound-file', async (event, filePath) => {
   try {
     if (typeof filePath !== 'string' || !filePath) return { ok: false, error: 'No file' };
@@ -4444,6 +4456,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
       five_hour: hasClaudeUsage ? cc.five_hour : null,
       seven_day: hasClaudeUsage ? cc.seven_day : null,
       limits: hasClaudeUsage ? (cc.limits || []) : [],
+      observedAt: hasClaudeUsage ? cc.observedAt : null,
       anthropic_source: hasClaudeUsage ? 'cli' : 'none',
       claude_code_same_account: hasClaudeUsage,
       googleConnection
@@ -4583,6 +4596,8 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
   } else {
     debugLog('Prepaid fetch skipped or failed:', prepaidResult.reason?.message || 'no data');
   }
+
+  data.observedAt = Date.now();
 
   // Attach the Claude Code (CLI) account usage, if available. A live account
   // always carries resets_at timestamps — anything else is a dead session.

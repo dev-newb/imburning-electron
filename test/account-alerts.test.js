@@ -4,25 +4,34 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const resetAlerts = require('../src/renderer/reset-alerts');
 const app = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
 const fn = name => app.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`))[0];
 function harness() {
   const sounds = [], notifications = [];
   const ctx = vm.createContext({
     Date, Set, Map, credentials: {}, EXTRA_ROW_CONFIG: {},
-    window: { _cachedSettings: { usageAlerts: true }, electronAPI: {
+    window: { BurnwatchResetAlerts: resetAlerts, _cachedSettings: { usageAlerts: true }, electronAPI: {
       showNotification: (...args) => notifications.push(args), sendAlertWebhook() {}
     } },
     playAlertSound: kind => sounds.push(kind), formatResetsAt: () => 'later',
     warnThreshold: 80, dangerThreshold: 90
   });
   vm.runInContext(`let _alertAccounts = {}, _prevBurningKeys = new Set(), _burnWatchSeeded = false;
-    let _resetWatch = null, _resetBank = null, _blockedKeys = null, isFirstDataLoad = true;
-    const EARLY_RESET_FROM = 5, EARLY_RESET_TO = 1, alertFired = {};\n` +
+    const _resetTracker = window.BurnwatchResetAlerts.createTracker();
+    let isFirstDataLoad = true; const alertFired = {};\n` +
     ['alertAccountIdentities', 'alertPoolAccount', 'resetAccountAlertBaseline', 'checkAccountAlerts',
-      'computeBurningRowKeys', 'checkBurnSpikeSound', 'resetWatchPools', 'checkEarlyResets',
+      'computeBurningRowKeys', 'checkBurnSpikeSound', 'resetWatchPools', 'checkResetAlerts',
       'seedAlertFlags', 'checkUsageAlerts'].map(fn).join('\n'), ctx);
-  return { ctx, sounds, notifications, feed: data => ctx.checkAccountAlerts(data),
+  let at = Date.now();
+  const stamp = data => {
+    const value = structuredClone(data); at += 300000; value.observedAt = at;
+    for (const provider of ['codex', 'gemini', 'claude_code']) {
+      if (value[provider]) { value[provider].observedAt = at; if (value[provider].cli) value[provider].cli.observedAt = at; }
+    }
+    return value;
+  };
+  return { ctx, sounds, notifications, feed: data => ctx.checkAccountAlerts(stamp(data)),
     clear() { sounds.length = 0; notifications.length = 0; } };
 }
 const account = (id, percent, available = 0, connected = false) => ({ accountId: id, connected,
@@ -36,6 +45,7 @@ test('connecting desktop after CLI silently seeds existing bank, exhaustion and 
   const data = { codex: { ...account('desktop', 100, 3, true), cli: account('cli', 56) }, burningSeries: { codex: true } };
   h.feed(data); h.feed(data);
   assert.deepEqual(h.sounds, []); assert.deepEqual(h.notifications, []);
+  h.feed({ ...data, codex: { ...data.codex, resetCredits: { available: 4 } } });
   h.feed({ ...data, codex: { ...data.codex, resetCredits: { available: 4 } } });
   assert.deepEqual(h.sounds, ['banked']);
 });
@@ -54,8 +64,11 @@ test('same-account transitions still announce banked resets, early resets, walls
   h.feed({ codex: account('a', 100, 0) });
   assert.deepEqual(h.sounds, ['wall']); assert.equal(h.notifications.length, 1);
   h.clear(); h.feed({ codex: account('a', 0, 0) });
+  assert.deepEqual(h.sounds, []); assert.deepEqual(h.notifications, []);
+  h.feed({ codex: account('a', 0, 0) });
   assert.deepEqual(h.sounds, ['reset']); assert.match(h.notifications[0][1], /available again/);
   h.clear(); h.feed({ codex: account('a', 0, 1) });
+  h.feed({ codex: account('a', 0, 1) });
   assert.deepEqual(h.sounds, ['banked']);
 });
 

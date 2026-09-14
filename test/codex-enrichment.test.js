@@ -81,3 +81,32 @@ test('CLI email is decoded from its own id token without requiring the usage end
   const candidates = ctx.readCodexAuthCandidatesUncached();
   assert.equal(candidates[0].email, 'one@example.test'); assert.equal(candidates[1].email, 'two@example.test');
 });
+
+test('missing or invalid available-reset counts remain unknown rather than becoming zero', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(['codexWindowSuffix', 'codexWindowLabel', 'codexWindowKey', 'normalizeCodexLive'].map(source).join('\n'), ctx);
+  for (const count of [undefined, null, -1, '1', 1.5, 0, 2]) {
+    const result = ctx.normalizeCodexLive({ rate_limit: { primary_window: { used_percent: 50, limit_window_seconds: 604800 } },
+      rate_limit_reset_credits: { available_count: count } });
+    assert.equal(result.resetCredits.available, count === 0 || count === 2 ? count : null);
+  }
+});
+
+test('cached, stale and internally cached provider responses retain their original observation time', async () => {
+  let now = 1000000;
+  class Clock extends Date { static now() { return now; } }
+  const ctx = vm.createContext({ Date: Clock, _providerCache: {}, PROVIDER_CACHE_MS: 300000,
+    PROVIDER_STALE_MAX_MS: 1800000, PROVIDER_FETCH_TIMEOUT_MS: 16000,
+    setTimeout, clearTimeout, debugLog() {} });
+  vm.runInContext(source('cachedProviderFetch'), ctx);
+  const first = await ctx.cachedProviderFetch('codex', async () => ({ limits: [], cli: { limits: [] } }));
+  assert.equal(first.observedAt, now); assert.equal(first.cli.observedAt, now);
+  now += 60000;
+  assert.equal((await ctx.cachedProviderFetch('codex', async () => { throw Error('must stay cached'); })).observedAt, 1000000);
+  now += 300000;
+  assert.equal((await ctx.cachedProviderFetch('codex', async () => null)).observedAt, 1000000);
+  const persisted = await ctx.cachedProviderFetch('google', async () => ({ observedAt: 900000, limits: [] }));
+  assert.equal(persisted.observedAt, 900000);
+  const fresh = await ctx.cachedProviderFetch('codex', async () => ({ limits: [] }), { force: true });
+  assert.equal(fresh.observedAt, now);
+});
