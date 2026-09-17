@@ -39,6 +39,22 @@ test('near-deadline rollovers still sound and are classified as scheduled', () =
   t.observe([p(0, 60 - 1 / 60, next)], []);
   assert.equal(t.observe([p(0, 65, next)], []).reset[0].reason, 'scheduled');
 });
+test('scheduled five-hour rollovers are suppressed, while early five-hour resets still ring', () => {
+  const fiveHour = { key: 'five_hour', pool: 'five_hour', label: 'Claude Session (5h)', windowMinutes: 300 };
+  let t = createTracker(); t.observe([p(45, 55, fiveHour)], []);
+  const next = { ...fiveHour, resetsAt: start + 360 * minute };
+  t.observe([p(0, 60, next)], []);
+  let result = t.observe([p(0, 65, next)], []);
+  assert.equal(result.reset.length, 0);
+  assert.equal(result.suppressed[0].reason, 'scheduled');
+  assert.equal(result.suppressed[0].from, 45);
+
+  t = createTracker(); t.observe([p(16, 0, fiveHour)], []);
+  t.observe([p(1, 5, fiveHour)], []);
+  result = t.observe([p(1, 10, fiveHour)], []);
+  assert.equal(result.reset[0].reason, 'early');
+  assert.equal(result.suppressed.length, 0);
+});
 test('expiry alone never makes noise and an idle pool needs an actual rollover', () => {
   const t = createTracker(); t.observe([p(0, 55)], []);
   assert.equal(t.observe([p(0, 60)], []).reset.length, 0);

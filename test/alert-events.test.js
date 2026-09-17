@@ -30,6 +30,17 @@ test('disabled sounds and previews never claim events; logs rotate', async t => 
   assert.equal(fs.statSync(path.join(root, 'events.jsonl.1')).size, 1024 * 1024);
   assert.ok(fs.statSync(path.join(root, 'events.jsonl')).size < 2000);
 });
+test('suppressed scheduled resets are written to the ledger without claiming playback', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'imburning-suppressed-reset-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const result = await alertSoundEvent(root, 'electron', { ...request, phase: 'suppressed' });
+  assert.equal(result.play, false);
+  assert.equal(fs.existsSync(path.join(root, 'claims.json')), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'claims.json'), 'utf8')), {});
+  const logged = JSON.parse(fs.readFileSync(path.join(root, 'events.jsonl'), 'utf8'));
+  assert.equal(logged.phase, 'suppressed');
+  assert.equal(logged.events[0].reason, 'scheduled');
+});
 
 test('the actual playback function lets only one app play, while previews and disabled sounds behave correctly', async t => {
   const vm = require('node:vm');

@@ -9,7 +9,7 @@ const LOG_LIMIT = 1024 * 1024;
 
 async function alertSoundEvent(root, app, request, now = Date.now()) {
   if (!['reset', 'banked', 'wall', 'burn'].includes(request?.kind)
-      || !['claim', 'played', 'failed', 'disabled', 'preview'].includes(request?.phase)) return { play: false };
+      || !['claim', 'played', 'failed', 'disabled', 'preview', 'suppressed'].includes(request?.phase)) return { play: false };
   const events = (Array.isArray(request.events) ? request.events : []).slice(0, 32).filter(e =>
     typeof e?.key === 'string' && e.key.length <= 2048).map(e => ({
     id: crypto.createHash('sha256').update(e.shared === false ? app + ':' + e.key : e.key).digest('hex'),

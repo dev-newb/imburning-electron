@@ -8,11 +8,12 @@ const resetAlerts = require('../src/renderer/reset-alerts');
 const app = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
 const fn = name => app.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n}`))[0];
 function harness() {
-  const sounds = [], notifications = [];
+  const sounds = [], notifications = [], ledger = [];
   const ctx = vm.createContext({
     Date, Set, Map, credentials: {}, EXTRA_ROW_CONFIG: {},
     window: { BurnwatchResetAlerts: resetAlerts, _cachedSettings: { usageAlerts: true }, electronAPI: {
-      showNotification: (...args) => notifications.push(args), sendAlertWebhook() {}
+      showNotification: (...args) => notifications.push(args), sendAlertWebhook() {},
+      alertSoundEvent: event => { ledger.push(event); return Promise.resolve({ play: false }); }
     } },
     playAlertSound: kind => sounds.push(kind), formatResetsAt: () => 'later',
     warnThreshold: 80, dangerThreshold: 90
@@ -31,8 +32,8 @@ function harness() {
     }
     return value;
   };
-  return { ctx, sounds, notifications, feed: data => ctx.checkAccountAlerts(stamp(data)),
-    clear() { sounds.length = 0; notifications.length = 0; } };
+  return { ctx, sounds, notifications, ledger, feed: data => ctx.checkAccountAlerts(stamp(data)),
+    clear() { sounds.length = 0; notifications.length = 0; ledger.length = 0; } };
 }
 const account = (id, percent, available = 0, connected = false) => ({ accountId: id, connected,
   source: 'live', email: id + '@example.test', resetCredits: { available },
@@ -70,6 +71,35 @@ test('same-account transitions still announce banked resets, early resets, walls
   h.clear(); h.feed({ codex: account('a', 0, 1) });
   h.feed({ codex: account('a', 0, 1) });
   assert.deepEqual(h.sounds, ['banked']);
+});
+
+test('scheduled 5-hour rollover is logged but silent; weekly rollover and early 5-hour reset ring', async () => {
+  const base = Date.now();
+  const h = harness();
+  const claude = (field, pct, resetsAt) => ({ anthropic_email: 'a@example.test', anthropic_source: 'web',
+    [field]: { utilization: pct, resets_at: new Date(resetsAt).toISOString() } });
+
+  h.feed(claude('five_hour', 45, base + 10 * 60000));
+  h.feed(claude('five_hour', 0, base + 310 * 60000));
+  h.feed(claude('five_hour', 0, base + 310 * 60000));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.sounds, []);
+  assert.equal(h.ledger.length, 1);
+  assert.equal(h.ledger[0].phase, 'suppressed');
+  assert.equal(h.ledger[0].events[0].reason, 'scheduled');
+  assert.equal(h.ledger[0].events[0].from, 45);
+
+  h.clear(); h.ctx.resetAccountAlertBaseline('anthropic');
+  h.feed(claude('seven_day', 98, base + 40 * 60000));
+  h.feed(claude('seven_day', 0, base + 7 * 86400000));
+  h.feed(claude('seven_day', 0, base + 7 * 86400000));
+  assert.deepEqual(h.sounds, ['reset']);
+
+  h.clear(); h.ctx.resetAccountAlertBaseline('anthropic');
+  h.feed(claude('five_hour', 16, base + 86400000));
+  h.feed(claude('five_hour', 1, base + 86400000));
+  h.feed(claude('five_hour', 1, base + 86400000));
+  assert.deepEqual(h.sounds, ['reset']);
 });
 
 test('disconnects, missing data, delayed first quotas and re-adoption are quiet', () => {
