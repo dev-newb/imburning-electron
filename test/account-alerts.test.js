@@ -73,7 +73,7 @@ test('same-account transitions still announce banked resets, early resets, walls
   assert.deepEqual(h.sounds, ['banked']);
 });
 
-test('scheduled 5-hour rollover is logged but silent; weekly rollover and early 5-hour reset ring', async () => {
+test('all 5-hour resets are logged but silent; weekly rollover rings', async () => {
   const base = Date.now();
   const h = harness();
   const claude = (field, pct, resetsAt) => ({ anthropic_email: 'a@example.test', anthropic_source: 'web',
@@ -99,7 +99,12 @@ test('scheduled 5-hour rollover is logged but silent; weekly rollover and early 
   h.feed(claude('five_hour', 16, base + 86400000));
   h.feed(claude('five_hour', 1, base + 86400000));
   h.feed(claude('five_hour', 1, base + 86400000));
-  assert.deepEqual(h.sounds, ['reset']);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.sounds, []);
+  assert.equal(h.ledger.length, 1);
+  assert.equal(h.ledger[0].phase, 'suppressed');
+  assert.equal(h.ledger[0].events[0].reason, 'early');
+  assert.equal(h.ledger[0].events[0].from, 16);
 });
 
 test('disconnects, missing data, delayed first quotas and re-adoption are quiet', () => {

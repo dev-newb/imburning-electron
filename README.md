@@ -106,7 +106,7 @@ The widget **reflows in realtime** as you drag — no fixed layouts, no clipped 
 🔥 **Burn-spike detection** — median+MAD anomaly detection on every tracked series; a pool eating tokens unusually fast catches **live pixel fire in its own colour** until the pace settles. Click a burning bar to switch between **Classic pixel** and **Particle inferno** flame styles
 ⚫ **Maxed-out treatment** — at 100% the bar goes black and **smoulders with pixel smoke** until the window resets
 🔔 **Usage & burn-spike alerts** — desktop notifications, plus the fire sound if you keep it on
-🎺 **Reset fanfare** — confirmed early resets and scheduled weekly rollovers play the choir. Routine scheduled 5-hour rollovers stay silent. Cached readings, account switches, and temporary zeros also stay quiet. The sound can arrive one refresh after the first reset reading.
+🎺 **Reset fanfare** — confirmed weekly resets play the choir. Five-hour resets stay silent because they do not independently restore the weekly quota. Cached readings, account switches, and temporary zeros also stay quiet. The sound can arrive one refresh after the first reset reading.
 📱 **Phone alerts** — ntfy/webhook push for spikes, danger levels, maxed pools, daily digest
 📈 **The Prediction Graph** — 7-day history with dotted projections, cross-provider comparison on one 0–100% axis, clickable legend, and a pop-out always-on-top window
 💾 **History export** — full usage history to **CSV or JSON**, a local file save, nothing uploaded
@@ -221,4 +221,4 @@ Electron and Tauri share a local ten-minute duplicate guard for the same account
 
 Sound decisions and playback results are recorded in `~/.imburning-alerts/events.jsonl`, with one rotated backup and a 1 MiB limit per file. The log stores hashed event identities, pool names, numeric readings and reasons, never emails or login tokens. Sound previews bypass duplicate protection; disabled sounds do not claim events.
 
-Confirmed scheduled 5-hour rollovers are recorded with phase `suppressed` so the silent decision remains auditable.
+Confirmed 5-hour reset indications are recorded with phase `suppressed` so the silent decision remains auditable.
