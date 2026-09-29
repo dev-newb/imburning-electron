@@ -11,6 +11,7 @@ const { startOAuthCallbackServer } = require('./src/oauth-callback');
 const { sanitizeHiddenSeries, sanitizeFetchOptions, migrateHiddenSeriesLabels } = require('./src/settings-validation');
 const { normalizeGeminiQuota, normalizeAntigravityModels } = require('./src/provider-models');
 const { googleQuotaIssue, googleConnectionStatus } = require('./src/google-connection');
+const googleAccountEmail = require('./src/google-account-email').createGoogleEmailLookup();
 const { PROVIDER_SERIES, usageAccountIdentities, sameAccountHistory } = require('./src/account-history');
 const { discoverCredentialHomes, clearCredentialHomeCache } = require('./src/local-credential-sources');
 
@@ -1269,7 +1270,10 @@ async function fetchAntigravityUsage() {
   // A stale stored token can still 401 even when unexpired — one refresh retry.
   if (!json && tok.accessToken === accessToken) {
     const fresh = await refreshAntigravityToken(tok.refreshToken);
-    if (fresh) json = await fetchAntigravityModels(fresh);
+    if (fresh) {
+      accessToken = fresh;
+      json = await fetchAntigravityModels(accessToken);
+    }
   }
   if (!json) return lastGood; // rate-limited / transient — keep showing last-good
 
@@ -1282,7 +1286,7 @@ async function fetchAntigravityUsage() {
   // Gemini pools only — the normalizer drops Antigravity's Claude and GPT-OSS
   // allowances outright, so nothing here can mix another vendor's usage into
   // the Google section or anything computed from it.
-  const data = { ...norm, connected: true, email: (tok.email || null), observedAt: Date.now() };
+  const data = { ...norm, connected: true, email: await googleAccountEmail(accessToken), observedAt: Date.now() };
   store.set('antigravityLastGood', { at: Date.now(), data });
   return data;
 }
