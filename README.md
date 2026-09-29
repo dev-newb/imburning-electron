@@ -10,14 +10,18 @@
 
 > **Two builds, one widget.** This is the **Electron** build. A native-webview port, [**I'm Burning! (Tauri)**](https://github.com/dev-newb/imburning-tauri), runs the *same renderer* behind a Rust backend — a ~10 MB binary using the OS webview instead of a bundled Chromium. Feature parity is tracked commit-for-commit; pick whichever runtime you prefer.
 
-![I'm Burning! — portrait main view: Anthropic, OpenAI, and Google sections, every pool tracked, a maxed-out Codex bar smoking](assets/screenshots/main-portrait-dark.png)
+<p align="center">
+  <img src="assets/screenshots/main-portrait-dark.png" width="520" alt="Portrait demo with fictional accounts: live token fire, a smoking maxed Codex pool, three reset orbs, a second CLI account, frozen Google and usage history">
+</p>
+
+Screenshots use fictional accounts. [Explore the screenshot and animation gallery](assets/demos/README.md) for transparent PNGs, animated previews, and downloadable videos.
 
 ---
 
 ## New in 2.7 — the rename, the sounds, and the smoke
 
 - 🤖 **New name, new face** — the app is now *I'm Burning!*, with the burning pixel robot as its icon in the Dock, Cmd-Tab switcher, and Finder.
-- 🎵 **Alert sounds** — a confirmed scheduled or early usage reset plays a heavenly choir; a **burn-spike** plays fire. Each sound has its own toggle, volume, and a **file picker** to use any audio of your own (Settings).
+- 🎵 **Alert sounds** — a confirmed weekly reset plays a heavenly choir; a **burn-spike** plays fire. Five-hour rollovers stay silent. Each sound has its own toggle, volume, and a **file picker** to use any audio of your own (Settings).
 - ⚫ **Maxed-out bars go dark** — a pool at 100% chars black with a glowing ember edge and **pixel smoke drifting off it**. The fire has been and gone; a spent bar never wears live flames.
 - 🔮 **Reset orbs with urgency** — each banked OpenAI limit-reset is its own orb with its own flame: teal while there's runway, **amber inside a week, red inside 24 hours**, with per-orb expiry popups when OpenAI reports them (read via the Codex CLI's app-server).
 
@@ -114,6 +118,18 @@ The widget **reflows in realtime** as you drag — no fixed layouts, no clipped 
 ---
 
 ## The fun parts
+
+### Watch the effects
+
+| Remove a company: shockwave and ash | Hide a row: fire and smoke |
+| --- | --- |
+| ![Company removal explosion](assets/demos/remove-company-explosion.webp) | ![Minus-button row removal](assets/demos/hide-row-smoke.webp) |
+
+| Token burn: classic pixel fire | Token burn: particle inferno |
+| --- | --- |
+| ![Classic token-burning animation](assets/demos/burning-classic.webp) | ![Particle token-burning animation](assets/demos/burning-inferno.webp) |
+
+[Download the transparent videos](assets/demos/README.md#videos). These are recordings of the real renderer using simulated quota data.
 
 🔥 **Pixel fire** — hiding an account group sends a flame across its heading, charring the letters with sparks and smoke; reversing heals it letter by letter
 ✨ **Reset sparkles** — when a limit window completes, its ring gets a wand-tap burst
