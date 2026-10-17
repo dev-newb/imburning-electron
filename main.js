@@ -4653,6 +4653,7 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  require('./src/mac-menu').installMacMenu({ app, Menu });
   setupAutoUpdate();
 
   // Restore session cookie if we have stored credentials
