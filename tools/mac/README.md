@@ -1,4 +1,4 @@
-# Burnwatch on macOS
+# I'm Burning on macOS
 
 No signed Mac builds are published, so macOS installs are built from source.
 These two scripts make that self-updating: the app lives in `/Applications`
@@ -9,13 +9,18 @@ like any other app, and updates itself at login with no Terminal window.
 Requires [Node.js](https://nodejs.org) 18+ and git.
 
 ```bash
-git clone https://github.com/dev-newb/burnwatch.git
-cd burnwatch
+git clone https://github.com/dev-newb/imburning-electron.git
+cd imburning-electron
 bash tools/mac/install.sh
 ```
 
 That installs a launchd agent and kicks off the first build. A few minutes
-later `Claude-Usage-Widget.app` appears in Applications and launches.
+later `I'm Burning.app` appears in Applications and launches.
+
+The application bundle and Finder display name are **I'm Burning**. The internal
+package name and Application Support directory remain `claude-usage-widget` for
+compatibility with existing accounts, encrypted credentials, settings and history.
+Do not rename that data directory manually.
 
 ## After that
 

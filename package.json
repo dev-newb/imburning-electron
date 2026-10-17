@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.burnwatch.app",
-    "productName": "I'm Burning!",
+    "productName": "I'm Burning",
     "copyright": "Copyright \u00a9 2026 Burnwatch (dev-newb) \u00b7 based on Claude Usage Widget \u00a9 Slavomir Durej",
     "publish": [
       {
